@@ -1,0 +1,611 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
+using Apex.Serialization.Internal.Reflection;
+
+namespace Apex.Serialization.Internal
+{
+    internal class DynamicCode<TStream, TBinary>
+        where TStream : IBufferedStream
+        where TBinary : ISerializer
+    {
+        internal static Delegate GenerateWriteMethod(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
+        {
+            var fields = TypeFields.GetFields(type);
+
+            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForField(x)) + 12;
+
+            var source = Expression.Parameter(shouldWriteTypeInfo ? typeof(object) : type, "source");
+            var stream = Expression.Parameter(typeof(TStream), "stream");
+            var output = Expression.Parameter(typeof(TBinary), "io");
+
+            var returnTarget = Expression.Label();
+
+            var writeStatements = new List<Expression>();
+            var localVariables = new List<ParameterExpression>();
+
+            var castedSourceType = (ParameterExpression)null;
+
+            if (shouldWriteTypeInfo)
+            {
+                castedSourceType = Expression.Variable(type);
+                localVariables.Add(castedSourceType);
+                writeStatements.Add(Expression.Assign(castedSourceType, Expression.Convert(source, type)));
+            }
+
+            var actualSource = castedSourceType ?? source;
+
+            writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSizeNeeded)));
+
+            if (settings.SerializationMode == Mode.Graph)
+            {
+                if (!type.IsValueType && !typeof(Delegate).IsAssignableFrom(type)
+                    && !typeof(Type).IsAssignableFrom(type))
+                {
+                    writeStatements.Add(Expression.IfThen(
+                        Expression.Call(output, SerializerMethods.WriteObjectRefMethod, source),
+                        Expression.Return(returnTarget)));
+                }
+                else if (shouldWriteTypeInfo)
+                {
+                    writeStatements.Add(Expression.Call(stream,
+                        BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo,
+                        Expression.Constant(-1)));
+                }
+            }
+
+            if (shouldWriteTypeInfo)
+            {
+                writeStatements.Add(
+                    Expression.Call(output, SerializerMethods.WriteTypeRefMethod, Expression.Constant(type))
+                );
+            }
+
+            writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSizeNeeded)));
+
+            // write fields for normal types, some things are special like collections
+            var specialExpression = HandleSpecialWrite(type, output, actualSource, stream, source, settings);
+
+            if (specialExpression != null)
+            {
+                writeStatements.Add(specialExpression);
+            }
+            else
+            {
+                if (type.IsPointer || fields.Any(x => x.FieldType.IsPointer))
+                {
+                    throw new NotSupportedException("Pointers or types containing pointers are not supported");
+                }
+                if (typeof(SafeHandle).IsAssignableFrom(type))
+                {
+                    throw new NotSupportedException("Objects containing handles are not supported");
+                }
+
+                writeStatements.AddRange(fields.Select(x => GetWriteFieldExpression(x, actualSource, stream, output)));
+            }
+
+            writeStatements.Add(Expression.Label(returnTarget));
+
+            var lambda = Expression.Lambda(Expression.Block(localVariables, writeStatements), $"Write_{type.FullName}", new [] {source, stream, output}).Compile();
+            return lambda;
+        }
+
+        internal static Expression HandleSpecialWrite(Type type, ParameterExpression output, ParameterExpression actualSource, ParameterExpression stream, ParameterExpression source, ImmutableSettings settings)
+        {
+            var primitive = HandlePrimitiveWrite(stream, output, type, actualSource);
+            if(primitive != null)
+            {
+                return primitive;
+            }
+
+            if (typeof(Type).IsAssignableFrom(type))
+            {
+                return Expression.Call(output, SerializerMethods.WriteTypeRefMethod, actualSource);
+            }
+
+            if (typeof(Delegate).IsAssignableFrom(type))
+            {
+                if (!settings.AllowFunctionSerialization)
+                {
+                    throw new NotSupportedException("Function serialization is not supported unless the 'AllowFunctionSerialization' setting is true");
+                }
+
+                return Expression.Call(output, SerializerMethods.WriteFunctionMethod, Expression.Convert(source, typeof(Delegate)));
+            }
+
+            if (type.IsValueType && type.IsExplicitLayout)
+            {
+                if (type.GetFields().Any(x => !x.FieldType.IsValueType))
+                {
+                    throw new NotSupportedException("Structs with explicit layout and reference fields are not supported");
+                }
+
+                var method = (MethodInfo)typeof(BufferedStreamMethods<>.GenericMethods<>).MakeGenericType(typeof(TStream), type)
+                    .GetField("WriteValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+                return Expression.Block(
+                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+                        Expression.Call(null, typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type))),
+                    Expression.Call(stream, method, actualSource)
+                );
+            }
+
+            if(type.IsArray)
+            {
+                var elementType = type.GetElementType();
+                var dimensions = type.GetArrayRank();
+
+                var lengths = new List<ParameterExpression>();
+                var indices = new List<ParameterExpression>();
+
+                for (int i = 0; i < dimensions; ++i)
+                {
+                    lengths.Add(Expression.Variable(typeof(int)));
+                    indices.Add(Expression.Variable(typeof(int)));
+                }
+
+                var statements = new List<Expression>();
+                statements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4 * dimensions)));
+                statements.AddRange(lengths.Select((x,i) => Expression.Assign(x, Expression.Call(actualSource, "GetLength", Array.Empty<Type>(), Expression.Constant(i)))));
+                statements.AddRange(lengths.Select(x => Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
+
+                var accessExpression = dimensions > 1
+                    ? (Expression) Expression.ArrayIndex(actualSource, indices)
+                    : Expression.ArrayIndex(actualSource, indices[0]);
+                var innerWrite = WriteValue(stream, output, elementType, accessExpression);
+                var loop = (Expression) Expression.Block(
+                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(24)),
+                    innerWrite);
+                for (int i = 0; i < dimensions; ++i)
+                {
+                    var breakLabel = Expression.Label();
+                    loop =
+                        Expression.Block(
+                            Expression.Assign(indices[i], Expression.Constant(0)),
+                            Expression.Loop(Expression.IfThenElse(
+                                Expression.GreaterThanOrEqual(indices[i], lengths[i]),
+                                Expression.Break(breakLabel),
+                                Expression.Block(loop, Expression.Assign(indices[i], Expression.Increment(indices[i])))
+                            ), breakLabel)
+                        );
+                }
+
+                statements.Add(loop);
+
+                return Expression.Block(indices.Concat(lengths), statements);
+            }
+
+            /*
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            {
+                var keyType = type.GetGenericArguments()[0];
+                var valueType = type.GetGenericArguments()[1];
+
+                var elementType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
+                var enumeratorType = type.GetNestedType("Enumerator").MakeGenericType(keyType, valueType);
+                var enumeratorVar = Expression.Variable(enumeratorType);
+                var getEnumeratorCall = Expression.Call(actualSource, type.GetMethod("GetEnumerator"));
+                var enumeratorAssign = Expression.Assign(enumeratorVar, getEnumeratorCall);
+                var moveNextCall = Expression.Call(enumeratorVar, typeof(IEnumerator).GetMethod("MoveNext"));
+
+                var loopVar = Expression.Variable(elementType);
+
+                var breakLabel = Expression.Label();
+
+                var loop = Expression.Block(new[] { enumeratorVar },
+                    Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo,
+                        Expression.Property(actualSource, "Count")),
+                    enumeratorAssign,
+                    Expression.Loop(
+                        Expression.IfThenElse(
+                            Expression.Equal(moveNextCall, Expression.Constant(true)),
+                            Expression.Block(new[] { loopVar },
+                                Expression.Assign(loopVar, Expression.Property(enumeratorVar, "Current")),
+                                Expression.Call(stream, BufferedStreamMethods<TStream>.WriteStringMethodInfo,
+                                    Expression.Property(loopVar, "Key")),
+                                Expression.Call(stream, BufferedStreamMethods<TStream>.WriteStringMethodInfo,
+                                    Expression.Property(loopVar, "Value"))
+                            ),
+                            Expression.Break(breakLabel)
+                        )
+                    ),
+                    Expression.Label(breakLabel));
+
+                return loop;
+            }
+            */
+
+            return null;
+        }
+
+        internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo, ParameterExpression source,
+            ParameterExpression stream, ParameterExpression output)
+        {
+            var declaredType = fieldInfo.FieldType;
+            var valueAccessExpression = Expression.MakeMemberAccess(source, fieldInfo);
+
+            return WriteValue(stream, output, declaredType, valueAccessExpression);
+        }
+
+        private static Expression WriteValue(ParameterExpression stream, ParameterExpression output, Type declaredType,
+            Expression valueAccessExpression)
+        {
+            var primitiveExpression = HandlePrimitiveWrite(stream, output, declaredType, valueAccessExpression);
+            if(primitiveExpression != null)
+            {
+                return primitiveExpression;
+            }
+
+            var nullableExpression = HandleNullableWrite(stream, output, declaredType, valueAccessExpression);
+            if (nullableExpression != null)
+            {
+                return nullableExpression;
+            }
+
+            var shouldWriteTypeInfo = !declaredType.IsSealed || typeof(Delegate).IsAssignableFrom(declaredType)
+                || typeof(Type).IsAssignableFrom(declaredType);
+
+            /*
+            if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            {
+                shouldWriteTypeInfo = false;
+            }
+            */
+
+            if (shouldWriteTypeInfo)
+            {
+                return Expression.Call(output, "WriteInternal", null, valueAccessExpression);
+            }
+
+            return Expression.Call(output, "WriteSealedInternal", new[] {declaredType}, valueAccessExpression);
+        }
+
+        private static Expression HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
+            Expression valueAccessExpression)
+        {
+            if(BufferedStreamMethods<TStream>.primitiveWriteMethods.TryGetValue(declaredType, out var method))
+            {
+                return Expression.Call(stream, method, valueAccessExpression);
+            }
+
+            // TODO: string interning
+            if (declaredType == typeof(string))
+            {
+                return Expression.Call(stream, BufferedStreamMethods<TStream>.WriteStringMethodInfo, valueAccessExpression);
+            }
+
+            return null;
+        }
+
+        private static Expression HandleNullableWrite(ParameterExpression stream, ParameterExpression output,
+            Type declaredType,
+            Expression valueAccessExpression)
+        {
+            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
+            {
+                return null;
+            }
+
+            return Expression.IfThen(Expression.Not(Expression.Call(output, SerializerMethods.WriteNullByteMethod, Expression.Convert(valueAccessExpression, typeof(object)))),
+                Expression.Call(output, "WriteSealedInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
+        }
+
+        internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject");
+        private static Type[] emptyTypes = new Type[0];
+
+        internal static Delegate GenerateReadMethod(Type type, ImmutableSettings settings, bool isBoxed)
+        {
+            var fields = TypeFields.GetFields(type);
+            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForField(x)) + 8;
+
+            var stream = Expression.Parameter(typeof(TStream), "stream");
+            var output = Expression.Parameter(typeof(TBinary), "io");
+
+            var readStatements = new List<Expression>();
+            var localVariables = new List<ParameterExpression>();
+
+            var result = Expression.Variable(type);
+            localVariables.Add(result);
+
+            if(type.IsValueType)
+            {
+                readStatements.Add(Expression.Assign(result, Expression.Default(type)));
+            }
+
+            readStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSizeNeeded)));
+            
+            // write fields for normal types, some things are special like collections
+            var specialExpression = HandleSpecialRead(type, output, result, stream, settings);
+
+            if (specialExpression != null)
+            {
+                readStatements.Add(specialExpression);
+            }
+            else if (!type.IsValueType)
+            {
+                var defaultCtor = type.GetConstructor(new Type[] { });
+                var il = defaultCtor?.GetMethodBody()?.GetILAsByteArray();
+                var sideEffectFreeCtor = il != null && il.Length <= 8; //this is the size of an empty ctor
+                if (sideEffectFreeCtor)
+                {
+                    readStatements.Add(Expression.Assign(result, Expression.New(defaultCtor)));
+                }
+                else
+                {
+                    readStatements.Add(Expression.Assign(result,
+                        Expression.Convert(
+                            Expression.Call(null, GetUnitializedObjectMethodInfo, Expression.Constant(type)), type)));
+                }
+            }
+
+            if(specialExpression == null)
+            {
+                if (!type.IsValueType && settings.SerializationMode == Mode.Graph)
+                {
+                    readStatements.Add(Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter), SerializerMethods.SavedReferencesListAdd, result));
+                }
+
+                if (type.IsPointer || fields.Any(x => x.FieldType.IsPointer))
+                {
+                    throw new NotSupportedException("Pointers or types containing pointers are not supported");
+                }
+                if (typeof(SafeHandle).IsAssignableFrom(type))
+                {
+                    throw new NotSupportedException("Objects containing handles are not supported");
+                }
+
+                readStatements.AddRange(fields.Select(x => GetReadFieldExpression(x, result, stream, output)));
+            }
+
+            if (settings.SupportSerializationHooks)
+            {
+                var methods = TypeMethods.GetAfterDeserializeMethods(type);
+                if (methods.Count > 0)
+                {
+                    var p = Expression.Parameter(typeof(object));
+                    var action = Expression.Lambda<Action<object>>(
+                        Expression.Block(
+                            methods.Select(m => Expression.Call(Expression.Convert(p, type), m))
+                        )
+                        , $"AfterDeserialize_{type.FullName}", new[] {p}).Compile();
+
+                    readStatements.Add(Expression.Call(output, SerializerMethods.QueueAfterDeserializationHook, Expression.Constant(action), result));
+                }
+            }
+
+            if (isBoxed)
+            {
+                readStatements.Add(Expression.Convert(result, typeof(object)));
+            }
+            else
+            {
+                readStatements.Add(result);
+            }
+
+            var lambda = Expression.Lambda(Expression.Block(localVariables, readStatements), $"Read_{type.FullName}", new [] {stream, output}).Compile();
+
+            return lambda;
+        }
+
+        internal static Expression HandleSpecialRead(Type type, ParameterExpression output, ParameterExpression result, ParameterExpression stream, ImmutableSettings settings)
+        {
+            var primitive = HandlePrimitiveRead(stream, output, type);
+            if (primitive != null)
+            {
+                if (type == typeof(string) && settings.SerializationMode == Mode.Graph)
+                {
+                    return Expression.Block(
+                        Expression.Assign(result, primitive),
+                        Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
+                            SerializerMethods.SavedReferencesListAdd, result)
+                    );
+                }
+
+                return Expression.Assign(result, primitive);
+            }
+
+            if (typeof(Type).IsAssignableFrom(type))
+            {
+                return Expression.Assign(result, Expression.Convert(Expression.Call(output, SerializerMethods.ReadTypeRefMethod), type));
+            }
+
+            if (typeof(Delegate).IsAssignableFrom(type))
+            {
+                if (!settings.AllowFunctionSerialization)
+                {
+                    throw new NotSupportedException("Function deserialization is not supported unless the 'AllowFunctionSerialization' setting is true");
+                }
+
+                return Expression.Assign(result, Expression.Convert(Expression.Call(output, SerializerMethods.ReadFunctionMethod), type));
+            }
+
+            if (type.IsValueType && type.IsExplicitLayout)
+            {
+                if (type.GetFields().Any(x => !x.FieldType.IsValueType))
+                {
+                    throw new NotSupportedException("Structs with explicit layout and reference fields are not supported");
+                }
+
+                var method = (MethodInfo)typeof(BufferedStreamMethods<>.GenericMethods<>).MakeGenericType(typeof(TStream), type)
+                    .GetField("ReadValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+                return Expression.Block(
+                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+                        Expression.Call(null, typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type))),
+                    Expression.Assign(result, Expression.Call(stream, method))
+                );
+            }
+
+            if (type.IsArray)
+            {
+                var elementType = type.GetElementType();
+                var dimensions = type.GetArrayRank();
+
+                var lengths = new List<ParameterExpression>();
+                var indices = new List<ParameterExpression>();
+
+                for (int i = 0; i < dimensions; ++i)
+                {
+                    lengths.Add(Expression.Variable(typeof(int),$"length{i}"));
+                    indices.Add(Expression.Variable(typeof(int), $"index{i}"));
+                }
+
+                var statements = new List<Expression>();
+                statements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4 * dimensions)));
+                statements.AddRange(lengths.Select((x, i) => Expression.Assign(x, Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
+
+                statements.Add(Expression.Assign(result, Expression.NewArrayBounds(elementType, lengths)));
+
+                if (settings.SerializationMode == Mode.Graph)
+                {
+                    statements.Add(Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
+                        SerializerMethods.SavedReferencesListAdd, result));
+                }
+
+                var accessExpression = dimensions > 1
+                    ? (Expression) Expression.ArrayAccess(result, indices)
+                    : Expression.ArrayAccess(result, indices[0]);
+                var innerRead = Expression.Block(
+                        Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(24)),
+                        Expression.Assign(accessExpression, ReadValue(stream, output, elementType))
+                    );
+                var loop = (Expression)innerRead;
+
+                for (int i = 0; i < dimensions; ++i)
+                {
+                    var breakLabel = Expression.Label();
+                    loop = Expression.Block(
+                        Expression.Assign(indices[i], Expression.Constant(0)),
+                        Expression.Loop(Expression.IfThenElse(
+                            Expression.GreaterThanOrEqual(indices[i], lengths[i]),
+                            Expression.Break(breakLabel),
+                            Expression.Block(loop, Expression.Assign(indices[i], Expression.Increment(indices[i])))
+                        ), breakLabel)
+                    );
+                }
+
+                statements.Add(loop);
+
+                return Expression.Block(indices.Concat(lengths), statements);
+            }
+
+            /*
+            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            {
+                var blockStatements = new List<Expression>();
+                var countVar = Expression.Variable(typeof(int));
+                blockStatements.Add(Expression.Assign(countVar, Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)));
+
+                // TODO: need to save equality comparer
+                blockStatements.Add(Expression.Assign(result,
+                    Expression.Convert(
+                        Expression.New(type.GetConstructor(new Type[] {typeof(int)}), countVar), type)));
+
+                var breakLabel = Expression.Label();
+
+                blockStatements.Add(
+                    Expression.Loop(
+                        Expression.IfThenElse(
+                            Expression.Equal(countVar, Expression.Constant(0)),
+                            Expression.Break(breakLabel),
+                            Expression.Block(
+                                Expression.Call(result, type.GetMethod("Add", type.GenericTypeArguments),
+                                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReadStringMethodInfo),
+                                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReadStringMethodInfo)),
+                                Expression.AddAssign(countVar, Expression.Constant(-1))
+                                )
+                            )
+                        )
+                    );
+
+                blockStatements.Add(Expression.Label(breakLabel));
+
+                return Expression.Block(new [] {countVar}, blockStatements);
+            }
+            */
+
+            return null;
+        }
+
+        private static MethodInfo fieldInfoSetValueMethod = typeof(FieldInfo).GetMethod("SetValue", new[] { typeof(object), typeof(object) });
+
+        internal static Expression GetReadFieldExpression(FieldInfo fieldInfo, ParameterExpression result,
+            ParameterExpression stream, ParameterExpression output)
+        {
+            var declaredType = fieldInfo.FieldType;
+
+            if (fieldInfo.Attributes.HasFlag(FieldAttributes.InitOnly))
+            {
+                if(FieldInfoModifier.setFieldInfoNotReadonly != null)
+                {
+                    FieldInfoModifier.setFieldInfoNotReadonly(fieldInfo);
+                }
+                else
+                {
+                    return Expression.Call(Expression.Constant(fieldInfo), fieldInfoSetValueMethod, result, Expression.Convert(ReadValue(stream, output, declaredType), typeof(object)));
+                }
+            }
+
+            var valueAccessExpression = Expression.MakeMemberAccess(result, fieldInfo);
+
+            return Expression.Assign(valueAccessExpression, ReadValue(stream, output, declaredType));
+        }
+
+        private static Expression ReadValue(ParameterExpression stream, ParameterExpression output, Type declaredType)
+        {
+            var primitiveExpression = HandlePrimitiveRead(stream, output, declaredType);
+            if (primitiveExpression != null)
+            {
+                return primitiveExpression;
+            }
+
+            var shouldReadTypeInfo = !declaredType.IsSealed || typeof(Delegate).IsAssignableFrom(declaredType)
+                || typeof(Type).IsAssignableFrom(declaredType);
+
+            /*
+            if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            {
+                shouldReadTypeInfo = false;
+            }
+            */
+
+            if (shouldReadTypeInfo)
+            {
+                return Expression.Convert(Expression.Call(output, "ReadInternal", null), declaredType);
+            }
+
+            return Expression.Call(output, "ReadSealedInternal", new[] { declaredType });
+        }
+
+        private static Expression HandlePrimitiveRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
+        {
+            if (BufferedStreamMethods<TStream>.primitiveReadMethods.TryGetValue(declaredType, out var method))
+            {
+                return Expression.Call(stream, method);
+            }
+
+            // TODO: string interning
+            if (declaredType == typeof(string))
+            {
+                return Expression.Call(stream, BufferedStreamMethods<TStream>.ReadStringMethodInfo);
+            }
+
+            return null;
+        }
+
+        private static Expression HandleNullableRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
+        {
+            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
+            {
+                return null;
+            }
+
+            return Expression.IfThen(Expression.Not(Expression.Call(output, SerializerMethods.ReadNullByteMethod)),
+                Expression.Call(output, "ReadSealedInternal", declaredType.GenericTypeArguments));
+        }
+
+    }
+}
