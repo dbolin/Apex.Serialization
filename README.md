@@ -46,6 +46,6 @@ You may pass a Settings object to the constructor of the binary class that lets 
 
 #### Tips for best performance
 
-Use sealed type declarations when possible - this allows the serializer to skip writing any type information
-Create empty constructors for classes that will be serialized/deserialized a lot
-Use different serializer instances for different workloads (e.g. one for serializing a few objects at a time and one for large graphs)
+- Use sealed type declarations when possible - this allows the serializer to skip writing any type information
+- Create empty constructors for classes that will be serialized/deserialized a lot
+- Use different serializer instances for different workloads (e.g. one for serializing a few objects at a time and one for large graphs)
