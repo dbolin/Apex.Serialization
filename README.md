@@ -4,6 +4,10 @@ A high performance contract-less binary serializer
 
 Suitable for realtime workloads where the serialized data will not persist for long, as most assembly changes will render the data format incompatible with older versions.
 
+### Status
+
+Currently BETA - some standard collections will not serialize/deserialize correctly at the moment
+
 ### Limitations
 
 As the serialization is contract-less, the binary format produced depends on precise characteristics of the types serialized. Most changes to types, such as adding or removing fields, renaming types, or changing relationships between types will break compatibility with previously serialized data.
