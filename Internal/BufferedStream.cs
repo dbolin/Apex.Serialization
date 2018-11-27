@@ -88,7 +88,7 @@ namespace Apex.Serialization.Internal
             {
                 var len = Size - _bufferPosition;
                 Unsafe.CopyBlock(_bufferPtr, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), len);
-                _target.Read(_buffer, (int)_bufferPosition, (int)len);
+                _target.Read(_buffer, (int)len, (int)_bufferPosition);
                 _bufferPosition = 0;
             }
         }
@@ -163,10 +163,10 @@ namespace Apex.Serialization.Internal
             {
                 fixed (byte* b = &entry.Bytes[0])
                 {
-                    ReserveSize(8 + entry.Length1 + entry.Length2);
+                    ReserveSize(10 + entry.Length1 + entry.Length2);
                     Write(entry.Length1);
                     Write(entry.Length2);
-                    WriteBytes(b, entry.Length1 + entry.Length2);
+                    WriteBytes(b, entry.Length1 + entry.Length2 + 2);
                     return;
                 }
             }
@@ -245,6 +245,7 @@ namespace Apex.Serialization.Internal
                         Unsafe.CopyBlock(Unsafe.Add<byte>(text, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), allowed);
                         byteCount -= allowed;
                         sourcePosition += allowed;
+                        _bufferPosition += allowed;
                         Flush();
                     }
                     else

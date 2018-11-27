@@ -562,6 +562,12 @@ namespace Apex.Serialization.Internal
                 return primitiveExpression;
             }
 
+            var nullableExpression = HandleNullableRead(stream, output, declaredType);
+            if (nullableExpression != null)
+            {
+                return nullableExpression;
+            }
+
             var shouldReadTypeInfo = !declaredType.IsSealed || typeof(Delegate).IsAssignableFrom(declaredType)
                 || typeof(Type).IsAssignableFrom(declaredType);
 
@@ -603,8 +609,9 @@ namespace Apex.Serialization.Internal
                 return null;
             }
 
-            return Expression.IfThen(Expression.Not(Expression.Call(output, SerializerMethods.ReadNullByteMethod)),
-                Expression.Call(output, "ReadSealedInternal", declaredType.GenericTypeArguments));
+            return Expression.Condition(Expression.Not(Expression.Call(output, SerializerMethods.ReadNullByteMethod)),
+                Expression.Convert(Expression.Call(output, "ReadSealedInternal", declaredType.GenericTypeArguments),
+                    declaredType), Expression.Convert(Expression.Constant(null), declaredType));
         }
 
     }

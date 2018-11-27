@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Apex.Serialization.Internal;
 using Apex.Serialization.Internal.Reflection;
 using BufferedStream = Apex.Serialization.Internal.BufferedStream;
@@ -323,6 +324,14 @@ namespace Apex.Serialization
             _stream.ReserveSize(4);
             WriteTypeRefInternal(value.Method.DeclaringType);
             _stream.Write(value.Method.Name);
+            _stream.ReserveSize(4);
+            var parameters = value.Method.GetParameters();
+            _stream.Write(parameters.Length);
+            foreach (var p in parameters.Select(x => x.ParameterType))
+            {
+                _stream.ReserveSize(4);
+                WriteTypeRefInternal(p);
+            }
             _stream.ReserveSize(1);
             if (value.Target == null)
             {
@@ -377,37 +386,48 @@ namespace Apex.Serialization
             var delegateType = ReadTypeRefInternal();
             var declaringType = ReadTypeRefInternal();
             var methodName = _stream.Read();
+            _stream.ReserveSize(4);
+            var parameterCount = _stream.Read<int>();
+            var parameterTypeList = new Type[parameterCount];
+            for (int i = 0; i < parameterCount; ++i)
+            {
+                parameterTypeList[i] = ReadTypeRefInternal();
+            }
+
             _stream.ReserveSize(1);
             bool hasTarget = _stream.Read<bool>();
             Delegate result;
             if (hasTarget)
             {
                 var target = ReadInternal();
-                result = Delegate.CreateDelegate(delegateType, target, declaringType.GetMethod(methodName, System.Reflection.BindingFlags.Public
-                                                                                      | System.Reflection.BindingFlags.NonPublic
-                                                                                      | System.Reflection.BindingFlags.Instance));
+                result = Delegate.CreateDelegate(delegateType, target, declaringType.GetMethod(methodName,
+                    System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.Instance, null, parameterTypeList, null));
             }
             else
             {
-                result = Delegate.CreateDelegate(delegateType, declaringType.GetMethod(methodName, System.Reflection.BindingFlags.NonPublic
-                                                                              | System.Reflection.BindingFlags.Public
-                                                                              | System.Reflection.BindingFlags.Static));
+                result = Delegate.CreateDelegate(delegateType, declaringType.GetMethod(methodName,
+                    System.Reflection.BindingFlags.NonPublic
+                    | System.Reflection.BindingFlags.Public
+                    | System.Reflection.BindingFlags.Static, null, parameterTypeList, null));
             }
+
             _stream.ReserveSize(5);
             var isMulticast = _stream.Read<bool>();
-            if(!isMulticast)
+            if (!isMulticast)
             {
                 return result;
             }
 
             var invocationCount = _stream.Read<int>();
-            if(invocationCount == 0)
+            if (invocationCount == 0)
             {
                 return result;
             }
 
             var list = new Delegate[invocationCount];
-            for(int i=0;i<invocationCount;++i)
+            for (int i = 0; i < invocationCount; ++i)
             {
                 list[i] = ReadFunctionInternal();
             }

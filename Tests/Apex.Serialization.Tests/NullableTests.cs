@@ -37,7 +37,10 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void NullableFieldsNull()
         {
-            var x = new Test1();
+            var x = new Test1
+            {
+                Value2 = 12
+            };
 
             RoundTrip(x);
         }

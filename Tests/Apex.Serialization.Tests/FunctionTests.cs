@@ -20,6 +20,11 @@ namespace Apex.Serialization.Tests
             {
                 return StaticValue;
             }
+
+            public static int StaticMethod(int param)
+            {
+                return StaticValue;
+            }
         }
 
         public class Test
