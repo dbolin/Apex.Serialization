@@ -22,7 +22,7 @@ Some types aren't supported:
 - Enumerators
 - Objects that use randomized hashing or other runtime specific data to determine their behavior
 - Structs with explicit layout that have reference fields
-- BlockingCollection<T>
+- BlockingCollection\<T>
 
 Requires code generation capabilities, most likely only operates under full trust
 
