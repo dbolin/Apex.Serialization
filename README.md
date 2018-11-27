@@ -35,6 +35,15 @@ var obj = binarySerializer.Read<SerializedClassType>(inputStream)
 
 Always reuse serializer instances when possible, as the instance caches a lot of data to improve performance when repeatedly serializing or deserializing objects.
 
+Fields with the [Nonserialized] attribute will not be serialized or deserialized.
+
+#### Settings
+
+You may pass a Settings object to the constructor of the binary class that lets you choose:
+- between tree or graph serialization (graph serialization is required for cases where you have a cyclical reference or need to maintain object identity)
+- whether functions should be serialized
+- whether serialization hooks should be called (any methods with the [AfterDeserialization] attribute will be called after the object graph is completely deserialized.)
+
 #### Tips for best performance
 
 Use sealed type declarations when possible - this allows the serializer to skip writing any type information
