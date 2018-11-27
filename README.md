@@ -22,14 +22,14 @@ Requires code generation capabilities, most likely only operates under full trus
 ### Usage
 
 Serialization
-```
+```csharp
 var obj = ClassToSerializer();
 var binarySerializer = new Binary();
 binarySerializer.Write(obj, outputStream);
 ```
 
 Deserialization
-```
+```csharp
 var obj = binarySerializer.Read<SerializedClassType>(inputStream)
 ```
 
