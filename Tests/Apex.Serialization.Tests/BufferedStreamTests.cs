@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Runtime.CompilerServices;
 using Apex.Serialization.Internal;
 using FluentAssertions;
 using Xunit;
@@ -14,19 +12,16 @@ namespace Apex.Serialization.Tests
     {
         private MemoryStream memoryStream = new MemoryStream();
         internal IBufferedStream Sut;
-        private Task memoryStressTask;
-        private CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
 
         public BufferedStreamTests()
         {
-            //memoryStressTask = MemoryStress();
             Sut = new BufferedStream();
             Sut.WriteTo(memoryStream);
         }
 
         public void Dispose()
         {
-            cancellationTokenSource.Cancel();
+            Sut.Dispose();
         }
 
         [Fact]
@@ -147,28 +142,48 @@ namespace Apex.Serialization.Tests
             Sut.Flush();
         }
 
-        private Task MemoryStress()
+        [Fact]
+        public void Wrapping()
         {
-            var q = new List<object>();
-            return Task.Run(() =>
+            memoryStream.Seek(0, SeekOrigin.Begin);
+            Sut.WriteTo(memoryStream);
+
+            var n = 200000;
+
+            for (int i = 0; i < n; ++i)
             {
-                while (!cancellationTokenSource.IsCancellationRequested)
-                {
-                    for (int i = 0; i < 10000; ++i)
-                    {
-                        var x = new byte[1000];
-                        x[1] = 1;
-                        q.Add(x);
-                    }
+                Sut.ReserveSize(4);
+                Sut.Write(i);
+            }
+            Sut.Flush();
 
-                    if (q.Count > 100000)
-                    {
-                        GC.Collect();
-                        q.Clear();
-                    }
-                }
-            }, cancellationTokenSource.Token);
+            memoryStream.Seek(0, SeekOrigin.Begin);
+            Sut.ReadFrom(memoryStream);
+
+            for (int i = 0; i < n; ++i)
+            {
+                Sut.ReserveSize(4);
+                Sut.Read<int>().Should().Be(i);
+            }
+
+            memoryStream.Seek(0, SeekOrigin.Begin);
+            Sut.WriteTo(memoryStream);
+
+            for (int i = 0; i < n; ++i)
+            {
+                Sut.Write($"00000000000000000000{i}");
+            }
+            Sut.Flush();
+
+            memoryStream.Seek(0, SeekOrigin.Begin);
+
+            Sut.ReadFrom(memoryStream);
+
+            for (int i = 0; i < n; ++i)
+            {
+                var x = Sut.Read();
+                x.Should().Be($"00000000000000000000{i}");
+            }
         }
-
     }
 }

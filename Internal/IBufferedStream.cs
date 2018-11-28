@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace Apex.Serialization.Internal
 {
-    internal unsafe interface IBufferedStream
+    internal unsafe interface IBufferedStream : IDisposable
     {
         void ReadFrom(Stream stream);
         void WriteTo(Stream stream);
