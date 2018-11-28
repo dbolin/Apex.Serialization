@@ -29,7 +29,8 @@ namespace Apex.Serialization.Internal
         private byte* _typeIdBufferPtr;
 
         private uint _bufferPosition;
-        private const uint Size = 1024*1024;
+        private const uint MaxSize = 1024*1024;
+        private int _size = (int)MaxSize;
 
         private DictionarySlim<Type, TypeIdCacheEntry> _typeIdCache = new DictionarySlim<Type, TypeIdCacheEntry>();
 
@@ -38,8 +39,8 @@ namespace Apex.Serialization.Internal
 
         internal BufferedStream()
         {
-            _buffer = new byte[Size];
-            _typeIdBuffer = new byte[Size * 4];
+            _buffer = new byte[MaxSize];
+            _typeIdBuffer = new byte[MaxSize * 4];
             PinBuffers();
         }
 
@@ -49,7 +50,8 @@ namespace Apex.Serialization.Internal
             {
                 _target = stream;
             }
-            _target.Read(_buffer, 0, (int)Size);
+
+            _size = _target.Read(_buffer, 0, (int)MaxSize);
             _bufferPosition = 0;
             _writing = false;
         }
@@ -60,6 +62,8 @@ namespace Apex.Serialization.Internal
             {
                 _target = stream;
             }
+
+            _size = (int)MaxSize;
             _bufferPosition = 0;
             _writing = true;
         }
@@ -86,9 +90,9 @@ namespace Apex.Serialization.Internal
             }
             else
             {
-                var len = Size - _bufferPosition;
-                Unsafe.CopyBlock(_bufferPtr, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), len);
-                _target.Read(_buffer, (int)len, (int)_bufferPosition);
+                var len = (int)(_size - _bufferPosition);
+                Unsafe.CopyBlock(_bufferPtr, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), (uint)len);
+                _size = _target.Read(_buffer, len, (int)_bufferPosition) + len;
                 _bufferPosition = 0;
             }
         }
@@ -96,12 +100,22 @@ namespace Apex.Serialization.Internal
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReserveSize(int sizeNeeded)
         {
-            if (Size - _bufferPosition < sizeNeeded)
+            CheckSize();
+            if (_size - _bufferPosition < sizeNeeded)
             {
                 Flush();
             }
 
             SetReserved(sizeNeeded);
+        }
+
+        [Conditional("DEV")]
+        private void CheckSize()
+        {
+            if (_size == 0)
+            {
+                throw new InvalidOperationException();
+            }
         }
 
         [Conditional("DEV")]
@@ -137,11 +151,12 @@ namespace Apex.Serialization.Internal
             {
                 do
                 {
-                    var allowed = Size - _bufferPosition;
+                    var allowed = (uint)(_size - _bufferPosition);
                     if (byteCount > allowed)
                     {
                         Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), Unsafe.Add<byte>(text, (int)sourcePosition), allowed);
                         byteCount -= allowed;
+                        _bufferPosition += allowed;
                         sourcePosition += allowed;
                         Flush();
                     }
@@ -181,7 +196,7 @@ namespace Apex.Serialization.Internal
                 {
                     var stage = stageBytes;
                     var start = stage;
-                    var nameLen = Encoding.UTF8.GetBytes(namePtr, name.Length, stage, (int) Size);
+                    var nameLen = Encoding.UTF8.GetBytes(namePtr, name.Length, stage, (int) MaxSize);
                     ReorderBytes(stage, nameLen);
 
                     stage += nameLen;
@@ -190,7 +205,7 @@ namespace Apex.Serialization.Internal
                     *stage = (byte) ' ';
                     stage++;
 
-                    var asmLen = Encoding.UTF8.GetBytes(asmPtr, qualifiedInfo.Length, stage, (int) Size);
+                    var asmLen = Encoding.UTF8.GetBytes(asmPtr, qualifiedInfo.Length, stage, (int) MaxSize);
                     ReorderBytes(stage, asmLen);
                     stage += asmLen;
 
@@ -239,7 +254,7 @@ namespace Apex.Serialization.Internal
             {
                 do
                 {
-                    var allowed = Size - _bufferPosition;
+                    var allowed = (uint)(_size - _bufferPosition);
                     if (byteCount > allowed)
                     {
                         Unsafe.CopyBlock(Unsafe.Add<byte>(text, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), allowed);
