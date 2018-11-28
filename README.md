@@ -22,6 +22,8 @@ Some types aren't supported:
 - Enumerators
 - Objects that use randomized hashing or other runtime specific data to determine their behavior
 - Structs with explicit layout that have reference fields
+- BlockingCollection\<T>
+- Hashtable (when strings are used as keys)
 
 Requires code generation capabilities, most likely only operates under full trust
 
@@ -55,3 +57,4 @@ You may pass a Settings object to the constructor of the binary class that lets 
 - Use sealed type declarations when possible - this allows the serializer to skip writing any type information
 - Create empty constructors for classes that will be serialized/deserialized a lot
 - Use different serializer instances for different workloads (e.g. one for serializing a few objects at a time and one for large graphs)
+- Don't inherit from standard collections
