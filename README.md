@@ -23,7 +23,7 @@ Some types aren't supported:
 - Objects that use randomized hashing or other runtime specific data to determine their behavior
 - Structs with explicit layout that have reference fields
 - BlockingCollection\<T>
-- Hashtable (when strings are used as keys)
+- Non-generic standard collections
 
 Requires code generation capabilities, most likely only operates under full trust
 
