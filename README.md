@@ -8,7 +8,7 @@ Suitable for realtime workloads where the serialized data will not persist for l
 
 [![Build Status](https://numenfall.visualstudio.com/Games/_apis/build/status/Apex.Serialization-CI)](https://numenfall.visualstudio.com/Games/_build/latest?definitionId=3)
 
-Currently BETA - some standard collections will not serialize/deserialize correctly at the moment
+Currently BETA
 
 ### Limitations
 
