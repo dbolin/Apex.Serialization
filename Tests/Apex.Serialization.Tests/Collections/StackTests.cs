@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using FluentAssertions;
 using Xunit;
 
 namespace Apex.Serialization.Tests.Collections
@@ -15,6 +16,10 @@ namespace Apex.Serialization.Tests.Collections
             x.Push("12");
             x.Push(null);
             x.Push(new object());
+
+            x = RoundTrip(x);
+
+            x.Peek().GetType().Should().Be(typeof(object));
         }
     }
 }
