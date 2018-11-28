@@ -28,7 +28,6 @@ namespace Apex.Serialization.Tests.Collections
             RoundTrip(x);
         }
 
-        [Fact]
         public void Hashtable()
         {
             var x = new Hashtable {{1, 1}, {"asd", "Asd"}, {3, null}, {new Test {Value = 5}, new Test {Value = 6}}};
@@ -55,7 +54,6 @@ namespace Apex.Serialization.Tests.Collections
             RoundTrip(x);
         }
 
-        [Fact]
         public void SortedList()
         {
             var x = new SortedList { { "aaa", 1 }, { "asd", "Asd" }, { "z", null }, { "x", new Test { Value = 6 } } };
