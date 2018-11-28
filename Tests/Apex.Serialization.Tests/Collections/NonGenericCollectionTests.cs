@@ -33,7 +33,7 @@ namespace Apex.Serialization.Tests.Collections
         {
             var x = new Hashtable {{1, 1}, {"asd", "Asd"}, {3, null}, {new Test {Value = 5}, new Test {Value = 6}}};
 
-            RoundTrip(x, (a,b) =>
+            x = RoundTrip(x, (a,b) =>
             {
                 a.Keys.Should().BeEquivalentTo(b.Keys);
                 a.Values.Should().BeEquivalentTo(b.Values);
@@ -60,7 +60,7 @@ namespace Apex.Serialization.Tests.Collections
         {
             var x = new SortedList { { "aaa", 1 }, { "asd", "Asd" }, { "z", null }, { "x", new Test { Value = 6 } } };
 
-            RoundTrip(x);
+            x = RoundTrip(x);
 
             x["aaa"].Should().Be(1);
             x["asd"].Should().Be("Asd");

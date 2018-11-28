@@ -2,6 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Text;
+using FluentAssertions;
 using Xunit;
 
 namespace Apex.Serialization.Tests.Collections.Concurrent
@@ -16,7 +17,10 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
             x.Push("");
             x.Push(null);
 
-            RoundTrip(x);
+            x = RoundTrip(x);
+
+            x.TryPeek(out var res);
+            res.Should().BeNull();
         }
     }
 }

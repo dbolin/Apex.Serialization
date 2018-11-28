@@ -10,7 +10,7 @@ using Apex.Serialization.Internal.Reflection;
 
 namespace Apex.Serialization.Internal
 {
-    internal class DynamicCode<TStream, TBinary>
+    internal static partial class DynamicCode<TStream, TBinary>
         where TStream : IBufferedStream
         where TBinary : ISerializer
     {
@@ -179,47 +179,15 @@ namespace Apex.Serialization.Internal
                 return Expression.Block(indices.Concat(lengths), statements);
             }
 
-            /*
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
-            {
-                var keyType = type.GetGenericArguments()[0];
-                var valueType = type.GetGenericArguments()[1];
+            return WriteCollection(type, output, actualSource, stream, source, settings);
+        }
 
-                var elementType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
-                var enumeratorType = type.GetNestedType("Enumerator").MakeGenericType(keyType, valueType);
-                var enumeratorVar = Expression.Variable(enumeratorType);
-                var getEnumeratorCall = Expression.Call(actualSource, type.GetMethod("GetEnumerator"));
-                var enumeratorAssign = Expression.Assign(enumeratorVar, getEnumeratorCall);
-                var moveNextCall = Expression.Call(enumeratorVar, typeof(IEnumerator).GetMethod("MoveNext"));
-
-                var loopVar = Expression.Variable(elementType);
-
-                var breakLabel = Expression.Label();
-
-                var loop = Expression.Block(new[] { enumeratorVar },
-                    Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo,
-                        Expression.Property(actualSource, "Count")),
-                    enumeratorAssign,
-                    Expression.Loop(
-                        Expression.IfThenElse(
-                            Expression.Equal(moveNextCall, Expression.Constant(true)),
-                            Expression.Block(new[] { loopVar },
-                                Expression.Assign(loopVar, Expression.Property(enumeratorVar, "Current")),
-                                Expression.Call(stream, BufferedStreamMethods<TStream>.WriteStringMethodInfo,
-                                    Expression.Property(loopVar, "Key")),
-                                Expression.Call(stream, BufferedStreamMethods<TStream>.WriteStringMethodInfo,
-                                    Expression.Property(loopVar, "Value"))
-                            ),
-                            Expression.Break(breakLabel)
-                        )
-                    ),
-                    Expression.Label(breakLabel));
-
-                return loop;
-            }
-            */
-
-            return null;
+        internal static Expression WriteCollection(Type type, ParameterExpression output,
+            ParameterExpression actualSource, ParameterExpression stream, ParameterExpression source, ImmutableSettings
+                settings)
+        {
+            return WriteDictionary(type, output, actualSource, stream, source, settings)
+                ?? WriteList(type, output, actualSource, stream, source, settings);
         }
 
         internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo, ParameterExpression source,
@@ -248,13 +216,6 @@ namespace Apex.Serialization.Internal
 
             var shouldWriteTypeInfo = !declaredType.IsSealed || typeof(Delegate).IsAssignableFrom(declaredType)
                 || typeof(Type).IsAssignableFrom(declaredType);
-
-            /*
-            if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
-            {
-                shouldWriteTypeInfo = false;
-            }
-            */
 
             if (shouldWriteTypeInfo)
             {
@@ -292,6 +253,16 @@ namespace Apex.Serialization.Internal
 
             return Expression.IfThen(Expression.Not(Expression.Call(output, SerializerMethods.WriteNullByteMethod, Expression.Convert(valueAccessExpression, typeof(object)))),
                 Expression.Call(output, "WriteSealedInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
+        }
+
+        private static int GetWriteSizeof(Type type)
+        {
+            if (type.IsValueType)
+            {
+                return (int)typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type).Invoke(null, Array.Empty<object>());
+            }
+
+            return 5;
         }
 
         internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject");
@@ -492,42 +463,13 @@ namespace Apex.Serialization.Internal
                 return Expression.Block(indices.Concat(lengths), statements);
             }
 
-            /*
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
-            {
-                var blockStatements = new List<Expression>();
-                var countVar = Expression.Variable(typeof(int));
-                blockStatements.Add(Expression.Assign(countVar, Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)));
+            return ReadCollection(type, output, result, stream, settings);
+        }
 
-                // TODO: need to save equality comparer
-                blockStatements.Add(Expression.Assign(result,
-                    Expression.Convert(
-                        Expression.New(type.GetConstructor(new Type[] {typeof(int)}), countVar), type)));
-
-                var breakLabel = Expression.Label();
-
-                blockStatements.Add(
-                    Expression.Loop(
-                        Expression.IfThenElse(
-                            Expression.Equal(countVar, Expression.Constant(0)),
-                            Expression.Break(breakLabel),
-                            Expression.Block(
-                                Expression.Call(result, type.GetMethod("Add", type.GenericTypeArguments),
-                                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReadStringMethodInfo),
-                                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReadStringMethodInfo)),
-                                Expression.AddAssign(countVar, Expression.Constant(-1))
-                                )
-                            )
-                        )
-                    );
-
-                blockStatements.Add(Expression.Label(breakLabel));
-
-                return Expression.Block(new [] {countVar}, blockStatements);
-            }
-            */
-
-            return null;
+        internal static Expression ReadCollection(Type type, ParameterExpression output, ParameterExpression result, ParameterExpression stream, ImmutableSettings settings)
+        {
+            return ReadDictionary(type, output, result, stream, settings)
+                ?? ReadList(type, output, result, stream, settings);
         }
 
         private static MethodInfo fieldInfoSetValueMethod = typeof(FieldInfo).GetMethod("SetValue", new[] { typeof(object), typeof(object) });
@@ -571,13 +513,6 @@ namespace Apex.Serialization.Internal
             var shouldReadTypeInfo = !declaredType.IsSealed || typeof(Delegate).IsAssignableFrom(declaredType)
                 || typeof(Type).IsAssignableFrom(declaredType);
 
-            /*
-            if (declaredType.IsGenericType && declaredType.GetGenericTypeDefinition() == typeof(Dictionary<,>))
-            {
-                shouldReadTypeInfo = false;
-            }
-            */
-
             if (shouldReadTypeInfo)
             {
                 return Expression.Convert(Expression.Call(output, "ReadInternal", null), declaredType);
@@ -614,5 +549,14 @@ namespace Apex.Serialization.Internal
                     declaredType), Expression.Convert(Expression.Constant(null), declaredType));
         }
 
+        private static int GetReadSizeof(Type type)
+        {
+            if (type.IsValueType)
+            {
+                return (int)typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type).Invoke(null, Array.Empty<object>());
+            }
+
+            return 5;
+        }
     }
 }

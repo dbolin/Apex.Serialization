@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -65,16 +66,35 @@ namespace Apex.Serialization.Internal.Reflection
             return 4;
         }
 
+        private static DictionarySlim<Type, Type> _collections = new DictionarySlim<Type, Type>();
+
+        internal static Type GetCustomCollectionBaseCollection(Type type)
+        {
+            if (_collections.TryGetValue(type, out var result))
+            {
+                return result;
+            }
+
+            return null;
+        }
+
         internal static List<FieldInfo> GetFields(Type type)
         {
             lock (_cacheLock)
             {
+                var originalType = type;
                 ref var fields = ref _cache.GetOrAddValueRef(type);
                 if (fields == null)
                 {
                     var start = Enumerable.Empty<FieldInfo>();
                     while (type != null)
                     {
+                        if (IsKnownCollection(type))
+                        {
+                            _collections.GetOrAddValueRef(originalType) = type;
+                            //break;
+                        }
+
                         var newFields = type.GetFields(BindingFlags.Instance | BindingFlags.Public |
                                                        BindingFlags.NonPublic |
                                                        BindingFlags.DeclaredOnly)
@@ -90,6 +110,28 @@ namespace Apex.Serialization.Internal.Reflection
 
                 return fields;
             }
+        }
+
+        private static HashSet<Type> _knownCollections = new HashSet<Type>
+        {
+            typeof(Dictionary<,>),
+            typeof(SortedDictionary<,>),
+            typeof(ConcurrentDictionary<,>),
+            typeof(SortedList<,>),
+            typeof(LinkedList<>),
+            typeof(SortedSet<>),
+            typeof(ConcurrentQueue<>),
+            typeof(ConcurrentBag<>),
+        };
+
+        internal static bool IsKnownCollection(Type type)
+        {
+            if (type.IsGenericType)
+            {
+                type = type.GetGenericTypeDefinition();
+            }
+
+            return _knownCollections.Contains(type);
         }
     }
 }

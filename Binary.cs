@@ -38,6 +38,12 @@ namespace Apex.Serialization
         private readonly DictionarySlim<Type, Action<object, BufferedStream, Binary>> VirtualWriteMethods = new DictionarySlim<Type, Action<object, BufferedStream, Binary>>();
         private readonly DictionarySlim<Type, Func<BufferedStream, Binary, object>> VirtualReadMethods = new DictionarySlim<Type, Func<BufferedStream, Binary, object>>();
 
+        private Type _lastWriteType;
+        private Action<object, BufferedStream, Binary> _lastWriteMethod;
+
+        private Type _lastReadType;
+        private Func<BufferedStream, Binary, object> _lastReadMethod;
+
         private readonly TypeLookup<Type> _knownTypes = new TypeLookup<Type>();
 
         private readonly List<ValueTuple<Action<object>,object>> _deserializationHooks;
@@ -138,12 +144,20 @@ namespace Apex.Serialization
 
             var type = ReadTypeRefInternal();
 
+            if (_lastReadType == type)
+            {
+                return _lastReadMethod(_stream, this);
+            }
+
             ref var method = ref VirtualReadMethods.GetOrAddValueRef(type);
 
             if (method == null)
             {
                 method = (Func<BufferedStream, Binary, object>)DynamicCode<BufferedStream, Binary>.GenerateReadMethod(type, Settings, true);
             }
+
+            _lastReadType = type;
+            _lastReadMethod = method;
 
             return method(_stream, this);
         }
@@ -280,12 +294,22 @@ namespace Apex.Serialization
             }
 
             var type = value.GetType();
+
+            if (_lastWriteType == type)
+            {
+                _lastWriteMethod(value, _stream, this);
+                return;
+            }
+
             ref var method = ref VirtualWriteMethods.GetOrAddValueRef(type);
 
             if (method == null)
             {
                 method = (Action<object, BufferedStream, Binary>) DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(type, Settings, true);
             }
+
+            _lastWriteType = type;
+            _lastWriteMethod = method;
 
             method(value, _stream, this);
         }

@@ -13,8 +13,7 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
         {
             var x = new ConcurrentBag<object> {1, "123", null};
 
-            //TODO: should work with tree
-            RoundTripGraphOnly(x);
+            RoundTrip(x);
         }
     }
 }

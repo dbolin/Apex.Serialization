@@ -18,6 +18,18 @@ namespace Apex.Serialization.Tests.Collections
             public Dictionary<string, string> Values;
         }
 
+        public class InheritedDictionary : Dictionary<string, object>
+        {
+            public int OwnField;
+
+            public int Count => 123;
+
+            public IEnumerator<int> GetEnumerator()
+            {
+                throw new NotSupportedException();
+            }
+        }
+
         [Fact]
         public void IntDictionary()
         {
@@ -31,7 +43,7 @@ namespace Apex.Serialization.Tests.Collections
         {
             var x = new Dictionary<string, string> {{"a", "a"}, {"b", "b"}};
 
-            RoundTrip(x);
+            x = RoundTrip(x);
 
             x["a"].Should().Be("a");
             x["b"].Should().Be("b");
@@ -64,6 +76,18 @@ namespace Apex.Serialization.Tests.Collections
                 {Values = new Dictionary<string, string> {{"a", "a"}, {"b", "b"}, {"c", "c"}, {"d", "d"}}};
 
             RoundTrip(x);
+        }
+
+        [Fact]
+        public void CustomDictionary()
+        {
+            var x = new InheritedDictionary {OwnField = 4};
+            x.Add("test", "test2");
+
+            x = RoundTrip(x);
+
+            x.ContainsKey("test").Should().Be(true);
+            x.OwnField.Should().Be(4);
         }
     }
 }

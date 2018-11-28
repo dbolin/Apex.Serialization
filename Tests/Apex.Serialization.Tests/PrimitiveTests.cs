@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using FluentAssertions;
 using Xunit;
 
 namespace Apex.Serialization.Tests
@@ -89,6 +90,16 @@ namespace Apex.Serialization.Tests
             };
 
             RoundTrip(x);
+        }
+
+        [Fact]
+        public void DateTimeTest()
+        {
+            var x = DateTime.UtcNow.ToLocalTime();
+
+            var y = RoundTrip(x);
+
+            y.Kind.Should().Be(x.Kind);
         }
     }
 }
