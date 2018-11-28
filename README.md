@@ -22,6 +22,7 @@ Some types aren't supported:
 - Enumerators
 - Objects that use randomized hashing or other runtime specific data to determine their behavior
 - Structs with explicit layout that have reference fields
+- Objects containing pointers or handles to unmanaged resources
 - BlockingCollection\<T>
 - Non-generic standard collections
 
