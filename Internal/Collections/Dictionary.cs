@@ -83,6 +83,11 @@ namespace Apex.Serialization.Internal
                 return null;
             }
 
+            if (!TypeFields.IsKnownCollection(collectionType))
+            {
+                return null;
+            }
+
             var genericTypeDef = collectionType.GetGenericTypeDefinition();
             if (genericTypeDef != typeof(Dictionary<,>)
                 && genericTypeDef != typeof(ConcurrentDictionary<,>)
