@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using Apex.Serialization.Internal;
 using Apex.Serialization.Internal.Reflection;
 using BufferedStream = Apex.Serialization.Internal.BufferedStream;
@@ -335,6 +336,24 @@ namespace Apex.Serialization
             return WriteNullByteInternal(value);
         }
 
+        private DictionarySlim<MethodInfo, Type[]> _methodParametersCache = new DictionarySlim<MethodInfo, Type[]>();
+
+        internal Type[] GetMethodParameterTypes(MethodInfo method)
+        {
+            ref var parameterTypes = ref _methodParametersCache.GetOrAddValueRef(method);
+            if (parameterTypes == null)
+            {
+                var parameters = method.GetParameters();
+                parameterTypes = new Type[parameters.Length];
+                for (int i = 0; i < parameters.Length; ++i)
+                {
+                    parameterTypes[i] = parameters[i].ParameterType;
+                }
+            }
+
+            return parameterTypes;
+        }
+
         void ISerializer.WriteFunction(Delegate value)
         {
             WriteFunctionInternal(value);
@@ -349,12 +368,12 @@ namespace Apex.Serialization
             WriteTypeRefInternal(value.Method.DeclaringType);
             _stream.Write(value.Method.Name);
             _stream.ReserveSize(4);
-            var parameters = value.Method.GetParameters();
+            var parameters = GetMethodParameterTypes(value.Method);
             _stream.Write(parameters.Length);
-            foreach (var p in parameters.Select(x => x.ParameterType))
+            for (int i = 0; i < parameters.Length; ++i)
             {
                 _stream.ReserveSize(4);
-                WriteTypeRefInternal(p);
+                WriteTypeRefInternal(parameters[i]);
             }
             _stream.ReserveSize(1);
             if (value.Target == null)
