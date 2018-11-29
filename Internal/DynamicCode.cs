@@ -222,7 +222,14 @@ namespace Apex.Serialization.Internal
                 return Expression.Call(output, "WriteInternal", null, valueAccessExpression);
             }
 
-            return Expression.Call(output, "WriteSealedInternal", new[] {declaredType}, valueAccessExpression);
+            if (declaredType.IsValueType)
+            {
+                return Expression.Call(output, "WriteValueInternal", new[] { declaredType }, valueAccessExpression);
+            }
+            else
+            {
+                return Expression.Call(output, "WriteSealedInternal", new[] { declaredType }, valueAccessExpression);
+            }
         }
 
         private static Expression HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
@@ -252,7 +259,7 @@ namespace Apex.Serialization.Internal
             }
 
             return Expression.IfThen(Expression.Not(Expression.Call(output, SerializerMethods.WriteNullByteMethod, Expression.Convert(valueAccessExpression, typeof(object)))),
-                Expression.Call(output, "WriteSealedInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
+                Expression.Call(output, "WriteValueInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
         }
 
         private static int GetWriteSizeof(Type type)
@@ -558,7 +565,14 @@ namespace Apex.Serialization.Internal
                 return Expression.Convert(Expression.Call(output, "ReadInternal", null), declaredType);
             }
 
-            return Expression.Call(output, "ReadSealedInternal", new[] { declaredType });
+            if (declaredType.IsValueType)
+            {
+                return Expression.Call(output, "ReadValueInternal", new[] { declaredType });
+            }
+            else
+            {
+                return Expression.Call(output, "ReadSealedInternal", new[] { declaredType });
+            }
         }
 
         private static Expression HandlePrimitiveRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
@@ -585,7 +599,7 @@ namespace Apex.Serialization.Internal
             }
 
             return Expression.Condition(Expression.Not(Expression.Call(output, SerializerMethods.ReadNullByteMethod)),
-                Expression.Convert(Expression.Call(output, "ReadSealedInternal", declaredType.GenericTypeArguments),
+                Expression.Convert(Expression.Call(output, "ReadValueInternal", declaredType.GenericTypeArguments),
                     declaredType), Expression.Convert(Expression.Constant(null), declaredType));
         }
 
