@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using Apex.Serialization.Internal;
 using Apex.Serialization.Internal.Reflection;
@@ -88,7 +87,14 @@ namespace Apex.Serialization
 
             if (StaticTypeInfo<T>.IsSealed)
             {
-                WriteSealedInternal(value);
+                if (StaticTypeInfo<T>.IsValueType)
+                {
+                    WriteValueInternal(value);
+                }
+                else
+                {
+                    WriteSealedInternal(value);
+                }
             }
             else
             {
@@ -111,7 +117,14 @@ namespace Apex.Serialization
             object result;
             if (StaticTypeInfo<T>.IsSealed)
             {
-                result = ReadSealedInternal<T>();
+                if (StaticTypeInfo<T>.IsValueType)
+                {
+                    result = ReadValueInternal<T>();
+                }
+                else
+                {
+                    result = ReadSealedInternal<T>();
+                }
             }
             else
             {
@@ -193,14 +206,23 @@ namespace Apex.Serialization
             return type;
         }
 
+        internal T ReadValueInternal<T>()
+        {
+            var method = ReadMethods<T>.Methods[_settingsIndex];
+            if (method == null)
+            {
+                method = (Func<BufferedStream, Binary, T>)DynamicCode<BufferedStream, Binary>.GenerateReadMethod(typeof(T), Settings, false);
+                ReadMethods<T>.Methods[_settingsIndex] = method;
+            }
+
+            return method(_stream, this);
+        }
+
         internal T ReadSealedInternal<T>()
         {
-            if (!StaticTypeInfo<T>.IsValueType)
+            if (ReadObjectRefHeader(out T result))
             {
-                if (ReadObjectRefHeader(out T result))
-                {
-                    return result;
-                }
+                return result;
             }
 
             var method = ReadMethods<T>.Methods[_settingsIndex];
@@ -499,20 +521,31 @@ namespace Apex.Serialization
             return Delegate.Combine(list);
         }
 
+        internal void WriteValueInternal<T>(T value)
+        {
+            var method = WriteMethods<T>.Methods[_settingsIndex];
+            if (method == null)
+            {
+                CheckTypes(value);
+
+                method = (Action<T, BufferedStream, Binary>)DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(value.GetType(), Settings, false);
+                WriteMethods<T>.Methods[_settingsIndex] = method;
+            }
+
+            method(value, _stream, this);
+        }
+
         internal void WriteSealedInternal<T>(T value)
         {
-            if (!StaticTypeInfo<T>.IsValueType)
+            _stream.ReserveSize(1);
+            if (ReferenceEquals(value, null))
             {
-                _stream.ReserveSize(1);
-                if (ReferenceEquals(value, null))
-                {
-                    _stream.Write((byte)0);
-                    return;
-                }
-                else
-                {
-                    _stream.Write((byte)1);
-                }
+                _stream.Write((byte)0);
+                return;
+            }
+            else
+            {
+                _stream.Write((byte)1);
             }
 
             var method = WriteMethods<T>.Methods[_settingsIndex];
