@@ -63,7 +63,7 @@ namespace Apex.Serialization.Internal.Reflection
                 return size;
             }
 
-            return 4;
+            return 0;
         }
 
         private static DictionarySlim<Type, Type> _collections = new DictionarySlim<Type, Type>();
@@ -104,8 +104,19 @@ namespace Apex.Serialization.Internal.Reflection
                         type = type.BaseType;
                     }
 
-                    fields = start.OrderBy(x => IsPrimitive(x) ? 0 : 1).ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
-                        .ThenBy(x => x.Name).ToList();
+                    if (FieldInfoModifier.MustUseReflectionToSetReadonly)
+                    {
+                        fields = start.OrderBy(x => x.IsInitOnly ? 0 : 1)
+                            .ThenBy(x => IsPrimitive(x) ? 0 : 1)
+                            .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
+                            .ThenBy(x => x.Name).ToList();
+                    }
+                    else
+                    {
+                        fields = start.OrderBy(x => IsPrimitive(x) ? 0 : 1)
+                            .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
+                            .ThenBy(x => x.Name).ToList();
+                    }
                 }
 
                 return fields;

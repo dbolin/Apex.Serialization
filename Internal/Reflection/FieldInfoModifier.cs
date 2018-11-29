@@ -21,6 +21,8 @@ namespace Apex.Serialization.Internal.Reflection
 
         internal static Action<FieldInfo> setFieldInfoNotReadonly;
 
+        internal static bool MustUseReflectionToSetReadonly => setFieldInfoNotReadonly == null;
+
         static FieldInfoModifier()
         {
             var type = Type.GetType("System.Reflection.RtFieldInfo", false);

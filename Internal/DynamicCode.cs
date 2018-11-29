@@ -279,7 +279,7 @@ namespace Apex.Serialization.Internal
             var readStatements = new List<Expression>();
             var localVariables = new List<ParameterExpression>();
 
-            var result = Expression.Variable(type);
+            var result = Expression.Variable(type, "result");
             localVariables.Add(result);
 
             if(type.IsValueType)
@@ -329,7 +329,47 @@ namespace Apex.Serialization.Internal
                     throw new NotSupportedException("Objects containing handles are not supported");
                 }
 
-                readStatements.AddRange(fields.Select(x => GetReadFieldExpression(x, result, stream, output)));
+                if (type.IsValueType && FieldInfoModifier.MustUseReflectionToSetReadonly)
+                {
+                    var boxedResult = Expression.Variable(typeof(object), "boxedResult");
+                    bool shouldUnbox = false;
+                    bool fieldIsBoxed = false;
+                    for (int i = 0; i < fields.Count; ++i)
+                    {
+                        var field = fields[i];
+                        if (i == 0 && field.IsInitOnly)
+                        {
+                            localVariables.Add(boxedResult);
+                            readStatements.Add(Expression.Assign(boxedResult,
+                                Expression.Convert(result, typeof(object))));
+                            shouldUnbox = true;
+                            fieldIsBoxed = true;
+                        } else if (!field.IsInitOnly && shouldUnbox)
+                        {
+                            readStatements.Add(Expression.Assign(result, Expression.Unbox(boxedResult, type)));
+                            shouldUnbox = false;
+                            fieldIsBoxed = false;
+                        }
+
+                        if (fieldIsBoxed)
+                        {
+                            readStatements.Add(GetReadFieldExpression(field, boxedResult, stream, output));
+                        }
+                        else
+                        {
+                            readStatements.Add(GetReadFieldExpression(field, result, stream, output));
+                        }
+                    }
+
+                    if (shouldUnbox)
+                    {
+                        readStatements.Add(Expression.Assign(result, Expression.Unbox(boxedResult, type)));
+                    }
+                }
+                else
+                {
+                    readStatements.AddRange(fields.Select(x => GetReadFieldExpression(x, result, stream, output)));
+                }
             }
 
             if (settings.SupportSerializationHooks)
