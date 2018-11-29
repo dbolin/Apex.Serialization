@@ -440,20 +440,41 @@ namespace Apex.Serialization
             _stream.ReserveSize(1);
             bool hasTarget = _stream.Read<bool>();
             Delegate result;
+            var methods = TypeMethods.GetMethods(declaringType);
+            MethodInfo delegateMethod = null;
+            for (int i = 0; i < methods.Count; ++i)
+            {
+                var m = methods[i];
+                if (m.MethodInfo.Name != methodName)
+                {
+                    continue;
+                }
+
+                if (m.ParameterTypes.Length != parameterCount)
+                {
+                    continue;
+                }
+
+                for (int j = 0; j < parameterCount; ++j)
+                {
+                    if (m.ParameterTypes[j] != parameterTypeList[j])
+                    {
+                        goto next;
+                    }
+                }
+
+                delegateMethod = m.MethodInfo;
+                break;
+                next: ;
+            }
             if (hasTarget)
             {
                 var target = ReadInternal();
-                result = Delegate.CreateDelegate(delegateType, target, declaringType.GetMethod(methodName,
-                    System.Reflection.BindingFlags.Public
-                    | System.Reflection.BindingFlags.NonPublic
-                    | System.Reflection.BindingFlags.Instance, null, parameterTypeList, null));
+                result = Delegate.CreateDelegate(delegateType, target, delegateMethod);
             }
             else
             {
-                result = Delegate.CreateDelegate(delegateType, declaringType.GetMethod(methodName,
-                    System.Reflection.BindingFlags.NonPublic
-                    | System.Reflection.BindingFlags.Public
-                    | System.Reflection.BindingFlags.Static, null, parameterTypeList, null));
+                result = Delegate.CreateDelegate(delegateType, delegateMethod);
             }
 
             _stream.ReserveSize(5);
