@@ -487,7 +487,7 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    return Expression.Call(Expression.Constant(fieldInfo), fieldInfoSetValueMethod, result, Expression.Convert(ReadValue(stream, output, declaredType), typeof(object)));
+                    return Expression.Call(Expression.Constant(fieldInfo), fieldInfoSetValueMethod, Expression.Convert(result, typeof(object)), Expression.Convert(ReadValue(stream, output, declaredType), typeof(object)));
                 }
             }
 
