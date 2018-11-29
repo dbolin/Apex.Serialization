@@ -1,12 +1,24 @@
 ﻿using System;
+using System.IO;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Security;
 
 namespace Apex.Serialization.Internal.Reflection
 {
     // If I didn't do it, then someone else would
     internal static class FieldInfoModifier
     {
+        private class TestReadonly
+        {
+            public TestReadonly(int v)
+            {
+                Value = v;
+            }
+
+            public readonly int Value;
+        }
+
         internal static Action<FieldInfo> setFieldInfoNotReadonly;
 
         static FieldInfoModifier()
@@ -29,6 +41,28 @@ namespace Apex.Serialization.Internal.Reflection
                         )
                     , fieldInfoParam
                     ).Compile();
+
+                var s = new Binary();
+                try
+                {
+                    var test = new TestReadonly(5);
+                    var m = new MemoryStream();
+                    s.Write(test, m);
+                    m.Seek(0, SeekOrigin.Begin);
+                    test = s.Read<TestReadonly>(m);
+                    if (test.Value != 5)
+                    {
+                        setFieldInfoNotReadonly = null;
+                    }
+                }
+                catch (VerificationException)
+                {
+                    setFieldInfoNotReadonly = null;
+                }
+                finally
+                {
+                    s.Dispose();
+                }
             }
         }
     }
