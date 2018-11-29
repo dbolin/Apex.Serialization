@@ -63,7 +63,7 @@ namespace Apex.Serialization.Internal.Reflection
                 return size;
             }
 
-            return 0;
+            return 5;
         }
 
         private static DictionarySlim<Type, Type> _collections = new DictionarySlim<Type, Type>();
