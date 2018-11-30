@@ -34,18 +34,4 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
-
-  <PropertyGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFramework)'== 'net47'">
-    <!-- Make .NET 4.7 reference assemblies available even on Linux -->
-    <FrameworkPathOverride>$(NuGetPackageRoot)microsoft.targetingpack.netframework.v4.7/1.0.1/lib/net47/</FrameworkPathOverride>
-    <!-- Make sure the additional feed is searched. -->
-    <RestoreAdditionalProjectSources>https://dotnet.myget.org/F/dotnet-core/api/v3/index.json</RestoreAdditionalProjectSources>
-  </PropertyGroup>
-
-  <ItemGroup Condition="'$(OS)' != 'Windows_NT' AND '$(TargetFramework)'== 'net47'">
-    <!-- Make sure the reference assemblies are available -->
-    <PackageReference Include="Microsoft.TargetingPack.NETFramework.v4.7"
-                      Version="1.0.1" ExcludeAssets="All" PrivateAssets="All" />
-  </ItemGroup>
-
 </Project>
