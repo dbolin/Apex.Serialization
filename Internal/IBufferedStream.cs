@@ -51,7 +51,7 @@ namespace Apex.Serialization.Internal
             {typeof(ulong), GenericMethods<ulong>.WriteValueMethodInfo},
             {typeof(short), GenericMethods<short>.WriteValueMethodInfo},
             {typeof(ushort), GenericMethods<ushort>.WriteValueMethodInfo},
-            {typeof(Guid), GenericMethods<Guid>.WriteValueMethodInfo}
+            {typeof(Guid), GenericMethods<Guid>.WriteValueMethodInfo},
         };
 
         internal static Dictionary<Type, MethodInfo> primitiveReadMethods = new Dictionary<Type, MethodInfo>
@@ -69,7 +69,7 @@ namespace Apex.Serialization.Internal
             {typeof(ulong), GenericMethods<ulong>.ReadValueMethodInfo},
             {typeof(short), GenericMethods<short>.ReadValueMethodInfo},
             {typeof(ushort), GenericMethods<ushort>.ReadValueMethodInfo},
-            {typeof(Guid), GenericMethods<Guid>.ReadValueMethodInfo}
+            {typeof(Guid), GenericMethods<Guid>.ReadValueMethodInfo},
         };
 
         internal static class GenericMethods<T> where T : struct
