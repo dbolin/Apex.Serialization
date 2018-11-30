@@ -29,7 +29,7 @@ Serializing/deserializing a list of 10000 small pocos defined as follows
         }
 ```
 
-#### Protobuf-net
+#### Protobuf-net 2.4.0
 ```
              Method |     Mean |     Error |    StdDev | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
 ------------------- |---------:|----------:|----------:|------------:|------------:|------------:|--------------------:|
@@ -39,7 +39,7 @@ Serializing/deserializing a list of 10000 small pocos defined as follows
            PocoRead | 9.395 ms | 0.1173 ms | 0.0979 ms |    203.1250 |     93.7500 |     31.2500 |          1197.97 KB |
 ```
 
-#### Hyperion
+#### Hyperion 0.9.8
 ```
              Method |     Mean |     Error |    StdDev | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
 ------------------- |---------:|----------:|----------:|------------:|------------:|------------:|--------------------:|
@@ -49,7 +49,7 @@ Serializing/deserializing a list of 10000 small pocos defined as follows
   ImmutablePocoRead | 9.601 ms | 0.2089 ms | 0.2145 ms |    421.8750 |    156.2500 |     62.5000 |          2366.15 KB |
 ```
 
-#### MsgPack
+#### MsgPack 1.7.3.4
 ```
              Method |     Mean |     Error |    StdDev | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
 ------------------- |---------:|----------:|----------:|------------:|------------:|------------:|--------------------:|
