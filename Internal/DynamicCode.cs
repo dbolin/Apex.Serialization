@@ -64,12 +64,11 @@ namespace Apex.Serialization.Internal
                 writeStatements.Add(
                     Expression.Call(output, SerializerMethods.WriteTypeRefMethod, Expression.Constant(type))
                 );
+                writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSizeNeeded)));
             }
 
-            writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSizeNeeded)));
-
             // write fields for normal types, some things are special like collections
-            var specialExpression = HandleSpecialWrite(type, output, actualSource, stream, source, settings);
+            var specialExpression = HandleSpecialWrite(type, output, actualSource, stream, source, fields, settings);
 
             if (specialExpression != null)
             {
@@ -95,7 +94,7 @@ namespace Apex.Serialization.Internal
             return lambda;
         }
 
-        internal static Expression HandleSpecialWrite(Type type, ParameterExpression output, ParameterExpression actualSource, ParameterExpression stream, ParameterExpression source, ImmutableSettings settings)
+        internal static Expression HandleSpecialWrite(Type type, ParameterExpression output, ParameterExpression actualSource, ParameterExpression stream, ParameterExpression source, List<FieldInfo> fields, ImmutableSettings settings)
         {
             var primitive = HandlePrimitiveWrite(stream, output, type, actualSource);
             if(primitive != null)
@@ -118,20 +117,10 @@ namespace Apex.Serialization.Internal
                 return Expression.Call(output, SerializerMethods.WriteFunctionMethod, Expression.Convert(source, typeof(Delegate)));
             }
 
-            if (type.IsValueType && type.IsExplicitLayout)
+            var writeStruct = WriteStructExpression(type, actualSource, stream, fields);
+            if (writeStruct != null)
             {
-                if (type.GetFields().Any(x => !x.FieldType.IsValueType))
-                {
-                    throw new NotSupportedException("Structs with explicit layout and reference fields are not supported");
-                }
-
-                var method = (MethodInfo)typeof(BufferedStreamMethods<>.GenericMethods<>).MakeGenericType(typeof(TStream), type)
-                    .GetField("WriteValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
-                return Expression.Block(
-                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
-                        Expression.Call(null, typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type))),
-                    Expression.Call(stream, method, actualSource)
-                );
+                return writeStruct;
             }
 
             if(type.IsArray)
@@ -182,6 +171,32 @@ namespace Apex.Serialization.Internal
             return WriteCollection(type, output, actualSource, stream, source, settings);
         }
 
+        private static Expression WriteStructExpression(Type type, Expression source, ParameterExpression stream,
+            List<FieldInfo> fields)
+        {
+            if (type.IsValueType)
+            {
+                if (type.IsExplicitLayout)
+                {
+                    if (fields.Any(x => !x.FieldType.IsValueType))
+                    {
+                        throw new NotSupportedException(
+                            "Structs with explicit layout and reference fields are not supported");
+                    }
+                }
+
+                if (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                {
+                    var method = (MethodInfo) typeof(BufferedStreamMethods<>.GenericMethods<>)
+                        .MakeGenericType(typeof(TStream), type)
+                        .GetField("WriteValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+                    return Expression.Call(stream, method, source);
+                }
+            }
+
+            return null;
+        }
+
         internal static Expression WriteCollection(Type type, ParameterExpression output,
             ParameterExpression actualSource, ParameterExpression stream, ParameterExpression source, ImmutableSettings
                 settings)
@@ -212,6 +227,12 @@ namespace Apex.Serialization.Internal
             if (nullableExpression != null)
             {
                 return nullableExpression;
+            }
+
+            var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, TypeFields.GetFields(declaredType));
+            if (writeStruct != null)
+            {
+                return writeStruct;
             }
 
             var shouldWriteTypeInfo = !declaredType.IsSealed || typeof(Delegate).IsAssignableFrom(declaredType)
@@ -297,7 +318,7 @@ namespace Apex.Serialization.Internal
             readStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSizeNeeded)));
             
             // write fields for normal types, some things are special like collections
-            var specialExpression = HandleSpecialRead(type, output, result, stream, settings);
+            var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings);
 
             if (specialExpression != null)
             {
@@ -341,12 +362,18 @@ namespace Apex.Serialization.Internal
                     var boxedResult = Expression.Variable(typeof(object), "boxedResult");
                     bool shouldUnbox = false;
                     bool fieldIsBoxed = false;
+                    bool addedBoxedVariable = false;
                     for (int i = 0; i < fields.Count; ++i)
                     {
                         var field = fields[i];
-                        if (i == 0 && field.IsInitOnly)
+                        if (field.IsInitOnly && !fieldIsBoxed)
                         {
-                            localVariables.Add(boxedResult);
+                            if (!addedBoxedVariable)
+                            {
+                                localVariables.Add(boxedResult);
+                                addedBoxedVariable = true;
+                            }
+
                             readStatements.Add(Expression.Assign(boxedResult,
                                 Expression.Convert(result, typeof(object))));
                             shouldUnbox = true;
@@ -409,7 +436,7 @@ namespace Apex.Serialization.Internal
             return lambda;
         }
 
-        internal static Expression HandleSpecialRead(Type type, ParameterExpression output, ParameterExpression result, ParameterExpression stream, ImmutableSettings settings)
+        internal static Expression HandleSpecialRead(Type type, ParameterExpression output, ParameterExpression result, ParameterExpression stream, List<FieldInfo> fields, ImmutableSettings settings)
         {
             var primitive = HandlePrimitiveRead(stream, output, type);
             if (primitive != null)
@@ -441,20 +468,10 @@ namespace Apex.Serialization.Internal
                 return Expression.Assign(result, Expression.Convert(Expression.Call(output, SerializerMethods.ReadFunctionMethod), type));
             }
 
-            if (type.IsValueType && type.IsExplicitLayout)
+            var readStructExpression = ReadStructExpression(type, stream, fields);
+            if (readStructExpression != null)
             {
-                if (type.GetFields().Any(x => !x.FieldType.IsValueType))
-                {
-                    throw new NotSupportedException("Structs with explicit layout and reference fields are not supported");
-                }
-
-                var method = (MethodInfo)typeof(BufferedStreamMethods<>.GenericMethods<>).MakeGenericType(typeof(TStream), type)
-                    .GetField("ReadValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
-                return Expression.Block(
-                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
-                        Expression.Call(null, typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type))),
-                    Expression.Assign(result, Expression.Call(stream, method))
-                );
+                return Expression.Assign(result, readStructExpression);
             }
 
             if (type.IsArray)
@@ -513,6 +530,32 @@ namespace Apex.Serialization.Internal
             return ReadCollection(type, output, result, stream, settings);
         }
 
+        private static Expression ReadStructExpression(Type type, ParameterExpression stream,
+            List<FieldInfo> fields)
+        {
+            if (type.IsValueType)
+            {
+                if (type.IsExplicitLayout)
+                {
+                    if (fields.Any(x => !x.FieldType.IsValueType))
+                    {
+                        throw new NotSupportedException(
+                            "Structs with explicit layout and reference fields are not supported");
+                    }
+                }
+
+                if (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                {
+                    var method = (MethodInfo) typeof(BufferedStreamMethods<>.GenericMethods<>)
+                        .MakeGenericType(typeof(TStream), type)
+                        .GetField("ReadValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+                    return Expression.Call(stream, method);
+                }
+            }
+
+            return null;
+        }
+
         internal static Expression ReadCollection(Type type, ParameterExpression output, ParameterExpression result, ParameterExpression stream, ImmutableSettings settings)
         {
             return ReadDictionary(type, output, result, stream, settings)
@@ -555,6 +598,12 @@ namespace Apex.Serialization.Internal
             if (nullableExpression != null)
             {
                 return nullableExpression;
+            }
+
+            var readStructExpression = ReadStructExpression(declaredType, stream, TypeFields.GetFields(declaredType));
+            if (readStructExpression != null)
+            {
+                return readStructExpression;
             }
 
             var shouldReadTypeInfo = !declaredType.IsSealed || typeof(Delegate).IsAssignableFrom(declaredType)
