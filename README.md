@@ -53,6 +53,10 @@ You may pass a Settings object to the constructor of the binary class that lets 
 - whether functions should be serialized
 - whether serialization hooks should be called (any methods with the [AfterDeserialization] attribute will be called after the object graph is completely deserialized.)
 
+#### Performance
+
+Performance is a feature!  See [benchmarks](Benchmarks.md) for comparisons with other fast binary serializers.
+
 #### Tips for best performance
 
 - Use sealed type declarations when possible - this allows the serializer to skip writing any type information
