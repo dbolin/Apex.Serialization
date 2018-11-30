@@ -19,6 +19,7 @@ namespace Apex.Serialization.Internal
         Type ReadTypeRef();
 
         bool WriteNullByte(object value);
+        bool WriteNullableByte<T>(T? value) where T : struct;
         bool ReadNullByte();
 
         void WriteFunction(Delegate value);
@@ -54,6 +55,7 @@ namespace Apex.Serialization.Internal
             typeof(List<Type>).GetProperty("Item", new[] { typeof(int) });
 
         internal static readonly MethodInfo WriteNullByteMethod = typeof(ISerializer).GetMethod("WriteNullByte");
+        internal static readonly MethodInfo WriteNullableByteMethod = typeof(ISerializer).GetMethod("WriteNullableByte");
         internal static readonly MethodInfo ReadNullByteMethod = typeof(ISerializer).GetMethod("ReadNullByte");
 
         internal static readonly MethodInfo WriteFunctionMethod = typeof(ISerializer).GetMethod("WriteFunction");

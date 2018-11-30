@@ -359,6 +359,22 @@ namespace Apex.Serialization
             return WriteNullByteInternal(value);
         }
 
+        bool ISerializer.WriteNullableByte<T>(T? value)
+        {
+            _stream.ReserveSize(1);
+            if (value.HasValue)
+            {
+                _stream.Write((byte)1);
+            }
+            else
+            {
+                _stream.Write((byte)0);
+                return true;
+            }
+
+            return false;
+        }
+
         private DictionarySlim<MethodInfo, Type[]> _methodParametersCache = new DictionarySlim<MethodInfo, Type[]>();
 
         internal Type[] GetMethodParameterTypes(MethodInfo method)
