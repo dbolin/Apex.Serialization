@@ -46,6 +46,7 @@ namespace Apex.Serialization.Internal.Reflection
         {
             public MethodInfo MethodInfo;
             public Type[] ParameterTypes;
+            public Type[] GenericArguments;
         }
 
         internal static List<MethodInformation> GetMethods(Type type)
@@ -64,7 +65,8 @@ namespace Apex.Serialization.Internal.Reflection
                         methods.Add(new MethodInformation
                         {
                             MethodInfo = methodInfos[i],
-                            ParameterTypes = methodInfos[i].GetParameters().Select(x => x.ParameterType).ToArray()
+                            ParameterTypes = methodInfos[i].GetParameters().Select(x => x.ParameterType).ToArray(),
+                            GenericArguments = methodInfos[i].GetGenericArguments()
                         });
                     }
                 }

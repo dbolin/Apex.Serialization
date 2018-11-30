@@ -4,6 +4,8 @@
     <TargetFrameworks>net47;netcoreapp2.1</TargetFrameworks>
 
     <IsPackable>false</IsPackable>
+
+    <LangVersion>7.1</LangVersion>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
