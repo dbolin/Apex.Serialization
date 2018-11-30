@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using FluentAssertions;
 using Xunit;
 
@@ -43,6 +44,28 @@ namespace Apex.Serialization.Tests
             public object D;
         }
 
+        public class Test3<T>
+        {
+            public static T F1(T value)
+            {
+                return default;
+            }
+
+            public T F2(T value)
+            {
+                return default;
+            }
+
+            public T2 F3<T2>(T value)
+            {
+                return default;
+            }
+
+            public void F4<T4>()
+            {
+            }
+        }
+
         [Fact]
         public void Functions()
         {
@@ -83,6 +106,22 @@ namespace Apex.Serialization.Tests
             ((Func<int>)y.B)().Should().Be(4);
             ((Func<int>)y.C)().Should().Be(5);
             ((Func<int>)y.D)().Should().Be(6);
+        }
+
+        [Fact]
+        public void GenericFunctions()
+        {
+            var t = new Test3<Test3<int>>();
+            var x = new Test2
+            {
+                A = (Func<Dictionary<string, Test3<int>>, Dictionary<string, Test3<int>>>)
+                    Test3<Dictionary<string, Test3<int>>>.F1,
+                B = (Func<Test3<int>, Test3<int>>) t.F2,
+                C = (Func<Test3<int>, bool>) t.F3<bool>,
+                D = (Action) t.F4<decimal>
+            };
+
+            RoundTrip(x, (a, b) => true);
         }
     }
 }

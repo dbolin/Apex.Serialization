@@ -376,6 +376,7 @@ namespace Apex.Serialization
         }
 
         private DictionarySlim<MethodInfo, Type[]> _methodParametersCache = new DictionarySlim<MethodInfo, Type[]>();
+        private DictionarySlim<MethodInfo, Type[]> _methodGenericsCache = new DictionarySlim<MethodInfo, Type[]>();
 
         internal Type[] GetMethodParameterTypes(MethodInfo method)
         {
@@ -393,6 +394,17 @@ namespace Apex.Serialization
             return parameterTypes;
         }
 
+        internal Type[] GetMethodGenericTypes(MethodInfo method)
+        {
+            ref var genericTypes = ref _methodGenericsCache.GetOrAddValueRef(method);
+            if (genericTypes == null)
+            {
+                genericTypes = method.GetGenericArguments();
+            }
+
+            return genericTypes;
+        }
+
         void ISerializer.WriteFunction(Delegate value)
         {
             WriteFunctionInternal(value);
@@ -406,13 +418,20 @@ namespace Apex.Serialization
             _stream.ReserveSize(4);
             WriteTypeRefInternal(value.Method.DeclaringType);
             _stream.Write(value.Method.Name);
-            _stream.ReserveSize(4);
+            _stream.ReserveSize(2);
             var parameters = GetMethodParameterTypes(value.Method);
-            _stream.Write(parameters.Length);
+            var generics = GetMethodGenericTypes(value.Method);
+            _stream.Write((byte)parameters.Length);
+            _stream.Write((byte)generics.Length);
             for (int i = 0; i < parameters.Length; ++i)
             {
                 _stream.ReserveSize(4);
                 WriteTypeRefInternal(parameters[i]);
+            }
+            for (int i = 0; i < generics.Length; ++i)
+            {
+                _stream.ReserveSize(4);
+                WriteTypeRefInternal(generics[i]);
             }
             _stream.ReserveSize(1);
             if (value.Target == null)
@@ -535,17 +554,29 @@ namespace Apex.Serialization
             ).Compile();
         }
 
+        private static Type[] _parameterTypeBuffer = new Type[256];
+        private static Type[][] _genericTypeBuffers = new Type[][] {new Type[1], new Type[2], new Type[3], new Type[4]};
+
         internal Delegate ReadFunctionInternal()
         {
             var delegateType = ReadTypeRefInternal();
             var declaringType = ReadTypeRefInternal();
             var methodName = _stream.Read();
-            _stream.ReserveSize(4);
-            var parameterCount = _stream.Read<int>();
-            var parameterTypeList = new Type[parameterCount];
+            _stream.ReserveSize(2);
+            var parameterCount = _stream.Read<byte>();
+            var genericCount = _stream.Read<byte>();
             for (int i = 0; i < parameterCount; ++i)
             {
-                parameterTypeList[i] = ReadTypeRefInternal();
+                _parameterTypeBuffer[i] = ReadTypeRefInternal();
+            }
+
+            var genericTypeBuffer = genericCount <= 4
+                ? (genericCount == 0 ? null : _genericTypeBuffers[genericCount - 1])
+                : new Type[genericCount];
+
+            for (int i = 0; i < genericCount; ++i)
+            {
+                genericTypeBuffer[i] = ReadTypeRefInternal();
             }
 
             _stream.ReserveSize(1);
@@ -566,15 +597,24 @@ namespace Apex.Serialization
                     continue;
                 }
 
+                if (m.GenericArguments.Length != genericCount)
+                {
+                    continue;
+                }
+
                 for (int j = 0; j < parameterCount; ++j)
                 {
-                    if (m.ParameterTypes[j] != parameterTypeList[j])
+                    if (m.ParameterTypes[j] != _parameterTypeBuffer[j])
                     {
                         goto next;
                     }
                 }
 
                 delegateMethod = m.MethodInfo;
+                if (m.GenericArguments.Length > 0)
+                {
+                    delegateMethod = delegateMethod.MakeGenericMethod(genericTypeBuffer);
+                }
                 break;
                 next:;
             }
