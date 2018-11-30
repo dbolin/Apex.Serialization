@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Apex.Serialization.Internal.Reflection
 {
@@ -34,7 +35,25 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static object _cacheLock = new object();
 
-        internal static bool IsPrimitive(FieldInfo x) => primitiveTypeSizeDictionary.ContainsKey(x.FieldType);
+        private static object _primitiveCacheLock = new object();
+
+        internal static bool IsPrimitive(FieldInfo x)
+        {
+            lock (_primitiveCacheLock)
+            {
+                if (primitiveTypeSizeDictionary.ContainsKey(x.FieldType))
+                {
+                    return true;
+                }
+
+                if (TryGetSizeForStruct(x, out _))
+                {
+                    return true;
+                }
+
+                return false;
+            }
+        } 
 
         private static Dictionary<Type, int> primitiveTypeSizeDictionary = new Dictionary<Type, int>
         {
@@ -55,15 +74,48 @@ namespace Apex.Serialization.Internal.Reflection
             {typeof(UIntPtr), 8},
             {typeof(Guid), 16},
         };
+        
+        private static Dictionary<Type, int> structSizeDictionary = new Dictionary<Type, int>();
 
         internal static int GetSizeForField(FieldInfo field)
         {
-            if (primitiveTypeSizeDictionary.TryGetValue(field.FieldType, out var size))
+            lock (_primitiveCacheLock)
             {
-                return size;
+                if (primitiveTypeSizeDictionary.TryGetValue(field.FieldType, out var size))
+                {
+                    return size;
+                }
+
+                if (TryGetSizeForStruct(field, out var sizeForField))
+                {
+                    return sizeForField;
+                }
             }
 
             return 5;
+        }
+
+        private static bool TryGetSizeForStruct(FieldInfo field, out int sizeForField)
+        {
+            if (structSizeDictionary.TryGetValue(field.FieldType, out sizeForField))
+            {
+                return true;
+            }
+
+            if (field.FieldType.IsValueType && GetFields(field.FieldType).Count <= 1)
+            {
+                var result = (int) typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(field.FieldType)
+                    .Invoke(null, Array.Empty<Type>());
+
+                structSizeDictionary.Add(field.FieldType, result);
+                {
+                    sizeForField = result;
+                    return true;
+                }
+            }
+
+            sizeForField = 5;
+            return false;
         }
 
         private static DictionarySlim<Type, Type> _collections = new DictionarySlim<Type, Type>();
@@ -95,19 +147,28 @@ namespace Apex.Serialization.Internal.Reflection
                             //break;
                         }
 
-                        var newFields = type.GetFields(BindingFlags.Instance | BindingFlags.Public |
-                                                       BindingFlags.NonPublic |
-                                                       BindingFlags.DeclaredOnly)
-                                            .Where(x => x.CustomAttributes.All(a => a.AttributeType != typeof(NonSerializedAttribute)));
+                        if (type.Module.ScopeName == "CommonLanguageRuntimeLibrary")
+                        {
+                            start = start.Concat(type.GetFields(BindingFlags.Instance | BindingFlags.Public |
+                                                                BindingFlags.NonPublic |
+                                                                BindingFlags.DeclaredOnly));
+                        }
+                        else
+                        {
+                            start = start.Concat(type.GetFields(BindingFlags.Instance | BindingFlags.Public |
+                                                                BindingFlags.NonPublic |
+                                                                BindingFlags.DeclaredOnly)
+                                .Where(x => x.CustomAttributes.All(a =>
+                                    a.AttributeType != typeof(NonSerializedAttribute))));
+                        }
 
-                        start = start.Concat(newFields);
                         type = type.BaseType;
                     }
 
                     if (FieldInfoModifier.MustUseReflectionToSetReadonly)
                     {
-                        fields = start.OrderBy(x => x.IsInitOnly ? 0 : 1)
-                            .ThenBy(x => IsPrimitive(x) ? 0 : 1)
+                        fields = start.OrderBy(x => IsPrimitive(x) ? 0 : 1)
+                            .ThenBy(x => x.IsInitOnly ? 0 : 1)
                             .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
                             .ThenBy(x => x.Name).ToList();
                     }
