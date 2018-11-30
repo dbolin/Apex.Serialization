@@ -150,6 +150,36 @@ namespace Apex.Serialization
             return (T)result;
         }
 
+        public void Precompile(Type type)
+        {
+            ref var readMethod = ref VirtualReadMethods.GetOrAddValueRef(type);
+            if (readMethod == null)
+            {
+                readMethod = (Func<BufferedStream, Binary, object>)DynamicCode<BufferedStream, Binary>.GenerateReadMethod(type, Settings, true);
+            }
+            ref var writeMethod = ref VirtualWriteMethods.GetOrAddValueRef(type);
+            if (writeMethod == null)
+            {
+                writeMethod = (Action<object, BufferedStream, Binary>)DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(type, Settings, true);
+            }
+        }
+
+        public void Precompile<T>()
+        {
+            var readMethod = ReadMethods<T>.Methods[_settingsIndex];
+            if (readMethod == null)
+            {
+                readMethod = (Func<BufferedStream, Binary, T>)DynamicCode<BufferedStream, Binary>.GenerateReadMethod(typeof(T), Settings, false);
+                ReadMethods<T>.Methods[_settingsIndex] = readMethod;
+            }
+            var writeMethod = WriteMethods<T>.Methods[_settingsIndex];
+            if (writeMethod == null)
+            {
+                writeMethod = (Action<T, BufferedStream, Binary>)DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(typeof(T), Settings, false);
+                WriteMethods<T>.Methods[_settingsIndex] = writeMethod;
+            }
+        }
+
         internal object ReadInternal()
         {
             if (ReadObjectRefHeader<object>(out var result))
