@@ -47,15 +47,17 @@ namespace Apex.Serialization.Internal
             var moveNextCall = Expression.Call(enumeratorVar, typeof(IEnumerator).GetMethod("MoveNext"));
 
             var loopVar = Expression.Variable(elementType);
+            var countVar = Expression.Variable(typeof(int));
 
             var maxSize = GetWriteSizeof(keyType) + GetWriteSizeof(valueType);
 
             var breakLabel = Expression.Label();
 
-            var loop = Expression.Block(new[] { enumeratorVar },
+            var loop = Expression.Block(new[] { enumeratorVar, countVar },
                 Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)),
-                Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo,
-                    Expression.Property(actualSource, collectionType.GetProperty("Count"))),
+                Expression.Assign(countVar, Expression.Property(actualSource, collectionType.GetProperty("Count"))),
+                Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, countVar),
+                Expression.IfThen(Expression.LessThanOrEqual(countVar, Expression.Constant(0)), Expression.Goto(breakLabel)),
                 enumeratorAssign,
                 Expression.Loop(
                     Expression.IfThenElse(
