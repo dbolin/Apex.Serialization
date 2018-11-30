@@ -279,7 +279,7 @@ namespace Apex.Serialization.Internal
                 return null;
             }
 
-            return Expression.IfThen(Expression.Not(Expression.Call(output, SerializerMethods.WriteNullByteMethod, Expression.Convert(valueAccessExpression, typeof(object)))),
+            return Expression.IfThen(Expression.Not(Expression.Call(output, SerializerMethods.WriteNullableByteMethod.MakeGenericMethod(declaredType.GenericTypeArguments), valueAccessExpression)),
                 Expression.Call(output, "WriteValueInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
         }
 
