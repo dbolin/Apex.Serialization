@@ -19,7 +19,7 @@ Serializing/deserializing delegates
         private Action<int, string, Func<Dictionary<string, object>, Dictionary<string, string>>> _t3 = F1;
 ```
 
-#### Hyperion
+#### Hyperion 0.9.8
 ```
                 Method |      Mean |     Error |    StdDev | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
 ---------------------- |----------:|----------:|----------:|------------:|------------:|------------:|--------------------:|
@@ -35,10 +35,10 @@ Serializing/deserializing delegates
 ```
                 Method |     Mean |     Error |    StdDev | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
 ---------------------- |---------:|----------:|----------:|------------:|------------:|------------:|--------------------:|
-        FunctionNoArgs | 229.3 ns | 2.2290 ns | 2.0850 ns |           - |           - |           - |                   - |
-        FunctionOneArg | 269.7 ns | 1.1841 ns | 1.1076 ns |           - |           - |           - |                   - |
-   FunctionComplexArgs | 419.0 ns | 1.2823 ns | 1.1995 ns |           - |           - |           - |                   - |
-      D_FunctionNoArgs | 282.2 ns | 0.8241 ns | 0.7709 ns |      0.0300 |           - |           - |                96 B |
-     D_FunctionOneArgs | 352.1 ns | 4.2557 ns | 3.9808 ns |      0.0329 |           - |           - |               104 B |
- D_FunctionComplexArgs | 557.1 ns | 8.0708 ns | 7.5494 ns |      0.0372 |           - |           - |               120 B |
+        FunctionNoArgs | 255.0 ns | 1.6044 ns | 1.5007 ns |           - |           - |           - |                   - |
+        FunctionOneArg | 299.0 ns | 0.8713 ns | 0.8150 ns |           - |           - |           - |                   - |
+   FunctionComplexArgs | 438.6 ns | 1.3600 ns | 1.2722 ns |           - |           - |           - |                   - |
+      D_FunctionNoArgs | 295.0 ns | 2.3364 ns | 2.1855 ns |      0.0224 |           - |           - |                72 B |
+     D_FunctionOneArgs | 341.5 ns | 1.2520 ns | 1.1711 ns |      0.0224 |           - |           - |                72 B |
+ D_FunctionComplexArgs | 542.3 ns | 1.1440 ns | 1.0701 ns |      0.0219 |           - |           - |                72 B |
 ```
