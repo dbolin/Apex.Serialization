@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq.Expressions;
 using System.Reflection;
 using Apex.Serialization.Internal;
 using Apex.Serialization.Internal.Reflection;
@@ -446,6 +447,78 @@ namespace Apex.Serialization
             return ReadFunctionInternal();
         }
 
+        internal struct DelegateID : IEquatable<DelegateID>
+        {
+            public DelegateID(Type delegateType, Type declaringType, MethodInfo delegateMethod)
+            {
+                DelegateType = delegateType;
+                DeclaringType = declaringType;
+                DelegateMethod = delegateMethod;
+            }
+
+            public Type DelegateType;
+            public Type DeclaringType;
+            public MethodInfo DelegateMethod;
+
+            public override bool Equals(object obj)
+            {
+                return obj is DelegateID id && Equals(id);
+            }
+
+            public bool Equals(DelegateID other)
+            {
+                return EqualityComparer<Type>.Default.Equals(DelegateType, other.DelegateType) &&
+                       EqualityComparer<Type>.Default.Equals(DeclaringType, other.DeclaringType) &&
+                       EqualityComparer<MethodInfo>.Default.Equals(DelegateMethod, other.DelegateMethod);
+            }
+
+            public override int GetHashCode()
+            {
+                var hashCode = 1750649675;
+                hashCode = hashCode * -1521134295 + EqualityComparer<Type>.Default.GetHashCode(DelegateType);
+                hashCode = hashCode * -1521134295 + EqualityComparer<Type>.Default.GetHashCode(DeclaringType);
+                hashCode = hashCode * -1521134295 + EqualityComparer<MethodInfo>.Default.GetHashCode(DelegateMethod);
+                return hashCode;
+            }
+
+            public static bool operator ==(DelegateID iD1, DelegateID iD2)
+            {
+                return iD1.Equals(iD2);
+            }
+
+            public static bool operator !=(DelegateID iD1, DelegateID iD2)
+            {
+                return !(iD1 == iD2);
+            }
+        }
+
+        private readonly DictionarySlim<DelegateID, Delegate> _delegateCache = new DictionarySlim<DelegateID, Delegate>();
+
+        private readonly Func<object, object> _clone = CreateCloneFunc();
+
+        private static Func<object, object> CreateCloneFunc()
+        {
+            var p = Expression.Parameter(typeof(object));
+            return Expression.Lambda<Func<object, object>>(
+                Expression.Call(p, typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
+                , p
+            ).Compile();
+        }
+
+        private readonly Action<Delegate, object> _setTarget = CreateSetTargetAction();
+
+        private static Action<Delegate, object> CreateSetTargetAction()
+        {
+            var p = Expression.Parameter(typeof(Delegate));
+            var t = Expression.Parameter(typeof(object));
+            return Expression.Lambda<Action<Delegate, object>>(
+                Expression.Assign(
+                    Expression.MakeMemberAccess(p,
+                        typeof(Delegate).GetField("_target", BindingFlags.Instance | BindingFlags.DeclaredOnly | BindingFlags.NonPublic)), t)
+                , p, t
+            ).Compile();
+        }
+
         internal Delegate ReadFunctionInternal()
         {
             var delegateType = ReadTypeRefInternal();
@@ -487,16 +560,30 @@ namespace Apex.Serialization
 
                 delegateMethod = m.MethodInfo;
                 break;
-                next: ;
+                next:;
             }
+
             if (hasTarget)
             {
                 var target = ReadInternal();
-                result = Delegate.CreateDelegate(delegateType, target, delegateMethod);
+                ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod));
+                if (cachedDelegate == null)
+                {
+                    cachedDelegate = Delegate.CreateDelegate(delegateType, null, delegateMethod);
+                }
+
+                result = (Delegate)_clone(cachedDelegate);
+                _setTarget(result, target);
             }
             else
             {
-                result = Delegate.CreateDelegate(delegateType, delegateMethod);
+                ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod));
+                if (cachedDelegate == null)
+                {
+                    cachedDelegate = Delegate.CreateDelegate(delegateType, delegateMethod);
+                }
+
+                result = cachedDelegate;
             }
 
             _stream.ReserveSize(5);
