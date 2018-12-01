@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using Apex.Serialization.Tests.Collections.Objects;
 using FluentAssertions;
 using Xunit;
 
@@ -88,6 +90,31 @@ namespace Apex.Serialization.Tests.Collections
 
             x.ContainsKey("test").Should().Be(true);
             x.OwnField.Should().Be(4);
+        }
+
+        [Fact]
+        public void RandomHashcodes()
+        {
+            var element = new RandomHashcode {Value = 10};
+            var x = new Dictionary<RandomHashcode, int> {{element, 1}};
+
+            RandomHashcode.NewRandomizer();
+
+            var y = RoundTrip(x, (a,b) => true);
+
+            y.First().Key.GetHashCode().Should().Be(element.GetHashCode());
+
+            y.ContainsKey(element).Should().Be(true);
+            y[element].Should().Be(1);
+        }
+
+        [Fact]
+        public void ClassAsKey()
+        {
+            var x = new Dictionary<Test2, int>();
+            x.Add(new Test2(), 1);
+
+            RoundTrip(x, (a,b) => b.First().Value.Should().Be(1));
         }
     }
 }
