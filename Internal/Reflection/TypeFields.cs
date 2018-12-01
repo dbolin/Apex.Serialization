@@ -35,11 +35,9 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static object _cacheLock = new object();
 
-        private static object _primitiveCacheLock = new object();
-
         internal static bool IsPrimitive(FieldInfo x)
         {
-            lock (_primitiveCacheLock)
+            lock (_cacheLock)
             {
                 if (primitiveTypeSizeDictionary.ContainsKey(x.FieldType))
                 {
@@ -79,7 +77,7 @@ namespace Apex.Serialization.Internal.Reflection
 
         internal static int GetSizeForField(FieldInfo field)
         {
-            lock (_primitiveCacheLock)
+            lock (_cacheLock)
             {
                 if (primitiveTypeSizeDictionary.TryGetValue(field.FieldType, out var size))
                 {
@@ -192,6 +190,7 @@ namespace Apex.Serialization.Internal.Reflection
             typeof(SortedList<,>),
             typeof(LinkedList<>),
             typeof(SortedSet<>),
+            typeof(HashSet<>),
             typeof(ConcurrentQueue<>),
             typeof(ConcurrentBag<>),
         };

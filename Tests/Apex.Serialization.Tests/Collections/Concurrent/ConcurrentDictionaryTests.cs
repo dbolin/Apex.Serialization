@@ -1,6 +1,9 @@
-﻿using System;
+﻿using Apex.Serialization.Tests.Collections.Objects;
+using FluentAssertions;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Xunit;
 
@@ -17,6 +20,23 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
             x.TryAdd(3, null);
 
             RoundTrip(x);
+        }
+
+        [Fact]
+        public void RandomHashcodes()
+        {
+            var element = new RandomHashcode {Value = 10};
+            var x = new ConcurrentDictionary<RandomHashcode, int>();
+            x.TryAdd(element, 1);
+
+            RandomHashcode.NewRandomizer();
+
+            var y = RoundTrip(x, (a, b) => true);
+
+            y.First().Key.GetHashCode().Should().Be(element.GetHashCode());
+
+            y.ContainsKey(element).Should().Be(true);
+            y[element].Should().Be(1);
         }
     }
 }

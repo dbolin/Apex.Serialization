@@ -49,7 +49,8 @@ namespace Apex.Serialization.Internal
             var loopVar = Expression.Variable(elementType);
             var countVar = Expression.Variable(typeof(int));
 
-            var maxSize = GetWriteSizeof(keyType) + GetWriteSizeof(valueType);
+            var keySize = GetWriteSizeof(keyType);
+            var valueSize = GetWriteSizeof(valueType);
 
             var breakLabel = Expression.Label();
 
@@ -64,8 +65,9 @@ namespace Apex.Serialization.Internal
                         Expression.Equal(moveNextCall, Expression.Constant(true)),
                         Expression.Block(new[] { loopVar },
                             Expression.Assign(loopVar, Expression.Property(enumeratorVar, "Current")),
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
+                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(keySize)),
                             WriteValue(stream, output, keyType, Expression.Property(loopVar, "Key")),
+                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(valueSize)),
                             WriteValue(stream, output, valueType, Expression.Property(loopVar, "Value"))
                         ),
                         Expression.Break(breakLabel)
@@ -142,7 +144,11 @@ namespace Apex.Serialization.Internal
                     SerializerMethods.SavedReferencesListAdd, result));
             }
 
-            var maxSize = GetWriteSizeof(keyType) + GetWriteSizeof(valueType);
+            var keySize = GetReadSizeof(keyType);
+            var valueSize = GetReadSizeof(valueType);
+
+            var keyVar = Expression.Variable(keyType);
+            var valueVar = Expression.Variable(valueType);
 
             var breakLabel = Expression.Label();
 
@@ -151,12 +157,12 @@ namespace Apex.Serialization.Internal
                     Expression.IfThenElse(
                         Expression.Equal(countVar, Expression.Constant(0)),
                         Expression.Break(breakLabel),
-                        Expression.Block(
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
-                            Expression.Call(result, collectionType.GetMethod(addMethod, collectionType.GenericTypeArguments),
-                                ReadValue(stream, output, keyType),
-                                ReadValue(stream, output, valueType)
-                                ),
+                        Expression.Block( new [] {keyVar, valueVar},
+                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(keySize)),
+                            Expression.Assign(keyVar, ReadValue(stream, output, keyType)),
+                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(valueSize)),
+                            Expression.Assign(valueVar, ReadValue(stream, output, valueType)),
+                            Expression.Call(result, collectionType.GetMethod(addMethod, collectionType.GenericTypeArguments), keyVar, valueVar),
                             Expression.AddAssign(countVar, Expression.Constant(-1))
                             )
                         )
