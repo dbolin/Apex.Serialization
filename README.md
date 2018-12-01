@@ -14,7 +14,7 @@ Currently BETA
 
 As the serialization is contract-less, the binary format produced depends on precise characteristics of the types serialized. Most changes to types, such as adding or removing fields, renaming types, or changing relationships between types will break compatibility with previously serialized data.
 
-For performance reasons, the serializer and deserializer make extensive use of pointers and raw memory access.  This will usually cause attempting to deserialize incompatible data to immediately crash the application instead of throwing an exception.
+For performance reasons, the serializer and deserializer make extensive use of pointers and direct memory access.  This will usually cause attempting to deserialize incompatible data to immediately crash the application instead of throwing an exception.
 
 NEVER deserialize data from an untrusted source.
 
@@ -25,6 +25,8 @@ Some types aren't supported:
 - Objects containing pointers or handles to unmanaged resources
 - BlockingCollection\<T>
 - Non-generic standard collections
+- ImmutableDictionary and ImmutableHashSet when the Key type hashcode can be randomized
+- Any class inheriting from standard collections when the Key type hashcode can be randomized
 
 Requires code generation capabilities, most likely only operates under full trust
 
