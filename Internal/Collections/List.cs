@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq.Expressions;
+using System.Reflection;
 using Apex.Serialization.Internal.Reflection;
 
 namespace Apex.Serialization.Internal
@@ -43,11 +44,12 @@ namespace Apex.Serialization.Internal
 
             var valueType = collectionType.GetGenericArguments()[0];
 
-            var enumeratorType = typeof(IEnumerator<>).MakeGenericType(valueType);
+            var enumeratorType = collectionType.GetMethod("GetEnumerator",
+                BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).ReturnType;
             var enumeratorVar = Expression.Variable(enumeratorType);
             var getEnumeratorCall = Expression.Convert(Expression.Call(actualSource, collectionType.GetMethod("GetEnumerator")), enumeratorType);
             var enumeratorAssign = Expression.Assign(enumeratorVar, getEnumeratorCall);
-            var moveNextCall = Expression.Call(enumeratorVar, typeof(IEnumerator).GetMethod("MoveNext"));
+            var moveNextCall = Expression.Call(enumeratorVar, enumeratorType.GetMethod("MoveNext") ?? typeof(IEnumerator).GetMethod("MoveNext"));
 
             var loopVar = Expression.Variable(valueType);
 
