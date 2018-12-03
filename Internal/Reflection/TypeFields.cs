@@ -59,7 +59,7 @@ namespace Apex.Serialization.Internal.Reflection
             {typeof(byte), 1},
             {typeof(sbyte), 1},
             {typeof(char), 2},
-            {typeof(decimal), 24},
+            {typeof(decimal), 16},
             {typeof(double), 8},
             {typeof(float), 4},
             {typeof(int), 4},
