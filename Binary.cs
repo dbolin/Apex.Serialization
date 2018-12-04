@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using Apex.Serialization.Internal;
 using Apex.Serialization.Internal.Reflection;
 using BufferedStream = Apex.Serialization.Internal.BufferedStream;
@@ -750,6 +751,38 @@ namespace Apex.Serialization
         void ISerializer.QueueAfterDeserializationHook(Action<object> method, object instance)
         {
             _deserializationHooks.Add((method,instance));
+        }
+
+        unsafe void ISerializer.WriteValuesArray(object array, int length, int elementSize)
+        {
+            var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
+            try
+            {
+                var ptr = handle.AddrOfPinnedObject().ToPointer();
+                _stream.ReserveSize(4);
+                _stream.Write(length);
+                _stream.WriteBytes(ptr, (uint)(length * elementSize));
+            }
+            finally
+            {
+                handle.Free();
+            }
+        }
+
+        unsafe void ISerializer.ReadIntoValuesArray(object array, int elementSize)
+        {
+            _stream.ReserveSize(4);
+            var length = _stream.Read<int>();
+            var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
+            try
+            {
+                var ptr = handle.AddrOfPinnedObject().ToPointer();
+                _stream.ReadBytes(ptr, (uint)(length * elementSize));
+            }
+            finally
+            {
+                handle.Free();
+            }
         }
     }
 }

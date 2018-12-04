@@ -18,7 +18,7 @@ namespace Apex.Serialization.Internal
         {
             var fields = TypeFields.GetFields(type);
 
-            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForField(x)) + 12;
+            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 12;
 
             var source = Expression.Parameter(shouldWriteTypeInfo ? typeof(object) : type, "source");
             var stream = Expression.Parameter(typeof(TStream), "stream");
@@ -128,47 +128,82 @@ namespace Apex.Serialization.Internal
                 var elementType = type.GetElementType();
                 var dimensions = type.GetArrayRank();
 
-                var lengths = new List<ParameterExpression>();
-                var indices = new List<ParameterExpression>();
+                var (elementSize, isRef) = TypeFields.GetSizeForType(elementType);
 
+                var lengths = new List<ParameterExpression>();
                 for (int i = 0; i < dimensions; ++i)
                 {
                     lengths.Add(Expression.Variable(typeof(int)));
-                    indices.Add(Expression.Variable(typeof(int)));
                 }
 
                 var statements = new List<Expression>();
-                statements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4 * dimensions)));
-                statements.AddRange(lengths.Select((x,i) => Expression.Assign(x, Expression.Call(actualSource, "GetLength", Array.Empty<Type>(), Expression.Constant(i)))));
-                statements.AddRange(lengths.Select(x => Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
 
-                var accessExpression = dimensions > 1
-                    ? (Expression) Expression.ArrayIndex(actualSource, indices)
-                    : Expression.ArrayIndex(actualSource, indices[0]);
-                var innerWrite = WriteValue(stream, output, elementType, accessExpression);
-                var loop = (Expression) Expression.Block(
-                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(24)),
-                    innerWrite);
-                for (int i = 0; i < dimensions; ++i)
+                statements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+                    Expression.Constant(4 * dimensions)));
+                statements.AddRange(lengths.Select((x, i) =>
+                    Expression.Assign(x, Expression.Call(actualSource, "GetLength", Array.Empty<Type>(), Expression.Constant(i)))));
+                statements.AddRange(lengths.Select(x =>
+                    Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
+
+                if (IsBlittable(elementType) && dimensions == 1)
                 {
-                    var breakLabel = Expression.Label();
-                    loop =
-                        Expression.Block(
-                            Expression.Assign(indices[i], Expression.Constant(0)),
-                            Expression.Loop(Expression.IfThenElse(
-                                Expression.GreaterThanOrEqual(indices[i], lengths[i]),
-                                Expression.Break(breakLabel),
-                                Expression.Block(loop, Expression.Assign(indices[i], Expression.Increment(indices[i])))
-                            ), breakLabel)
-                        );
+                    statements.Add(WriteArrayOfBlittableValues(output, actualSource, stream, dimensions, elementType, elementSize));
                 }
-
-                statements.Add(loop);
-
-                return Expression.Block(indices.Concat(lengths), statements);
+                else
+                {
+                    statements.Add(WriteArrayGeneral(output, actualSource, stream, dimensions, lengths, elementType, elementSize));
+                }
+                return Expression.Block(lengths, statements);
             }
 
             return WriteCollection(type, output, actualSource, stream, source, settings);
+        }
+
+        private static MethodInfo _allocMethod = typeof(GCHandle).GetMethod("Alloc", new[] { typeof(object), typeof(GCHandleType) });
+        private static MethodInfo _addrMethod = typeof(GCHandle).GetMethod("AddrOfPinnedObject");
+        private static MethodInfo _toPointerMethod = typeof(IntPtr).GetMethod("ToPointer");
+        private static MethodInfo _freeMethod = typeof(GCHandle).GetMethod("Free");
+
+        private static Expression WriteArrayOfBlittableValues(ParameterExpression output, ParameterExpression actualSource,
+            ParameterExpression stream, int dimensions, Type elementType, int elementSize)
+        {
+            return Expression.Call(output, SerializerMethods.WriteArrayOfValuesMethod,
+                Expression.Convert(actualSource, typeof(object)), Expression.Property(actualSource, "Length"),
+                Expression.Constant(elementSize));
+        }
+
+        private static Expression WriteArrayGeneral(ParameterExpression output, ParameterExpression actualSource,
+            ParameterExpression stream, int dimensions, List<ParameterExpression> lengths, Type elementType, int elementSize)
+        {
+            var indices = new List<ParameterExpression>();
+
+            for (int i = 0; i < dimensions; ++i)
+            {
+                indices.Add(Expression.Variable(typeof(int)));
+            }
+
+            var accessExpression = dimensions > 1
+                ? (Expression) Expression.ArrayIndex(actualSource, indices)
+                : Expression.ArrayIndex(actualSource, indices[0]);
+            var innerWrite = WriteValue(stream, output, elementType, accessExpression);
+            var loop = (Expression) Expression.Block(
+                Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
+                innerWrite);
+            for (int i = 0; i < dimensions; ++i)
+            {
+                var breakLabel = Expression.Label();
+                loop =
+                    Expression.Block(
+                        Expression.Assign(indices[i], Expression.Constant(0)),
+                        Expression.Loop(Expression.IfThenElse(
+                            Expression.GreaterThanOrEqual(indices[i], lengths[i]),
+                            Expression.Break(breakLabel),
+                            Expression.Block(loop, Expression.Assign(indices[i], Expression.Increment(indices[i])))
+                        ), breakLabel)
+                    );
+            }
+
+            return Expression.Block(indices, loop);
         }
 
         private static Expression WriteStructExpression(Type type, Expression source, ParameterExpression stream,
@@ -185,7 +220,9 @@ namespace Apex.Serialization.Internal
                     }
                 }
 
-                if (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                if (type.IsExplicitLayout ||
+                    (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                )
                 {
                     var method = (MethodInfo) typeof(BufferedStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)
@@ -283,23 +320,13 @@ namespace Apex.Serialization.Internal
                 Expression.Call(output, "WriteValueInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
         }
 
-        private static int GetWriteSizeof(Type type)
-        {
-            if (type.IsValueType)
-            {
-                return (int)typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type).Invoke(null, Array.Empty<object>());
-            }
-
-            return 5;
-        }
-
         internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject");
         private static Type[] emptyTypes = new Type[0];
 
         internal static Delegate GenerateReadMethod(Type type, ImmutableSettings settings, bool isBoxed)
         {
             var fields = TypeFields.GetFields(type);
-            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForField(x)) + 8;
+            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 8;
 
             var stream = Expression.Parameter(typeof(TStream), "stream");
             var output = Expression.Parameter(typeof(TBinary), "io");
@@ -479,18 +506,19 @@ namespace Apex.Serialization.Internal
                 var elementType = type.GetElementType();
                 var dimensions = type.GetArrayRank();
 
-                var lengths = new List<ParameterExpression>();
-                var indices = new List<ParameterExpression>();
+                var (elementSize, isRef) = TypeFields.GetSizeForType(elementType);
 
+                var lengths = new List<ParameterExpression>();
                 for (int i = 0; i < dimensions; ++i)
                 {
-                    lengths.Add(Expression.Variable(typeof(int),$"length{i}"));
-                    indices.Add(Expression.Variable(typeof(int), $"index{i}"));
+                    lengths.Add(Expression.Variable(typeof(int), $"length{i}"));
                 }
 
                 var statements = new List<Expression>();
-                statements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4 * dimensions)));
-                statements.AddRange(lengths.Select((x, i) => Expression.Assign(x, Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
+                statements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+                    Expression.Constant(4 * dimensions)));
+                statements.AddRange(lengths.Select((x, i) => Expression.Assign(x,
+                    Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
 
                 statements.Add(Expression.Assign(result, Expression.NewArrayBounds(elementType, lengths)));
 
@@ -500,34 +528,108 @@ namespace Apex.Serialization.Internal
                         SerializerMethods.SavedReferencesListAdd, result));
                 }
 
-                var accessExpression = dimensions > 1
-                    ? (Expression) Expression.ArrayAccess(result, indices)
-                    : Expression.ArrayAccess(result, indices[0]);
-                var innerRead = Expression.Block(
-                        Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(24)),
-                        Expression.Assign(accessExpression, ReadValue(stream, output, elementType))
-                    );
-                var loop = (Expression)innerRead;
-
-                for (int i = 0; i < dimensions; ++i)
+                if (IsBlittable(elementType) && dimensions == 1)
                 {
-                    var breakLabel = Expression.Label();
-                    loop = Expression.Block(
-                        Expression.Assign(indices[i], Expression.Constant(0)),
-                        Expression.Loop(Expression.IfThenElse(
-                            Expression.GreaterThanOrEqual(indices[i], lengths[i]),
-                            Expression.Break(breakLabel),
-                            Expression.Block(loop, Expression.Assign(indices[i], Expression.Increment(indices[i])))
-                        ), breakLabel)
-                    );
+                    statements.Add(ReadArrayOfBlittableValues(output, result, stream, dimensions, elementType, elementSize));
+                }
+                else
+                {
+                    statements.Add(ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths));
                 }
 
-                statements.Add(loop);
-
-                return Expression.Block(indices.Concat(lengths), statements);
+                return Expression.Block(lengths, statements);
             }
 
             return ReadCollection(type, output, result, stream, settings);
+        }
+
+        private static bool IsBlittable(Type elementType)
+        {
+            if (elementType == typeof(byte))
+            {
+                return true;
+            }
+            if (elementType == typeof(sbyte))
+            {
+                return true;
+            }
+            if (elementType == typeof(short))
+            {
+                return true;
+            }
+            if (elementType == typeof(ushort))
+            {
+                return true;
+            }
+            if (elementType == typeof(int))
+            {
+                return true;
+            }
+            if (elementType == typeof(uint))
+            {
+                return true;
+            }
+            if (elementType == typeof(long))
+            {
+                return true;
+            }
+            if (elementType == typeof(ulong))
+            {
+                return true;
+            }
+            if (elementType == typeof(float))
+            {
+                return true;
+            }
+            if (elementType == typeof(double))
+            {
+                return true;
+            }
+
+            return elementType.IsExplicitLayout && TypeFields.GetFields(elementType).All(x => IsBlittable(x.FieldType));
+        }
+
+        private static Expression ReadArrayOfBlittableValues(ParameterExpression output, ParameterExpression actualSource,
+            ParameterExpression stream, int dimensions, Type elementType, int elementSize)
+        {
+            return Expression.Call(output, SerializerMethods.ReadArrayOfValuesMethod,
+                Expression.Convert(actualSource, typeof(object)), Expression.Constant(elementSize));
+        }
+
+        private static Expression ReadArrayGeneral(ParameterExpression output, ParameterExpression result,
+            ParameterExpression stream, int dimensions, Type elementType, int elementSize,
+            List<ParameterExpression> lengths)
+        {
+            var indices = new List<ParameterExpression>();
+
+            for (int i = 0; i < dimensions; ++i)
+            {
+                indices.Add(Expression.Variable(typeof(int), $"index{i}"));
+            }
+
+            var accessExpression = dimensions > 1
+                ? (Expression) Expression.ArrayAccess(result, indices)
+                : Expression.ArrayAccess(result, indices[0]);
+            var innerRead = Expression.Block(
+                Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
+                Expression.Assign(accessExpression, ReadValue(stream, output, elementType))
+            );
+            var loop = (Expression) innerRead;
+
+            for (int i = 0; i < dimensions; ++i)
+            {
+                var breakLabel = Expression.Label();
+                loop = Expression.Block(
+                    Expression.Assign(indices[i], Expression.Constant(0)),
+                    Expression.Loop(Expression.IfThenElse(
+                        Expression.GreaterThanOrEqual(indices[i], lengths[i]),
+                        Expression.Break(breakLabel),
+                        Expression.Block(loop, Expression.Assign(indices[i], Expression.Increment(indices[i])))
+                    ), breakLabel)
+                );
+            }
+
+            return Expression.Block(indices, loop);
         }
 
         private static Expression ReadStructExpression(Type type, ParameterExpression stream,
@@ -544,7 +646,9 @@ namespace Apex.Serialization.Internal
                     }
                 }
 
-                if (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                if (type.IsExplicitLayout ||
+                    (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                )
                 {
                     var method = (MethodInfo) typeof(BufferedStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)
@@ -650,16 +754,6 @@ namespace Apex.Serialization.Internal
             return Expression.Condition(Expression.Not(Expression.Call(output, SerializerMethods.ReadNullByteMethod)),
                 Expression.Convert(Expression.Call(output, "ReadValueInternal", declaredType.GenericTypeArguments),
                     declaredType), Expression.Convert(Expression.Constant(null), declaredType));
-        }
-
-        private static int GetReadSizeof(Type type)
-        {
-            if (type.IsValueType)
-            {
-                return (int)typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type).Invoke(null, Array.Empty<object>());
-            }
-
-            return 5;
         }
     }
 }

@@ -53,7 +53,7 @@ namespace Apex.Serialization.Internal
 
             var loopVar = Expression.Variable(valueType);
 
-            var maxSize = GetWriteSizeof(valueType);
+            var (maxSize, isRef) = TypeFields.GetSizeForType(valueType);
 
             var breakLabel = Expression.Label();
 
@@ -126,8 +126,6 @@ namespace Apex.Serialization.Internal
             blockStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)));
             blockStatements.Add(Expression.Assign(countVar, Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)));
 
-            // TODO: need to save equality comparer
-            
             if (type == collectionType)
             {
                 var constructor = type.GetConstructor(new Type[] { typeof(int) });
@@ -158,7 +156,7 @@ namespace Apex.Serialization.Internal
                     SerializerMethods.SavedReferencesListAdd, result));
             }
 
-            var maxSize = GetWriteSizeof(valueType);
+            var (maxSize, isRef) = TypeFields.GetSizeForType(valueType);
 
             var breakLabel = Expression.Label();
 

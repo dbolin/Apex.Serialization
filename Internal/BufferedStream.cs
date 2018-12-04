@@ -337,5 +337,50 @@ namespace Apex.Serialization.Internal
             Dispose(true);
         }
 
+        public void WriteBytes(void* source, uint length)
+        {
+            uint sourcePosition = 0;
+            do
+            {
+                var allowed = (uint)(_size - _bufferPosition);
+                if (length > allowed)
+                {
+                    Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), Unsafe.Add<byte>(source, (int)sourcePosition), allowed);
+                    length -= allowed;
+                    _bufferPosition += allowed;
+                    sourcePosition += allowed;
+                    Flush();
+                }
+                else
+                {
+                    Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), Unsafe.Add<byte>(source, (int)sourcePosition), length);
+                    _bufferPosition += length;
+                    length = 0;
+                }
+            } while (length > 0);
+        }
+
+        public void ReadBytes(void* destination, uint length)
+        {
+            uint sourcePosition = 0;
+            do
+            {
+                var allowed = (uint)(_size - _bufferPosition);
+                if (length > allowed)
+                {
+                    Unsafe.CopyBlock(Unsafe.Add<byte>(destination, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), allowed);
+                    length -= allowed;
+                    sourcePosition += allowed;
+                    _bufferPosition += allowed;
+                    Flush();
+                }
+                else
+                {
+                    Unsafe.CopyBlock(Unsafe.Add<byte>(destination, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), length);
+                    _bufferPosition += length;
+                    length = 0;
+                }
+            } while (length > 0);
+        }
     }
 }

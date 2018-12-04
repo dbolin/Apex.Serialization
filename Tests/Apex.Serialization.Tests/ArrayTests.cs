@@ -27,6 +27,9 @@ namespace Apex.Serialization.Tests
 
             public int[][] ArrayOfArrays;
             public int[,] MultiDimensionalArray;
+            public DateTime[] DateTimeArray;
+            public Guid[] GuidArray;
+            public decimal?[] NullableDecimalArray;
         }
 
         [Fact]
@@ -40,7 +43,10 @@ namespace Apex.Serialization.Tests
                 RefArray = new Test3[] { new Test3 { Value = 5 } },
                 ObjectArray = new object[] { 1, "asd", new Test2 { Value = 6 }, new Test3 { Value = 7 }, null, new object[] { 1, "zxc" } },
                 ArrayOfArrays = new int[][] { new int[] { 1, 2, 3 }, new int[] { 4, 5, 6, 7, 8 } },
-                MultiDimensionalArray = new int[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } }
+                MultiDimensionalArray = new int[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } },
+                DateTimeArray = new [] {DateTime.UtcNow },
+                GuidArray = new [] {Guid.NewGuid() },
+                NullableDecimalArray = new [] {12.0m, (decimal?)null}
             };
 
             RoundTrip(x);
