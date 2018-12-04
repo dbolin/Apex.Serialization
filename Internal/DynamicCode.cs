@@ -18,7 +18,7 @@ namespace Apex.Serialization.Internal
         {
             var fields = TypeFields.GetFields(type);
 
-            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForField(x)) + 12;
+            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 12;
 
             var source = Expression.Parameter(shouldWriteTypeInfo ? typeof(object) : type, "source");
             var stream = Expression.Parameter(typeof(TStream), "stream");
@@ -185,7 +185,9 @@ namespace Apex.Serialization.Internal
                     }
                 }
 
-                if (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                if (type.IsExplicitLayout ||
+                    (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                )
                 {
                     var method = (MethodInfo) typeof(BufferedStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)
@@ -283,23 +285,13 @@ namespace Apex.Serialization.Internal
                 Expression.Call(output, "WriteValueInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
         }
 
-        private static int GetWriteSizeof(Type type)
-        {
-            if (type.IsValueType)
-            {
-                return (int)typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type).Invoke(null, Array.Empty<object>());
-            }
-
-            return 5;
-        }
-
         internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject");
         private static Type[] emptyTypes = new Type[0];
 
         internal static Delegate GenerateReadMethod(Type type, ImmutableSettings settings, bool isBoxed)
         {
             var fields = TypeFields.GetFields(type);
-            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForField(x)) + 8;
+            var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 8;
 
             var stream = Expression.Parameter(typeof(TStream), "stream");
             var output = Expression.Parameter(typeof(TBinary), "io");
@@ -544,7 +536,9 @@ namespace Apex.Serialization.Internal
                     }
                 }
 
-                if (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                if (type.IsExplicitLayout ||
+                    (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
+                )
                 {
                     var method = (MethodInfo) typeof(BufferedStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)
@@ -650,16 +644,6 @@ namespace Apex.Serialization.Internal
             return Expression.Condition(Expression.Not(Expression.Call(output, SerializerMethods.ReadNullByteMethod)),
                 Expression.Convert(Expression.Call(output, "ReadValueInternal", declaredType.GenericTypeArguments),
                     declaredType), Expression.Convert(Expression.Constant(null), declaredType));
-        }
-
-        private static int GetReadSizeof(Type type)
-        {
-            if (type.IsValueType)
-            {
-                return (int)typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type).Invoke(null, Array.Empty<object>());
-            }
-
-            return 5;
         }
     }
 }

@@ -44,7 +44,7 @@ namespace Apex.Serialization.Internal.Reflection
                     return true;
                 }
 
-                if (TryGetSizeForStruct(x, out _))
+                if (TryGetSizeForStruct(x.FieldType, out _))
                 {
                     return true;
                 }
@@ -75,37 +75,37 @@ namespace Apex.Serialization.Internal.Reflection
         
         private static Dictionary<Type, int> structSizeDictionary = new Dictionary<Type, int>();
 
-        internal static int GetSizeForField(FieldInfo field)
+        internal static (int size, bool isRef) GetSizeForType(Type type)
         {
             lock (_cacheLock)
             {
-                if (primitiveTypeSizeDictionary.TryGetValue(field.FieldType, out var size))
+                if (primitiveTypeSizeDictionary.TryGetValue(type, out var size))
                 {
-                    return size;
+                    return (size, false);
                 }
 
-                if (TryGetSizeForStruct(field, out var sizeForField))
+                if (TryGetSizeForStruct(type, out var sizeForField))
                 {
-                    return sizeForField;
+                    return (sizeForField, false);
                 }
             }
 
-            return 5;
+            return (5, true);
         }
 
-        private static bool TryGetSizeForStruct(FieldInfo field, out int sizeForField)
+        private static bool TryGetSizeForStruct(Type type, out int sizeForField)
         {
-            if (structSizeDictionary.TryGetValue(field.FieldType, out sizeForField))
+            if (structSizeDictionary.TryGetValue(type, out sizeForField))
             {
                 return true;
             }
 
-            if (field.FieldType.IsValueType && GetFields(field.FieldType).Count <= 1)
+            if (type.IsValueType && GetFields(type).Count <= 1)
             {
-                var result = (int) typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(field.FieldType)
+                var result = (int) typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type)
                     .Invoke(null, Array.Empty<Type>());
 
-                structSizeDictionary.Add(field.FieldType, result);
+                structSizeDictionary.Add(type, result);
                 {
                     sizeForField = result;
                     return true;

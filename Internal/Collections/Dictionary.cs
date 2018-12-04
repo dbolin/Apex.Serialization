@@ -51,8 +51,8 @@ namespace Apex.Serialization.Internal
             var loopVar = Expression.Variable(elementType);
             var countVar = Expression.Variable(typeof(int));
 
-            var keySize = GetWriteSizeof(keyType);
-            var valueSize = GetWriteSizeof(valueType);
+            var (keySize, keyIsRef) = TypeFields.GetSizeForType(keyType);
+            var (valueSize, valueIsRef) = TypeFields.GetSizeForType(valueType);
 
             var breakLabel = Expression.Label();
 
@@ -146,8 +146,8 @@ namespace Apex.Serialization.Internal
                     SerializerMethods.SavedReferencesListAdd, result));
             }
 
-            var keySize = GetReadSizeof(keyType);
-            var valueSize = GetReadSizeof(valueType);
+            var (keySize,keyIsRef) = TypeFields.GetSizeForType(keyType);
+            var (valueSize,valueIsRef) = TypeFields.GetSizeForType(valueType);
 
             var keyVar = Expression.Variable(keyType);
             var valueVar = Expression.Variable(valueType);
