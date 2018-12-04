@@ -19,9 +19,8 @@ For performance reasons, the serializer and deserializer make extensive use of p
 NEVER deserialize data from an untrusted source.
 
 Some types aren't supported:
-- Enumerators
 - Objects that use randomized hashing or other runtime specific data to determine their behavior
-- Structs with explicit layout that have reference fields
+- Structs with explicit layout that contain reference fields
 - Objects containing pointers or handles to unmanaged resources
 - BlockingCollection\<T>
 - Non-generic standard collections
