@@ -185,5 +185,35 @@ namespace Apex.Serialization.Tests
                 x.Should().Be($"00000000000000000000{i}");
             }
         }
+
+        [Fact]
+        public unsafe void WriteBytes()
+        {
+            var x = new int[] {1, 2, 3, 4};
+            var y = new int[4];
+
+            memoryStream.Seek(0, SeekOrigin.Begin);
+            Sut.WriteTo(memoryStream);
+
+            fixed (int* p = &x[0])
+            {
+                Sut.WriteBytes((byte*) p, 4 * 4);
+            }
+
+            Sut.Flush();
+
+            memoryStream.Seek(0, SeekOrigin.Begin);
+            Sut.ReadFrom(memoryStream);
+
+            fixed (int* p = &y[0])
+            {
+                Sut.ReadBytes((byte*)p, 4 * 4);
+            }
+
+            y[0].Should().Be(1);
+            y[1].Should().Be(2);
+            y[2].Should().Be(3);
+            y[3].Should().Be(4);
+        }
     }
 }

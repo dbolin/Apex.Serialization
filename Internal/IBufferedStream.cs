@@ -16,11 +16,13 @@ namespace Apex.Serialization.Internal
         void Write(string input);
         void WriteTypeId(Type type);
         void Write<T>(T value) where T : struct;
+        void WriteBytes(void* source, uint length);
 
         string Read();
         byte* ReadTypeId(out int length1, out int length2);
         Type RestoreTypeFromId(ref byte* typeId, int typeLen1, int typeLen2);
         T Read<T>() where T : struct;
+        void ReadBytes(void* destination, uint length);
     }
 
     internal static class BufferedStreamMethods<TStream> where TStream : IBufferedStream
@@ -35,6 +37,12 @@ namespace Apex.Serialization.Internal
 
         internal static readonly MethodInfo WriteTypeIdMethodInfo =
             typeof(TStream).GetMethod("WriteTypeId", new[] { typeof(Type) });
+
+        internal static readonly MethodInfo WriteBytesMethodInfo =
+            typeof(TStream).GetMethod("WriteBytes", new[] { typeof(void*), typeof(uint) });
+
+        internal static readonly MethodInfo ReadBytesMethodInfo =
+            typeof(TStream).GetMethod("ReadBytes", new[] { typeof(void*), typeof(uint) });
 
         internal static Dictionary<Type, MethodInfo> primitiveWriteMethods = new Dictionary<Type, MethodInfo>
         {

@@ -25,6 +25,9 @@ namespace Apex.Serialization.Internal
         void WriteFunction(Delegate value);
         Delegate ReadFunction();
 
+        void WriteValuesArray(object array, int length, int elementSize);
+        void ReadIntoValuesArray(object array, int elementSize);
+
         void QueueAfterDeserializationHook(Action<object> method, object instance);
     }
 
@@ -60,6 +63,9 @@ namespace Apex.Serialization.Internal
 
         internal static readonly MethodInfo WriteFunctionMethod = typeof(ISerializer).GetMethod("WriteFunction");
         internal static readonly MethodInfo ReadFunctionMethod = typeof(ISerializer).GetMethod("ReadFunction");
+
+        internal static readonly MethodInfo WriteArrayOfValuesMethod = typeof(ISerializer).GetMethod("WriteValuesArray");
+        internal static readonly MethodInfo ReadArrayOfValuesMethod = typeof(ISerializer).GetMethod("ReadIntoValuesArray");
 
         internal static readonly MethodInfo QueueAfterDeserializationHook =
             typeof(ISerializer).GetMethod("QueueAfterDeserializationHook");
