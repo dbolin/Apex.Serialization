@@ -58,6 +58,25 @@ You may pass a Settings object to the constructor of the binary class that lets 
 
 Performance is a feature!  See [benchmarks](Benchmarks.md) for comparisons with other fast binary serializers.
 
+### Custom serialization/deserialization
+
+You can define custom serialization and deserialization simply by calling
+```csharp
+Binary.RegisterCustomSerializer<CustomType>(writeAction, readAction)
+```
+
+All registrations must be done before instantiating the Binary class.  In order for custom serialization to be used, the SupportSerializationHooks property on the Settings used to instantiate the Binary class must be set to true.
+
+Both the write Action and read Action will be called with an instance of the type being serialized/deserialized and a BinaryWriter/BinaryReader interface which exposes three methods:
+
+```csharp
+        void Write(string input);
+        void Write<T>(T value) where T : struct;
+        void WriteObject<T>(T value);
+```
+
+The reader has corresponding methods for reading back the values.  Behavior of the generic Write/Read method when passed a non-primitive is undefined.
+
 #### Tips for best performance
 
 - Use sealed type declarations when possible - this allows the serializer to skip writing any type information
