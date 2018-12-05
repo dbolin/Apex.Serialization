@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
+using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal.Reflection;
 
 namespace Apex.Serialization.Internal
@@ -85,7 +85,7 @@ namespace Apex.Serialization.Internal
                     throw new NotSupportedException("Objects containing handles are not supported");
                 }
 
-                writeStatements.AddRange(fields.Select(x => GetWriteFieldExpression(x, actualSource, stream, output)));
+                writeStatements.AddRange(fields.Select(x => GetWriteFieldExpression(x, actualSource, stream, output, settings)));
             }
 
             writeStatements.Add(Expression.Label(returnTarget));
@@ -115,6 +115,12 @@ namespace Apex.Serialization.Internal
                 }
 
                 return Expression.Call(output, SerializerMethods.WriteFunctionMethod, Expression.Convert(source, typeof(Delegate)));
+            }
+
+            var custom = HandleCustomWrite(output, type, actualSource, settings);
+            if (custom != null)
+            {
+                return custom;
             }
 
             var writeStruct = WriteStructExpression(type, actualSource, stream, fields);
@@ -151,7 +157,7 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    statements.Add(WriteArrayGeneral(output, actualSource, stream, dimensions, lengths, elementType, elementSize));
+                    statements.Add(WriteArrayGeneral(output, actualSource, stream, dimensions, lengths, elementType, elementSize, settings));
                 }
                 return Expression.Block(lengths, statements);
             }
@@ -173,7 +179,8 @@ namespace Apex.Serialization.Internal
         }
 
         private static Expression WriteArrayGeneral(ParameterExpression output, ParameterExpression actualSource,
-            ParameterExpression stream, int dimensions, List<ParameterExpression> lengths, Type elementType, int elementSize)
+            ParameterExpression stream, int dimensions, List<ParameterExpression> lengths, Type elementType, int elementSize,
+            ImmutableSettings settings)
         {
             var indices = new List<ParameterExpression>();
 
@@ -185,7 +192,7 @@ namespace Apex.Serialization.Internal
             var accessExpression = dimensions > 1
                 ? (Expression) Expression.ArrayIndex(actualSource, indices)
                 : Expression.ArrayIndex(actualSource, indices[0]);
-            var innerWrite = WriteValue(stream, output, elementType, accessExpression);
+            var innerWrite = WriteValue(stream, output, elementType, accessExpression, settings);
             var loop = (Expression) Expression.Block(
                 Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
                 innerWrite);
@@ -243,16 +250,16 @@ namespace Apex.Serialization.Internal
         }
 
         internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo, ParameterExpression source,
-            ParameterExpression stream, ParameterExpression output)
+            ParameterExpression stream, ParameterExpression output, ImmutableSettings settings)
         {
             var declaredType = fieldInfo.FieldType;
             var valueAccessExpression = Expression.MakeMemberAccess(source, fieldInfo);
 
-            return WriteValue(stream, output, declaredType, valueAccessExpression);
+            return WriteValue(stream, output, declaredType, valueAccessExpression, settings);
         }
 
         private static Expression WriteValue(ParameterExpression stream, ParameterExpression output, Type declaredType,
-            Expression valueAccessExpression)
+            Expression valueAccessExpression, ImmutableSettings settings)
         {
             var primitiveExpression = HandlePrimitiveWrite(stream, output, declaredType, valueAccessExpression);
             if(primitiveExpression != null)
@@ -264,6 +271,12 @@ namespace Apex.Serialization.Internal
             if (nullableExpression != null)
             {
                 return nullableExpression;
+            }
+
+            var customExpression = HandleCustomWrite(output, declaredType, valueAccessExpression, settings);
+            if (customExpression != null)
+            {
+                return customExpression;
             }
 
             var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, TypeFields.GetFields(declaredType));
@@ -288,6 +301,30 @@ namespace Apex.Serialization.Internal
             {
                 return Expression.Call(output, "WriteSealedInternal", new[] { declaredType }, valueAccessExpression);
             }
+        }
+
+        private static Expression HandleCustomWrite(ParameterExpression output, Type declaredType,
+            Expression valueAccessExpression, ImmutableSettings settings)
+        {
+            if (!settings.SupportSerializationHooks)
+            {
+                return null;
+            }
+
+            foreach (var entry in Binary.CustomActionSerializers)
+            {
+                if (entry.Key.IsAssignableFrom(declaredType))
+                {
+                    return Expression.Call(
+                        Expression.Convert(
+                            Expression.Constant(entry.Value.Action),
+                            typeof(Action<,>).MakeGenericType(declaredType, typeof(IBinaryWriter))),
+                        entry.Value.InvokeMethodInfo, valueAccessExpression,
+                        Expression.Call(output, SerializerMethods.BinaryWriterGetter));
+                }
+            }
+
+            return null;
         }
 
         private static Expression HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
@@ -343,15 +380,16 @@ namespace Apex.Serialization.Internal
             }
 
             readStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSizeNeeded)));
-            
-            // write fields for normal types, some things are special like collections
-            var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings);
 
-            if (specialExpression != null)
+            // write fields for normal types, some things are special like collections
+            var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings, out var created);
+
+            if (specialExpression != null && created)
             {
                 readStatements.Add(specialExpression);
             }
-            else if (!type.IsValueType)
+
+            if (!created && !type.IsValueType)
             {
                 var defaultCtor = type.GetConstructor(new Type[] { });
                 var il = defaultCtor?.GetMethodBody()?.GetILAsByteArray();
@@ -368,17 +406,26 @@ namespace Apex.Serialization.Internal
                 }
             }
 
-            if(specialExpression == null)
+            if (!created)
             {
                 if (!type.IsValueType && settings.SerializationMode == Mode.Graph)
                 {
-                    readStatements.Add(Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter), SerializerMethods.SavedReferencesListAdd, result));
+                    readStatements.Add(Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
+                        SerializerMethods.SavedReferencesListAdd, result));
                 }
+            }
 
+            if (specialExpression != null && !created)
+            {
+                readStatements.Add(specialExpression);
+            }
+            else if (specialExpression == null)
+            {
                 if (type.IsPointer || fields.Any(x => x.FieldType.IsPointer))
                 {
                     throw new NotSupportedException("Pointers or types containing pointers are not supported");
                 }
+
                 if (typeof(SafeHandle).IsAssignableFrom(type))
                 {
                     throw new NotSupportedException("Objects containing handles are not supported");
@@ -405,7 +452,8 @@ namespace Apex.Serialization.Internal
                                 Expression.Convert(result, typeof(object))));
                             shouldUnbox = true;
                             fieldIsBoxed = true;
-                        } else if (!field.IsInitOnly && shouldUnbox)
+                        }
+                        else if (!field.IsInitOnly && shouldUnbox)
                         {
                             readStatements.Add(Expression.Assign(result, Expression.Unbox(boxedResult, type)));
                             shouldUnbox = false;
@@ -463,11 +511,13 @@ namespace Apex.Serialization.Internal
             return lambda;
         }
 
-        internal static Expression HandleSpecialRead(Type type, ParameterExpression output, ParameterExpression result, ParameterExpression stream, List<FieldInfo> fields, ImmutableSettings settings)
+        internal static Expression HandleSpecialRead(Type type, ParameterExpression output, ParameterExpression result, ParameterExpression stream, List<FieldInfo> fields, ImmutableSettings settings,
+            out bool created)
         {
             var primitive = HandlePrimitiveRead(stream, output, type);
             if (primitive != null)
             {
+                created = true;
                 if (type == typeof(string) && settings.SerializationMode == Mode.Graph)
                 {
                     return Expression.Block(
@@ -482,6 +532,7 @@ namespace Apex.Serialization.Internal
 
             if (typeof(Type).IsAssignableFrom(type))
             {
+                created = true;
                 return Expression.Assign(result, Expression.Convert(Expression.Call(output, SerializerMethods.ReadTypeRefMethod), type));
             }
 
@@ -492,17 +543,28 @@ namespace Apex.Serialization.Internal
                     throw new NotSupportedException("Function deserialization is not supported unless the 'AllowFunctionSerialization' setting is true");
                 }
 
+                created = true;
                 return Expression.Assign(result, Expression.Convert(Expression.Call(output, SerializerMethods.ReadFunctionMethod), type));
+            }
+
+            var custom = HandleCustomRead(type, output, result, settings);
+            if (custom != null)
+            {
+                created = false;
+                return custom;
             }
 
             var readStructExpression = ReadStructExpression(type, stream, fields);
             if (readStructExpression != null)
             {
+                created = true;
                 return Expression.Assign(result, readStructExpression);
             }
 
             if (type.IsArray)
             {
+                created = true;
+
                 var elementType = type.GetElementType();
                 var dimensions = type.GetArrayRank();
 
@@ -540,7 +602,40 @@ namespace Apex.Serialization.Internal
                 return Expression.Block(lengths, statements);
             }
 
-            return ReadCollection(type, output, result, stream, settings);
+            var collection = ReadCollection(type, output, result, stream, settings);
+            if (collection != null)
+            {
+                created = true;
+            }
+            else
+            {
+                created = false;
+            }
+
+            return collection;
+        }
+
+        private static Expression HandleCustomRead(Type type, ParameterExpression output, ParameterExpression result, ImmutableSettings settings)
+        {
+            if (!settings.SupportSerializationHooks)
+            {
+                return null;
+            }
+
+            foreach (var entry in Binary.CustomActionDeserializers)
+            {
+                if (entry.Key.IsAssignableFrom(type))
+                {
+                    return Expression.Call(
+                        Expression.Convert(
+                            Expression.Constant(entry.Value.Action),
+                            typeof(Action<,>).MakeGenericType(type, typeof(IBinaryReader))),
+                        entry.Value.InvokeMethodInfo, result,
+                        Expression.Call(output, SerializerMethods.BinaryReaderGetter));
+                }
+            }
+
+            return null;
         }
 
         private static bool IsBlittable(Type elementType)

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using Apex.Serialization.Extensions;
 
 namespace Apex.Serialization.Internal
 {
@@ -29,6 +30,9 @@ namespace Apex.Serialization.Internal
         void ReadIntoValuesArray(object array, int elementSize);
 
         void QueueAfterDeserializationHook(Action<object> method, object instance);
+
+        IBinaryWriter BinaryWriter { get; }
+        IBinaryReader BinaryReader { get; }
     }
 
     internal static class SerializerMethods
@@ -56,6 +60,12 @@ namespace Apex.Serialization.Internal
 
         internal static readonly PropertyInfo LoadedTypeListIndexer =
             typeof(List<Type>).GetProperty("Item", new[] { typeof(int) });
+
+        internal static readonly MethodInfo BinaryWriterGetter =
+            typeof(ISerializer).GetProperty("BinaryWriter").GetMethod;
+
+        internal static readonly MethodInfo BinaryReaderGetter =
+            typeof(ISerializer).GetProperty("BinaryReader").GetMethod;
 
         internal static readonly MethodInfo WriteNullByteMethod = typeof(ISerializer).GetMethod("WriteNullByte");
         internal static readonly MethodInfo WriteNullableByteMethod = typeof(ISerializer).GetMethod("WriteNullableByte");

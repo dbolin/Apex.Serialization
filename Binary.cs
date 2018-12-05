@@ -2,8 +2,12 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Threading;
+using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal;
 using Apex.Serialization.Internal.Reflection;
+using BinaryReader = Apex.Serialization.Extensions.BinaryReader;
+using BinaryWriter = Apex.Serialization.Extensions.BinaryWriter;
 using BufferedStream = Apex.Serialization.Internal.BufferedStream;
 
 namespace Apex.Serialization
@@ -20,9 +24,11 @@ namespace Apex.Serialization
 
     public sealed partial class Binary : ISerializer, IDisposable
     {
+        internal static bool Instantiated;
+
         public ImmutableSettings Settings { get; } = Serialization.Settings.Default;
         private readonly int _settingsIndex;
-        private readonly BufferedStream _stream;
+        internal readonly BufferedStream _stream;
 
         List<object> ISerializer.LoadedObjectRefs => _loadedObjectRefs;
 
@@ -57,8 +63,14 @@ namespace Apex.Serialization
         private Type[] _parameterTypeBuffer = new Type[256];
         private Type[][] _genericTypeBuffers = new Type[][] { new Type[1], new Type[2], new Type[3], new Type[4] };
 
+        private readonly IBinaryWriter _binaryWriter;
+        private readonly IBinaryReader _binaryReader;
+
         public Binary()
         {
+            Instantiated = true;
+            _binaryWriter = new BinaryWriter(this);
+            _binaryReader = new BinaryReader(this);
             _settingsIndex = Settings.SettingsIndex;
             _stream = new BufferedStream();
             if (Settings.SerializationMode == Mode.Graph)
@@ -75,6 +87,9 @@ namespace Apex.Serialization
 
         public Binary(Settings settings)
         {
+            Instantiated = true;
+            _binaryWriter = new BinaryWriter(this);
+            _binaryReader = new BinaryReader(this);
             Settings = settings;
             _settingsIndex = Settings.SettingsIndex;
             _stream = new BufferedStream();
@@ -94,21 +109,7 @@ namespace Apex.Serialization
         {
             _stream.WriteTo(outputStream);
 
-            if (StaticTypeInfo<T>.IsSealed)
-            {
-                if (StaticTypeInfo<T>.IsValueType)
-                {
-                    WriteValueInternal(value);
-                }
-                else
-                {
-                    WriteSealedInternal(value);
-                }
-            }
-            else
-            {
-                WriteInternal(value);
-            }
+            WriteObjectEntry(value);
 
             _stream.Flush();
 
@@ -123,22 +124,7 @@ namespace Apex.Serialization
         {
             _stream.ReadFrom(inputStream);
 
-            object result;
-            if (StaticTypeInfo<T>.IsSealed)
-            {
-                if (StaticTypeInfo<T>.IsValueType)
-                {
-                    result = ReadValueInternal<T>();
-                }
-                else
-                {
-                    result = ReadSealedInternal<T>();
-                }
-            }
-            else
-            {
-                result = ReadInternal();
-            }
+            var result = ReadObjectEntry<T>();
 
             if (Settings.SerializationMode == Mode.Graph)
             {
@@ -155,7 +141,7 @@ namespace Apex.Serialization
                 _deserializationHooks.Clear();
             }
 
-            return (T)result;
+            return result;
         }
 
         public void Precompile(Type type)

@@ -68,7 +68,7 @@ namespace Apex.Serialization.Internal
                         Expression.Block(new[] { loopVar },
                             Expression.Assign(loopVar, Expression.Property(enumeratorVar, "Current")),
                             Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
-                            WriteValue(stream, output, valueType, loopVar)
+                            WriteValue(stream, output, valueType, loopVar, settings)
                         ),
                         Expression.Break(breakLabel)
                     )

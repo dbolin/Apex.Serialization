@@ -11,6 +11,47 @@ namespace Apex.Serialization
 {
     public sealed partial class Binary
     {
+        internal void WriteObjectEntry<T>(T value)
+        {
+            if (StaticTypeInfo<T>.IsSealed)
+            {
+                if (StaticTypeInfo<T>.IsValueType)
+                {
+                    WriteValueInternal(value);
+                }
+                else
+                {
+                    WriteSealedInternal(value);
+                }
+            }
+            else
+            {
+                WriteInternal(value);
+            }
+        }
+
+        internal T ReadObjectEntry<T>()
+        {
+            object result;
+            if (StaticTypeInfo<T>.IsSealed)
+            {
+                if (StaticTypeInfo<T>.IsValueType)
+                {
+                    result = ReadValueInternal<T>();
+                }
+                else
+                {
+                    result = ReadSealedInternal<T>();
+                }
+            }
+            else
+            {
+                result = ReadInternal();
+            }
+
+            return (T)result;
+        }
+
         internal object ReadInternal()
         {
             if (ReadObjectRefHeader<object>(out var result))
