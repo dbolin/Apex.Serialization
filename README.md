@@ -1,6 +1,6 @@
 ﻿# Apex.Serialization
 
-A high performance contract-less binary serializer
+A high performance contract-less binary serializer capable of handling data trees or object graphs.
 
 Suitable for realtime workloads where the serialized data will not persist for long, as most assembly changes will render the data format incompatible with older versions.
 
