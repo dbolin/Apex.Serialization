@@ -14,7 +14,7 @@ Currently BETA
 
 As the serialization is contract-less, the binary format produced depends on precise characteristics of the types serialized. Most changes to types, such as adding or removing fields, renaming types, or changing relationships between types will break compatibility with previously serialized data.
 
-For performance reasons, the serializer and deserializer make extensive use of pointers and direct memory access.  This will usually cause attempting to deserialize incompatible data to immediately crash the application instead of throwing an exception.
+For performance reasons, the serializer and deserializer make use of pointers and direct memory access.  This will usually cause attempting to deserialize incompatible data to immediately crash the application instead of throwing an exception.
 
 NEVER deserialize data from an untrusted source.
 
@@ -56,7 +56,7 @@ You may pass a Settings object to the constructor of the binary class that lets 
 
 #### Performance
 
-Performance is a feature!  See [benchmarks](Benchmarks.md) for comparisons with other fast binary serializers.
+Performance is a feature!  Apex.Serialization is an extremely fast binary serializer.  See [benchmarks](Benchmarks.md) for comparisons with other fast binary serializers.
 
 ### Custom serialization/deserialization
 
