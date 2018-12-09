@@ -75,7 +75,7 @@ Both the write Action and read Action will be called with an instance of the typ
         void WriteObject<T>(T value);
 ```
 
-The reader has corresponding methods for reading back the values.  Behavior of the generic Write/Read method when passed a non-primitive is undefined.
+The reader has corresponding methods for reading back the values.  Behavior of the generic Write/Read method when passed a non-primitive is undefined.  If multiple customer serializers match an object, they will all be called in the order in which they were registered.
 
 #### Tips for best performance
 
