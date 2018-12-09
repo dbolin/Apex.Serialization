@@ -311,20 +311,22 @@ namespace Apex.Serialization.Internal
                 return null;
             }
 
+            var statements = new List<Expression>();
+
             foreach (var entry in Binary.CustomActionSerializers)
             {
                 if (entry.Key.IsAssignableFrom(declaredType))
                 {
-                    return Expression.Call(
+                    statements.Add(Expression.Call(
                         Expression.Convert(
                             Expression.Constant(entry.Value.Action),
                             typeof(Action<,>).MakeGenericType(declaredType, typeof(IBinaryWriter))),
                         entry.Value.InvokeMethodInfo, valueAccessExpression,
-                        Expression.Call(output, SerializerMethods.BinaryWriterGetter));
+                        Expression.Call(output, SerializerMethods.BinaryWriterGetter)));
                 }
             }
 
-            return null;
+            return statements.Count > 0 ? Expression.Block(statements) : null;
         }
 
         private static Expression HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
@@ -622,20 +624,22 @@ namespace Apex.Serialization.Internal
                 return null;
             }
 
+            var statements = new List<Expression>();
+
             foreach (var entry in Binary.CustomActionDeserializers)
             {
                 if (entry.Key.IsAssignableFrom(type))
                 {
-                    return Expression.Call(
+                    statements.Add(Expression.Call(
                         Expression.Convert(
                             Expression.Constant(entry.Value.Action),
                             typeof(Action<,>).MakeGenericType(type, typeof(IBinaryReader))),
                         entry.Value.InvokeMethodInfo, result,
-                        Expression.Call(output, SerializerMethods.BinaryReaderGetter));
+                        Expression.Call(output, SerializerMethods.BinaryReaderGetter)));
                 }
             }
 
-            return null;
+            return statements.Count > 0 ? Expression.Block(statements) : null;
         }
 
         private static bool IsBlittable(Type elementType)
