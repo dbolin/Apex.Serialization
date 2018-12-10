@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using FluentAssertions;
 using Xunit;
 
 namespace Apex.Serialization.Tests.Collections
@@ -40,6 +41,17 @@ namespace Apex.Serialization.Tests.Collections
             var x = new List<Test> {new Test {Value = 2}};
 
             RoundTrip(x);
+        }
+
+        [Fact]
+        public void ListOfSealedTypeGraph()
+        {
+            var t = new Test {Value = 2};
+            var x = new List<Test> {t, t};
+
+            var y = RoundTripGraphOnly(x);
+
+            y[0].GetHashCode().Should().Be(y[1].GetHashCode());
         }
 
         [Fact]
