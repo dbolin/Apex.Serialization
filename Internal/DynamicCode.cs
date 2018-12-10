@@ -40,12 +40,26 @@ namespace Apex.Serialization.Internal
 
             var actualSource = castedSourceType ?? source;
 
-            writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSizeNeeded)));
+            writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, returnTarget, maxSizeNeeded, shouldWriteTypeInfo, actualSource, fields));
+
+            writeStatements.Add(Expression.Label(returnTarget));
+
+            var lambda = Expression.Lambda(Expression.Block(localVariables, writeStatements), $"Write_{type.FullName}", new [] {source, stream, output}).Compile();
+            return lambda;
+        }
+
+        private static IEnumerable<Expression> GetWriteStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
+            ParameterExpression output, Expression source, LabelTarget returnTarget, int maxSizeNeeded,
+            bool shouldWriteTypeInfo, Expression actualSource, List<FieldInfo> fields)
+        {
+            var writeStatements = new List<Expression>();
+            writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+                Expression.Constant(maxSizeNeeded)));
 
             if (settings.SerializationMode == Mode.Graph)
             {
                 if (!type.IsValueType && !typeof(Delegate).IsAssignableFrom(type)
-                    && !typeof(Type).IsAssignableFrom(type))
+                                      && !typeof(Type).IsAssignableFrom(type))
                 {
                     writeStatements.Add(Expression.IfThen(
                         Expression.Call(output, SerializerMethods.WriteObjectRefMethod, source),
@@ -64,7 +78,8 @@ namespace Apex.Serialization.Internal
                 writeStatements.Add(
                     Expression.Call(output, SerializerMethods.WriteTypeRefMethod, Expression.Constant(type))
                 );
-                writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSizeNeeded)));
+                writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+                    Expression.Constant(maxSizeNeeded)));
             }
 
             // write fields for normal types, some things are special like collections
@@ -80,21 +95,20 @@ namespace Apex.Serialization.Internal
                 {
                     throw new NotSupportedException("Pointers or types containing pointers are not supported");
                 }
+
                 if (typeof(SafeHandle).IsAssignableFrom(type))
                 {
                     throw new NotSupportedException("Objects containing handles are not supported");
                 }
 
-                writeStatements.AddRange(fields.Select(x => GetWriteFieldExpression(x, actualSource, stream, output, settings)));
+                writeStatements.AddRange(fields.Select(x =>
+                    GetWriteFieldExpression(x, actualSource, stream, output, settings)));
             }
 
-            writeStatements.Add(Expression.Label(returnTarget));
-
-            var lambda = Expression.Lambda(Expression.Block(localVariables, writeStatements), $"Write_{type.FullName}", new [] {source, stream, output}).Compile();
-            return lambda;
+            return writeStatements;
         }
 
-        internal static Expression HandleSpecialWrite(Type type, ParameterExpression output, ParameterExpression actualSource, ParameterExpression stream, ParameterExpression source, List<FieldInfo> fields, ImmutableSettings settings)
+        internal static Expression HandleSpecialWrite(Type type, ParameterExpression output, Expression actualSource, ParameterExpression stream, Expression source, List<FieldInfo> fields, ImmutableSettings settings)
         {
             var primitive = HandlePrimitiveWrite(stream, output, type, actualSource);
             if(primitive != null)
@@ -170,7 +184,7 @@ namespace Apex.Serialization.Internal
         private static MethodInfo _toPointerMethod = typeof(IntPtr).GetMethod("ToPointer");
         private static MethodInfo _freeMethod = typeof(GCHandle).GetMethod("Free");
 
-        private static Expression WriteArrayOfBlittableValues(ParameterExpression output, ParameterExpression actualSource,
+        private static Expression WriteArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
             ParameterExpression stream, int dimensions, Type elementType, int elementSize)
         {
             return Expression.Call(output, SerializerMethods.WriteArrayOfValuesMethod,
@@ -178,35 +192,65 @@ namespace Apex.Serialization.Internal
                 Expression.Constant(elementSize));
         }
 
-        private static Expression WriteArrayGeneral(ParameterExpression output, ParameterExpression actualSource,
+        private static Expression WriteArrayGeneral(ParameterExpression output, Expression actualSource,
             ParameterExpression stream, int dimensions, List<ParameterExpression> lengths, Type elementType, int elementSize,
             ImmutableSettings settings)
         {
             var indices = new List<ParameterExpression>();
+            var breakLabels = new List<LabelTarget>();
+            var continueLabels = new List<LabelTarget>();
 
             for (int i = 0; i < dimensions; ++i)
             {
                 indices.Add(Expression.Variable(typeof(int)));
+                breakLabels.Add(Expression.Label());
+                continueLabels.Add(Expression.Label());
             }
 
             var accessExpression = dimensions > 1
                 ? (Expression) Expression.ArrayIndex(actualSource, indices)
                 : Expression.ArrayIndex(actualSource, indices[0]);
-            var innerWrite = WriteValue(stream, output, elementType, accessExpression, settings);
-            var loop = (Expression) Expression.Block(
-                Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
-                innerWrite);
+
+            var writeValue = WriteValue(stream, output, elementType, accessExpression, settings, out var isSimpleWrite);
+
+            var shouldWriteTypeInfo = typeof(Delegate).IsAssignableFrom(elementType) || typeof(Type).IsAssignableFrom(elementType);
+
+            if (!isSimpleWrite && elementType.IsSealed)
+            {
+                writeValue = Expression.Block(GetWriteStatementsForType(elementType, settings, stream, output,
+                    accessExpression, continueLabels[continueLabels.Count - 1], elementSize + 12, shouldWriteTypeInfo, accessExpression,
+                    TypeFields.GetFields(elementType)));
+
+                if (!elementType.IsValueType)
+                {
+                    writeValue = Expression.Block(
+                        Expression.IfThen(
+                            Expression.Call(output, SerializerMethods.WriteNullByteMethod, accessExpression),
+                            Expression.Continue(continueLabels[continueLabels.Count - 1])
+                        ),
+                        writeValue
+                    );
+                }
+            }
+            else
+            {
+                writeValue = Expression.Block(
+                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
+                    writeValue);
+            }
+
+            var loop = writeValue;
+
             for (int i = 0; i < dimensions; ++i)
             {
-                var breakLabel = Expression.Label();
                 loop =
                     Expression.Block(
                         Expression.Assign(indices[i], Expression.Constant(0)),
                         Expression.Loop(Expression.IfThenElse(
                             Expression.GreaterThanOrEqual(indices[i], lengths[i]),
-                            Expression.Break(breakLabel),
-                            Expression.Block(loop, Expression.Assign(indices[i], Expression.Increment(indices[i])))
-                        ), breakLabel)
+                            Expression.Break(breakLabels[i]),
+                            Expression.Block(loop, Expression.Label(continueLabels[i]), Expression.Assign(indices[i], Expression.Increment(indices[i])))
+                        ), breakLabels[i])
                     );
             }
 
@@ -242,46 +286,50 @@ namespace Apex.Serialization.Internal
         }
 
         internal static Expression WriteCollection(Type type, ParameterExpression output,
-            ParameterExpression actualSource, ParameterExpression stream, ParameterExpression source, ImmutableSettings
+            Expression actualSource, ParameterExpression stream, Expression source, ImmutableSettings
                 settings)
         {
             return WriteDictionary(type, output, actualSource, stream, source, settings)
                 ?? WriteList(type, output, actualSource, stream, source, settings);
         }
 
-        internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo, ParameterExpression source,
+        internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo, Expression source,
             ParameterExpression stream, ParameterExpression output, ImmutableSettings settings)
         {
             var declaredType = fieldInfo.FieldType;
             var valueAccessExpression = Expression.MakeMemberAccess(source, fieldInfo);
 
-            return WriteValue(stream, output, declaredType, valueAccessExpression, settings);
+            return WriteValue(stream, output, declaredType, valueAccessExpression, settings, out _);
         }
 
         private static Expression WriteValue(ParameterExpression stream, ParameterExpression output, Type declaredType,
-            Expression valueAccessExpression, ImmutableSettings settings)
+            Expression valueAccessExpression, ImmutableSettings settings, out bool simpleType)
         {
             var primitiveExpression = HandlePrimitiveWrite(stream, output, declaredType, valueAccessExpression);
             if(primitiveExpression != null)
             {
+                simpleType = true;
                 return primitiveExpression;
             }
 
             var nullableExpression = HandleNullableWrite(stream, output, declaredType, valueAccessExpression);
             if (nullableExpression != null)
             {
+                simpleType = true;
                 return nullableExpression;
             }
 
             var customExpression = HandleCustomWrite(output, declaredType, valueAccessExpression, settings);
             if (customExpression != null)
             {
+                simpleType = true;
                 return customExpression;
             }
 
             var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, TypeFields.GetFields(declaredType));
             if (writeStruct != null)
             {
+                simpleType = true;
                 return writeStruct;
             }
 
@@ -290,15 +338,18 @@ namespace Apex.Serialization.Internal
 
             if (shouldWriteTypeInfo)
             {
+                simpleType = false;
                 return Expression.Call(output, "WriteInternal", null, valueAccessExpression);
             }
 
             if (declaredType.IsValueType)
             {
+                simpleType = false;
                 return Expression.Call(output, "WriteValueInternal", new[] { declaredType }, valueAccessExpression);
             }
             else
             {
+                simpleType = false;
                 return Expression.Call(output, "WriteSealedInternal", new[] { declaredType }, valueAccessExpression);
             }
         }

@@ -12,8 +12,8 @@ namespace Apex.Serialization.Internal
         where TStream : IBufferedStream
         where TBinary : ISerializer
     {
-        internal static Expression WriteDictionary(Type type, ParameterExpression output, ParameterExpression actualSource,
-            ParameterExpression stream, ParameterExpression source, ImmutableSettings settings)
+        internal static Expression WriteDictionary(Type type, ParameterExpression output, Expression actualSource,
+            ParameterExpression stream, Expression source, ImmutableSettings settings)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
             var collectionType = type;
@@ -68,9 +68,9 @@ namespace Apex.Serialization.Internal
                         Expression.Block(new[] { loopVar },
                             Expression.Assign(loopVar, Expression.Property(enumeratorVar, "Current")),
                             Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(keySize)),
-                            WriteValue(stream, output, keyType, Expression.Property(loopVar, "Key"), settings),
+                            WriteValue(stream, output, keyType, Expression.Property(loopVar, "Key"), settings, out _),
                             Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(valueSize)),
-                            WriteValue(stream, output, valueType, Expression.Property(loopVar, "Value"), settings)
+                            WriteValue(stream, output, valueType, Expression.Property(loopVar, "Value"), settings, out _)
                         ),
                         Expression.Break(breakLabel)
                     )

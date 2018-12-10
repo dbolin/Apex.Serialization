@@ -12,6 +12,12 @@ namespace Apex.Serialization.Tests.Collections
             public int Value;
         }
 
+        public struct Test2
+        {
+            public int Value2;
+            public string Value3;
+        }
+
         [Fact]
         public void ListOfInt()
         {
@@ -32,6 +38,14 @@ namespace Apex.Serialization.Tests.Collections
         public void ListOfSealedType()
         {
             var x = new List<Test> {new Test {Value = 2}};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void ListOfStruct()
+        {
+            var x = new List<Test2> { new Test2 { Value2 = 2, Value3 = "asd"} };
 
             RoundTrip(x);
         }
