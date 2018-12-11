@@ -32,22 +32,96 @@ namespace Apex.Serialization.Tests
             public decimal?[] NullableDecimalArray;
         }
 
-        [Fact]
-        public void Arrays()
+        public class TestClass
         {
-            var x = new Test
+            private static int StaticValue = 4;
+            private int Value = 3;
+
+            public int Method()
             {
-                IntArray = new int[] { 1, 2, 3, 4 },
-                StringArray = new string[] { "asd", "qwe" },
-                StructArray = new Test2[] { new Test2 { Value = 4 } },
-                RefArray = new Test3[] { new Test3 { Value = 5 } },
-                ObjectArray = new object[] { 1, "asd", new Test2 { Value = 6 }, new Test3 { Value = 7 }, null, new object[] { 1, "zxc" } },
-                ArrayOfArrays = new int[][] { new int[] { 1, 2, 3 }, new int[] { 4, 5, 6, 7, 8 } },
-                MultiDimensionalArray = new int[,] { { 1, 2, 3 }, { 4, 5, 6 }, { 7, 8, 9 } },
-                DateTimeArray = new [] {DateTime.UtcNow },
-                GuidArray = new [] {Guid.NewGuid() },
-                NullableDecimalArray = new [] {12.0m, (decimal?)null}
-            };
+                return Value;
+            }
+
+            public static int StaticMethod()
+            {
+                return StaticValue;
+            }
+
+            public static int StaticMethod(int param)
+            {
+                return StaticValue;
+            }
+        }
+
+        [Fact]
+        public void IntArray()
+        {
+            var x = new[] {1, 2, 3, 4};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void StringArray()
+        {
+            var x = new[] {"asd", null, "qwe"};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void StructArray()
+        {
+            var x = new[] {new Test2 {Value = 4}};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void RefArray()
+        {
+            var x = new[] {new Test3 {Value = 5}};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void ObjectArray()
+        {
+            var o = new Test3 {Value = 6};
+            var x = new object[] {1, "asd", o, o, new Test2 {Value = 7}, null, new object[] {1, "zxc"}};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void MultiDimensionalArray()
+        {
+            var x = new int[,] {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void DateTimeArray()
+        {
+            var x = new[] {DateTime.UtcNow};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void GuidArray()
+        {
+            var x = new[] {Guid.NewGuid()};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void NullableDecimalArray()
+        {
+            var x = new[] {12.0m, (decimal?) null};
 
             RoundTrip(x);
         }
@@ -56,6 +130,30 @@ namespace Apex.Serialization.Tests
         public void NullArrays()
         {
             var x = new Test();
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void ArrayOfType()
+        {
+            var x = new[] {typeof(int), typeof(string)};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void ArrayOfDelegate()
+        {
+            var x = new Func<int>[] {TestClass.StaticMethod};
+
+            RoundTrip(x, (a,b) => true);
+        }
+
+        [Fact]
+        public void ArrayOfArray()
+        {
+            var x = new int[][] {new int[] {1, 2, 3, 4}, new[] {4, 5, 6, 7}};
 
             RoundTrip(x);
         }
