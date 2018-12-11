@@ -11,6 +11,8 @@ namespace Apex.Serialization.Tests.Collections
         public sealed class Test
         {
             public int Value;
+            public Guid g;
+            public DateTime d;
         }
 
         public struct Test2
@@ -38,7 +40,7 @@ namespace Apex.Serialization.Tests.Collections
         [Fact]
         public void ListOfSealedType()
         {
-            var x = new List<Test> {new Test {Value = 2}};
+            var x = new List<Test> {new Test {Value = 2, d = DateTime.UtcNow, g = Guid.NewGuid()}};
 
             RoundTrip(x);
         }
