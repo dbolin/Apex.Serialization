@@ -22,8 +22,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Benchmark\**" />
     <Compile Remove="Tests\**" />
+    <EmbeddedResource Remove="Benchmark\**" />
     <EmbeddedResource Remove="Tests\**" />
+    <None Remove="Benchmark\**" />
     <None Remove="Tests\**" />
   </ItemGroup>
 

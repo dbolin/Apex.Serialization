@@ -5,3 +5,4 @@
 /.vs
 bin
 obj
+/Benchmark/BenchmarkDotNet.Artifacts
