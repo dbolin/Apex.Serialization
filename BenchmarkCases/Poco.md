@@ -1,6 +1,6 @@
 ## Pocos
 
-Protobuf-net / Hyperion / MessagePack / Apex
+Protobuf-net 2.4.0 / Hyperion 0.9.8 / MessagePack 1.7.3.4 / NetSerializer 4.1.0 / Apex
 
 Serializing/deserializing a list of 1000 small pocos defined as follows
 
@@ -37,42 +37,46 @@ Frequency=3417967 Hz, Resolution=292.5716 ns, Timer=TSC
   [Host] : .NET Core 2.1.6 (CoreCLR 4.6.27019.06, CoreFX 4.6.27019.05), 64bit RyuJIT
 ```
 
-#### Protobuf-net 2.4.0
+#### Mutable Poco Serialization
 ```
-             Method |     Mean |     Error |   StdDev | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
-------------------- |---------:|----------:|---------:|------------:|------------:|------------:|--------------------:|
- ImmutablePocoWrite | 560.6 us |  2.797 us | 2.617 us |     12.6953 |           - |           - |            39.31 KB |
-  ImmutablePocoRead | 765.6 us |  1.834 us | 1.716 us |     36.1328 |           - |           - |           113.58 KB |
-          PocoWrite | 558.3 us |  1.450 us | 1.356 us |     12.6953 |           - |           - |            39.31 KB |
-           PocoRead | 747.7 us | 10.624 us | 9.937 us |     36.1328 |           - |           - |           113.58 KB |
-```
-
-#### Hyperion 0.9.8
-```
-             Method |     Mean |     Error |    StdDev | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
-------------------- |---------:|----------:|----------:|------------:|------------:|------------:|--------------------:|
- ImmutablePocoWrite | 173.5 us | 0.6393 us | 0.5980 us |     12.6953 |           - |           - |            39.36 KB |
-  ImmutablePocoRead | 602.1 us | 2.9127 us | 2.7245 us |     70.3125 |     23.4375 |           - |            227.6 KB |
-          PocoWrite | 175.1 us | 0.9040 us | 0.8456 us |     12.6953 |           - |           - |            39.36 KB |
-           PocoRead | 604.8 us | 4.2222 us | 3.9494 us |     70.3125 |     23.4375 |           - |            227.6 KB |
+        Method |      Mean |     Error |    StdDev | Ratio | RatioSD | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
+-------------- |----------:|----------:|----------:|------:|--------:|------------:|------------:|------------:|--------------------:|
+      Protobuf | 512.91 us | 9.6213 us | 9.8804 us | 17.21 |    0.36 |     12.6953 |           - |           - |             40251 B |
+ NetSerializer | 440.37 us | 2.9253 us | 2.4428 us | 14.80 |    0.10 |           - |           - |           - |                   - |
+   MessagePack | 388.87 us | 0.6023 us | 0.5634 us | 13.06 |    0.04 |           - |           - |           - |                   - |
+      Hyperion | 170.03 us | 0.6921 us | 0.6474 us |  5.71 |    0.03 |     12.6953 |           - |           - |             40304 B |
+          Apex |  29.77 us | 0.0805 us | 0.0714 us |  1.00 |    0.00 |           - |           - |           - |                   - |
 ```
 
-#### MessagePack 1.7.3.4
+#### Mutable Poco Deserialization
 ```
-             Method |     Mean |     Error |    StdDev | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
-------------------- |---------:|----------:|----------:|------------:|------------:|------------:|--------------------:|
- ImmutablePocoWrite | 118.9 us | 0.3185 us | 0.2979 us |           - |           - |           - |                   - |
-  ImmutablePocoRead | 315.3 us | 1.7914 us | 1.5881 us |     28.8086 |      9.2773 |           - |            104064 B |
-          PocoWrite | 121.7 us | 1.4499 us | 1.3563 us |           - |           - |           - |                   - |
-           PocoRead | 317.0 us | 4.6244 us | 4.0994 us |     28.8086 |      9.2773 |           - |            104064 B |
+        Method |      Mean |     Error |    StdDev | Ratio | RatioSD | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
+-------------- |----------:|----------:|----------:|------:|--------:|------------:|------------:|------------:|--------------------:|
+      Protobuf | 710.43 us | 3.8831 us | 3.4422 us | 14.86 |    0.24 |     36.1328 |           - |           - |           113.56 KB |
+ NetSerializer | 475.23 us | 0.8711 us | 0.8148 us |  9.93 |    0.15 |     32.7148 |           - |           - |           101.81 KB |
+   MessagePack | 331.52 us | 0.6860 us | 0.5729 us |  6.93 |    0.10 |     32.7148 |           - |           - |           101.63 KB |
+      Hyperion | 231.07 us | 1.3997 us | 1.3092 us |  4.83 |    0.07 |     48.5840 |           - |           - |           149.46 KB |
+          Apex |  47.88 us | 0.7959 us | 0.7445 us |  1.00 |    0.00 |     33.0811 |           - |           - |           101.81 KB |
 ```
 
-#### Apex
+#### Immutable Poco Serialization
 ```
-             Method |     Mean |     Error |    StdDev | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
-------------------- |---------:|----------:|----------:|------------:|------------:|------------:|--------------------:|
- ImmutablePocoWrite | 19.73 us | 0.0446 us | 0.0395 us |           - |           - |           - |                   - |
-  ImmutablePocoRead | 93.15 us | 0.3215 us | 0.2850 us |     30.1514 |      6.4697 |           - |            104256 B |
-          PocoWrite | 31.45 us | 0.5846 us | 0.5468 us |           - |           - |           - |                   - |
-           PocoRead | 54.92 us | 1.0948 us | 1.0241 us |     30.0903 |      6.9580 |           - |            104256 B |
+        Method |      Mean |     Error |    StdDev | Ratio | RatioSD | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
+-------------- |----------:|----------:|----------:|------:|--------:|------------:|------------:|------------:|--------------------:|
+      Protobuf | 504.51 us | 4.7686 us | 4.4606 us | 34.79 |    0.32 |     12.6953 |           - |           - |             40251 B |
+ NetSerializer | 438.32 us | 0.7005 us | 0.6553 us | 30.22 |    0.10 |           - |           - |           - |                   - |
+   MessagePack | 388.48 us | 1.1708 us | 1.0379 us | 26.79 |    0.12 |           - |           - |           - |                   - |
+      Hyperion | 167.23 us | 1.0379 us | 0.9708 us | 11.53 |    0.08 |     12.6953 |           - |           - |             40304 B |
+          Apex |  14.50 us | 0.0431 us | 0.0403 us |  1.00 |    0.00 |           - |           - |           - |                   - |
+```
+
+#### Immutable Poco Deserialization
+```
+        Method |      Mean |     Error |    StdDev | Ratio | RatioSD | Gen 0/1k Op | Gen 1/1k Op | Gen 2/1k Op | Allocated Memory/Op |
+-------------- |----------:|----------:|----------:|------:|--------:|------------:|------------:|------------:|--------------------:|
+      Protobuf | 710.89 us | 2.7400 us | 2.2881 us | 10.42 |    0.04 |     36.1328 |           - |           - |           113.56 KB |
+      Hyperion | 587.22 us | 1.3634 us | 1.2753 us |  8.60 |    0.02 |     73.2422 |           - |           - |           227.61 KB |
+ NetSerializer | 491.25 us | 0.7875 us | 0.7366 us |  7.20 |    0.02 |     32.2266 |           - |           - |           101.81 KB |
+   MessagePack | 339.16 us | 1.1159 us | 0.9318 us |  4.97 |    0.01 |     32.7148 |           - |           - |           101.63 KB |
+          Apex |  68.26 us | 0.1153 us | 0.1078 us |  1.00 |    0.00 |     33.0811 |           - |           - |           101.81 KB |
 ```
