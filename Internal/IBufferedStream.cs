@@ -12,7 +12,7 @@ namespace Apex.Serialization.Internal
         void WriteTo(Stream stream);
 
         void ReserveSize(int sizeNeeded);
-        void Flush();
+        bool Flush();
         void Write(string input);
         void WriteTypeId(Type type);
         void Write<T>(T value) where T : struct;

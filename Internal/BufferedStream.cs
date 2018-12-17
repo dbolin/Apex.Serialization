@@ -76,24 +76,28 @@ namespace Apex.Serialization.Internal
             _typeIdBufferPtr = (byte*)_typeIdBufferGCHandle.AddrOfPinnedObject().ToPointer();
         }
 
-        public void Flush()
+        public bool Flush()
         {
-            if (_bufferPosition == 0)
-            {
-                return;
-            }
-
             if (_writing)
             {
+                if (_bufferPosition == 0)
+                {
+                    return true;
+                }
+
                 _target.Write(_buffer, 0, (int)_bufferPosition);
                 _bufferPosition = 0;
+                return true;
             }
             else
             {
                 var len = (int)(_size - _bufferPosition);
                 Unsafe.CopyBlock(_bufferPtr, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), (uint)len);
-                _size = _target.Read(_buffer, len, (int)_bufferPosition) + len;
+                _size = _target.Read(_buffer, len, (int)_bufferPosition);
+                var result = _size != 0;
+                _size += len;
                 _bufferPosition = 0;
+                return result;
             }
         }
 
@@ -101,10 +105,8 @@ namespace Apex.Serialization.Internal
         public void ReserveSize(int sizeNeeded)
         {
             CheckSize();
-            if (_size - _bufferPosition < sizeNeeded)
-            {
-                Flush();
-            }
+            while (_size - _bufferPosition < sizeNeeded && Flush())
+                ;
 
             SetReserved(sizeNeeded);
         }

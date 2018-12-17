@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Runtime.CompilerServices;
 using Apex.Serialization.Internal;
 using FluentAssertions;
 using Xunit;
@@ -214,6 +213,80 @@ namespace Apex.Serialization.Tests
             y[1].Should().Be(2);
             y[2].Should().Be(3);
             y[3].Should().Be(4);
+        }
+
+        [Fact]
+        public void CustomStreamTest()
+        {
+            var s = new CustomStream(memoryStream);
+
+            Sut.WriteTo(s);
+
+            Sut.ReserveSize(12);
+            Sut.Write(4);
+            Sut.Write(8);
+            Sut.Write(12);
+
+            Sut.Flush();
+
+            s.Seek(0, SeekOrigin.Begin);
+            Sut.ReadFrom(s);
+
+            Sut.ReserveSize(4);
+            Sut.Read<int>().Should().Be(4);
+            Sut.ReserveSize(4);
+            Sut.Read<int>().Should().Be(8);
+            Sut.ReserveSize(4);
+            Sut.Read<int>().Should().Be(12);
+
+            s.Seek(0, SeekOrigin.Begin);
+            Sut.WriteTo(s);
+
+            Sut.Write("1234123412341234123412341234");
+
+            Sut.Flush();
+
+            s.Seek(0, SeekOrigin.Begin);
+            Sut.ReadFrom(s);
+
+            Sut.Read().Should().Be("1234123412341234123412341234");
+        }
+
+        private class CustomStream : Stream
+        {
+            private MemoryStream memoryStream;
+
+            public CustomStream(MemoryStream memoryStream)
+            {
+                this.memoryStream = memoryStream;
+            }
+
+            public override bool CanRead => memoryStream.CanRead;
+
+            public override bool CanSeek => memoryStream.CanSeek;
+
+            public override bool CanWrite => memoryStream.CanWrite;
+
+            public override long Length => memoryStream.Length;
+
+            public override long Position
+            {
+                get => memoryStream.Position;
+                set => memoryStream.Position = value;
+            }
+
+            public override void Flush() => memoryStream.Flush();
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                return memoryStream.Read(buffer, offset, 3);
+            }
+
+            public override long Seek(long offset, SeekOrigin origin) => memoryStream.Seek(offset, origin);
+            public override void SetLength(long value) => memoryStream.SetLength(value);
+
+            public override void Write(byte[] buffer, int offset, int count) =>
+                memoryStream.Write(buffer, offset, count);
         }
     }
 }
