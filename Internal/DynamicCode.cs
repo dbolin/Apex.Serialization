@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -14,7 +15,21 @@ namespace Apex.Serialization.Internal
         where TStream : IBufferedStream
         where TBinary : ISerializer
     {
+        private static readonly ConcurrentDictionary<TypeKey, Delegate> _virtualWriteMethods = new ConcurrentDictionary<TypeKey, Delegate>();
+        private static readonly ConcurrentDictionary<TypeKey, Delegate> _virtualReadMethods = new ConcurrentDictionary<TypeKey, Delegate>();
+
         internal static Delegate GenerateWriteMethod(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
+        {
+            if (!shouldWriteTypeInfo)
+            {
+                return GenerateWriteMethodImpl(type, settings, shouldWriteTypeInfo);
+            }
+
+            return _virtualWriteMethods.GetOrAdd(new TypeKey {Type = type, SettingsIndex = settings.SettingsIndex}, 
+                t => GenerateWriteMethodImpl(type, settings, shouldWriteTypeInfo));
+        }
+
+        internal static Delegate GenerateWriteMethodImpl(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
         {
             var fields = TypeFields.GetFields(type);
 
@@ -415,6 +430,17 @@ namespace Apex.Serialization.Internal
         private static Type[] emptyTypes = new Type[0];
 
         internal static Delegate GenerateReadMethod(Type type, ImmutableSettings settings, bool isBoxed)
+        {
+            if (!isBoxed)
+            {
+                return GenerateReadMethodImpl(type, settings, isBoxed);
+            }
+
+            return _virtualReadMethods.GetOrAdd(new TypeKey { Type = type, SettingsIndex = settings.SettingsIndex },
+                t => GenerateReadMethodImpl(type, settings, isBoxed));
+        }
+
+        internal static Delegate GenerateReadMethodImpl(Type type, ImmutableSettings settings, bool isBoxed)
         {
             var fields = TypeFields.GetFields(type);
             var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 8;

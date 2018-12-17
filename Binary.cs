@@ -2,10 +2,8 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
-using System.Threading;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal;
-using Apex.Serialization.Internal.Reflection;
 using BinaryReader = Apex.Serialization.Extensions.BinaryReader;
 using BinaryWriter = Apex.Serialization.Extensions.BinaryWriter;
 using BufferedStream = Apex.Serialization.Internal.BufferedStream;
