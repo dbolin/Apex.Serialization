@@ -12,7 +12,7 @@ Currently BETA
 
 ### Limitations
 
-As the serialization is contract-less, the binary format produced depends on precise characteristics of the types serialized. Most changes to types, such as adding or removing fields, renaming types, or changing relationships between types will break compatibility with previously serialized data.
+As the serialization is contract-less, the binary format produced depends on precise characteristics of the types serialized. Most changes to types, such as adding or removing fields, renaming types, or changing relationships between types will break compatibility with previously serialized data.  Serializing and deserializing between different chip architectures and .NET runtimes is not supported.
 
 For performance reasons, the serializer and deserializer make use of pointers and direct memory access.  This will usually cause attempting to deserialize incompatible data to immediately crash the application instead of throwing an exception.
 
