@@ -59,7 +59,7 @@ namespace Apex.Serialization.Internal
 
             writeStatements.Add(Expression.Label(returnTarget));
 
-            var lambda = Expression.Lambda(Expression.Block(localVariables, writeStatements), $"Write_{type.FullName}", new [] {source, stream, output}).Compile();
+            var lambda = Expression.Lambda(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new [] {source, stream, output}).Compile();
             return lambda;
         }
 
@@ -470,7 +470,7 @@ namespace Apex.Serialization.Internal
                 readStatements.Add(result);
             }
 
-            var lambda = Expression.Lambda(Expression.Block(localVariables, readStatements), $"Read_{type.FullName}", new [] {stream, output}).Compile();
+            var lambda = Expression.Lambda(Expression.Block(localVariables, readStatements), $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
 
             return lambda;
         }
