@@ -218,7 +218,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void CustomStreamTest()
         {
-            var s = new CustomStream(memoryStream);
+            var s = new CustomStream(memoryStream, false);
 
             Sut.WriteTo(s);
 
@@ -252,13 +252,34 @@ namespace Apex.Serialization.Tests
             Sut.Read().Should().Be("1234123412341234123412341234");
         }
 
+        [Fact]
+        public void InfiniteReadTest()
+        {
+            var s = new CustomStream(memoryStream, true);
+
+            Sut.WriteTo(s);
+
+            Sut.Write("1234123412341234123412341234");
+
+            Sut.Flush();
+
+            s.Seek(0, SeekOrigin.Begin);
+            Sut.ReadFrom(s);
+
+            var e = Assert.Throws<InvalidOperationException>(() => Sut.Read());
+            e.Message.Should().Be("Underlying stream failed to read or write");
+        }
+
         private class CustomStream : Stream
         {
             private MemoryStream memoryStream;
+            private readonly bool stopReading;
+            private int limit;
 
-            public CustomStream(MemoryStream memoryStream)
+            public CustomStream(MemoryStream memoryStream, bool stopReading)
             {
                 this.memoryStream = memoryStream;
+                this.stopReading = stopReading;
             }
 
             public override bool CanRead => memoryStream.CanRead;
@@ -279,14 +300,22 @@ namespace Apex.Serialization.Tests
 
             public override int Read(byte[] buffer, int offset, int count)
             {
+                if(stopReading && limit != 0 && limit < memoryStream.Position)
+                {
+                    return 0;
+                }
+
                 return memoryStream.Read(buffer, offset, 3);
             }
 
             public override long Seek(long offset, SeekOrigin origin) => memoryStream.Seek(offset, origin);
             public override void SetLength(long value) => memoryStream.SetLength(value);
 
-            public override void Write(byte[] buffer, int offset, int count) =>
+            public override void Write(byte[] buffer, int offset, int count)
+            {
                 memoryStream.Write(buffer, offset, count);
+                limit += count / 2;
+            }
         }
     }
 }

@@ -160,7 +160,10 @@ namespace Apex.Serialization.Internal
                         byteCount -= allowed;
                         _bufferPosition += allowed;
                         sourcePosition += allowed;
-                        Flush();
+                        if (!Flush())
+                        {
+                            ThrowFailedStream();
+                        }
                     }
                     else
                     {
@@ -263,7 +266,10 @@ namespace Apex.Serialization.Internal
                         byteCount -= allowed;
                         sourcePosition += allowed;
                         _bufferPosition += allowed;
-                        Flush();
+                        if (!Flush())
+                        {
+                            ThrowFailedStream();
+                        }
                     }
                     else
                     {
@@ -351,7 +357,10 @@ namespace Apex.Serialization.Internal
                     length -= allowed;
                     _bufferPosition += allowed;
                     sourcePosition += allowed;
-                    Flush();
+                    if (!Flush())
+                    {
+                        ThrowFailedStream();
+                    }
                 }
                 else
                 {
@@ -374,7 +383,10 @@ namespace Apex.Serialization.Internal
                     length -= allowed;
                     sourcePosition += allowed;
                     _bufferPosition += allowed;
-                    Flush();
+                    if (!Flush())
+                    {
+                        ThrowFailedStream();
+                    }
                 }
                 else
                 {
@@ -383,6 +395,11 @@ namespace Apex.Serialization.Internal
                     length = 0;
                 }
             } while (length > 0);
+        }
+
+        private void ThrowFailedStream()
+        {
+            throw new InvalidOperationException("Underlying stream failed to read or write");
         }
     }
 }
