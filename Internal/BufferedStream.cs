@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -21,9 +22,10 @@ namespace Apex.Serialization.Internal
 
         private byte[] _buffer;
         private byte[] _typeIdBuffer;
+        private int _typeIdLengthRemaining;
 
         private GCHandle _bufferGCHandle;
-        private GCHandle _typeIdBufferGCHandle;
+        private List<GCHandle> _typeIdBufferGCHandles = new List<GCHandle>();
 
         private void* _bufferPtr;
         private byte* _typeIdBufferPtr;
@@ -40,8 +42,18 @@ namespace Apex.Serialization.Internal
         internal BufferedStream()
         {
             _buffer = new byte[MaxSize];
-            _typeIdBuffer = new byte[MaxSize * 4];
-            PinBuffers();
+            _bufferGCHandle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
+            _bufferPtr = _bufferGCHandle.AddrOfPinnedObject().ToPointer();
+            CreateNewTypeIdBuffer();
+        }
+
+        private void CreateNewTypeIdBuffer()
+        {
+            _typeIdBuffer = new byte[MaxSize];
+            _typeIdLengthRemaining = (int)MaxSize;
+            var typeIdBufferGCHandle = GCHandle.Alloc(_typeIdBuffer, GCHandleType.Pinned);
+            _typeIdBufferPtr = (byte*)typeIdBufferGCHandle.AddrOfPinnedObject().ToPointer();
+            _typeIdBufferGCHandles.Add(typeIdBufferGCHandle);
         }
 
         public void ReadFrom(Stream stream)
@@ -66,14 +78,6 @@ namespace Apex.Serialization.Internal
             _size = (int)MaxSize;
             _bufferPosition = 0;
             _writing = true;
-        }
-
-        private void PinBuffers()
-        {
-            _bufferGCHandle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
-            _typeIdBufferGCHandle = GCHandle.Alloc(_typeIdBuffer, GCHandleType.Pinned);
-            _bufferPtr = _bufferGCHandle.AddrOfPinnedObject().ToPointer();
-            _typeIdBufferPtr = (byte*)_typeIdBufferGCHandle.AddrOfPinnedObject().ToPointer();
         }
 
         public bool Flush()
@@ -296,6 +300,11 @@ namespace Apex.Serialization.Internal
 
         public Type RestoreTypeFromId(ref byte* typeId, int typeLen1, int typeLen2)
         {
+            if(_typeIdLengthRemaining < typeLen1 + typeLen2 + 2)
+            {
+                CreateNewTypeIdBuffer();
+            }
+
             Unsafe.CopyBlock((void*)_typeIdBufferPtr, (void*)typeId, (uint)(typeLen1 + typeLen2 + 2));
 
             ReorderBytes(typeId, typeLen1);
@@ -305,7 +314,9 @@ namespace Apex.Serialization.Internal
 
             typeId = _typeIdBufferPtr;
 
-            _typeIdBufferPtr += typeLen1 + typeLen2 + 2;
+            var totalLen = typeLen1 + typeLen2 + 2;
+            _typeIdBufferPtr += totalLen;
+            _typeIdLengthRemaining -= totalLen;
             return Type.GetType(typeName, true);
         }
 
@@ -336,7 +347,10 @@ namespace Apex.Serialization.Internal
             {
                 disposedValue = true;
                 _bufferGCHandle.Free();
-                _typeIdBufferGCHandle.Free();
+                foreach(var handle in _typeIdBufferGCHandles)
+                {
+                    handle.Free();
+                }
             }
         }
 
