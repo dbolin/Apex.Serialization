@@ -33,6 +33,8 @@ namespace Apex.Serialization
         private readonly DictionarySlim<object, int> _savedObjectLookup;
         private readonly List<object> _loadedObjectRefs;
 
+        private readonly List<object> _internedObjects = new List<object>();
+
         List<Type> ISerializer.LoadedTypeRefs => _loadedTypeRefs;
 
         private readonly DictionarySlim<Type, int> _savedTypeLookup = new DictionarySlim<Type, int>();
@@ -114,6 +116,13 @@ namespace Apex.Serialization
             if (Settings.SerializationMode == Mode.Graph)
             {
                 _savedObjectLookup.Clear();
+                if (_internedObjects.Count > 0)
+                {
+                    foreach (var o in _internedObjects)
+                    {
+                        _savedObjectLookup.GetOrAddValueRef(o) = _savedObjectLookup.Count;
+                    }
+                }
             }
             _savedTypeLookup.Clear();
         }
@@ -127,6 +136,10 @@ namespace Apex.Serialization
             if (Settings.SerializationMode == Mode.Graph)
             {
                 _loadedObjectRefs.Clear();
+                if (_internedObjects.Count > 0)
+                {
+                    _loadedObjectRefs.AddRange(_internedObjects);
+                }
             }
             _loadedTypeRefs.Clear();
 
@@ -170,6 +183,19 @@ namespace Apex.Serialization
                 writeMethod = (Action<T, BufferedStream, Binary>)DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(typeof(T), Settings, false);
                 WriteMethods<T>.Methods[_settingsIndex] = writeMethod;
             }
+        }
+
+        public void Intern(object o)
+        {
+            if(Settings.SerializationMode != Mode.Graph)
+            {
+                throw new InvalidOperationException("Object interning is only supported for Graph serialization");
+            }
+
+            _internedObjects.Add(o);
+
+            _savedObjectLookup.GetOrAddValueRef(o) = _savedObjectLookup.Count;
+            _loadedObjectRefs.Add(o);
         }
 
         public void Dispose()
