@@ -10,6 +10,8 @@ Suitable for realtime workloads where the serialized data will not persist for l
 
 Currently BETA
 
+[Nuget Package](https://www.nuget.org/packages/Apex.Serialization/)
+
 ### Limitations
 
 As the serialization is contract-less, the binary format produced depends on precise characteristics of the types serialized. Most changes to types, such as adding or removing fields, renaming types, or changing relationships between types will break compatibility with previously serialized data.  Serializing and deserializing between different chip architectures and .NET runtimes is not supported.
