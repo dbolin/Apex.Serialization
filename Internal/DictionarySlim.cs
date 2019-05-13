@@ -281,7 +281,6 @@ namespace Apex.Serialization.Internal
         // Not safe for concurrent _reads_ (at least, if either of them add)
         public ref TValue GetOrAddValueRef(TKey key)
         {
-            if (key == null) ThrowHelper.ThrowKeyArgumentNullException();
             Entry[] entries = _entries;
             int collisionCount = 0;
             int bucketIndex = key.GetHashCode() & (_buckets.Length - 1);
