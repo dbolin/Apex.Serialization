@@ -194,11 +194,6 @@ namespace Apex.Serialization.Internal
             return WriteCollection(type, output, actualSource, stream, source, settings);
         }
 
-        private static MethodInfo _allocMethod = typeof(GCHandle).GetMethod("Alloc", new[] { typeof(object), typeof(GCHandleType) });
-        private static MethodInfo _addrMethod = typeof(GCHandle).GetMethod("AddrOfPinnedObject");
-        private static MethodInfo _toPointerMethod = typeof(IntPtr).GetMethod("ToPointer");
-        private static MethodInfo _freeMethod = typeof(GCHandle).GetMethod("Free");
-
         private static Expression WriteArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
             ParameterExpression stream, int dimensions, Type elementType, int elementSize)
         {

@@ -7,7 +7,7 @@
     <Authors>Dominic Bolin</Authors>
     <Description>A high performance contract-less binary serializer</Description>
     <PackageProjectUrl>https://github.com/dbolin/Apex.Serialization</PackageProjectUrl>
-    <PackageTags>Serializer;Binary</PackageTags>
+    <PackageTags>Serializer, Binary</PackageTags>
     <RepositoryUrl>https://github.com/dbolin/Apex.Serialization.git</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
   </PropertyGroup>
