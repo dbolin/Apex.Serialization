@@ -235,7 +235,6 @@ namespace Apex.Serialization.Internal
                 if (!elementType.IsValueType)
                 {
                     writeValue = Expression.Block(
-                        Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(1)),
                         Expression.IfThen(
                             Expression.Call(output, SerializerMethods.WriteNullByteMethod, accessExpression),
                             Expression.Continue(continueLabels[continueLabels.Count - 1])

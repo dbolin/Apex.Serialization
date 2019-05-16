@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Xunit;
 
@@ -177,6 +178,14 @@ namespace Apex.Serialization.Tests
             var x = new[] { new Test5 { Test4 = new Test4 { Value = new Test3() { Value = 1 } } } };
 
             RoundTrip(x, (a,b) => a[0].Test4.Value.Value == b[0].Test4.Value.Value);
+        }
+
+        [Fact]
+        public void ArrayOfManyNullsAndThenValue()
+        {
+            var x = Enumerable.Repeat((Test5)null, 1000).Concat(new Test5[] { new Test5 { Value1 = 1} }).ToArray();
+
+            RoundTrip(x);
         }
     }
 }
