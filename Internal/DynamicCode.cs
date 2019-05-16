@@ -31,7 +31,7 @@ namespace Apex.Serialization.Internal
 
         internal static Delegate GenerateWriteMethodImpl(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
         {
-            var fields = TypeFields.GetFields(type);
+            var fields = TypeFields.GetOrderedFields(type);
 
             var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 12;
 
@@ -227,7 +227,7 @@ namespace Apex.Serialization.Internal
 
             if (!isSimpleWrite && elementType.IsSealed)
             {
-                var fields = TypeFields.GetFields(elementType);
+                var fields = TypeFields.GetOrderedFields(elementType);
                 writeValue = Expression.Block(GetWriteStatementsForType(elementType, settings, stream, output,
                     accessExpression, continueLabels[continueLabels.Count - 1], fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 12, shouldWriteTypeInfo, accessExpression,
                     fields));
@@ -235,6 +235,7 @@ namespace Apex.Serialization.Internal
                 if (!elementType.IsValueType)
                 {
                     writeValue = Expression.Block(
+                        Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(1)),
                         Expression.IfThen(
                             Expression.Call(output, SerializerMethods.WriteNullByteMethod, accessExpression),
                             Expression.Continue(continueLabels[continueLabels.Count - 1])
@@ -337,7 +338,7 @@ namespace Apex.Serialization.Internal
                 return customExpression;
             }
 
-            var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, TypeFields.GetFields(declaredType));
+            var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, TypeFields.GetOrderedFields(declaredType));
             if (writeStruct != null)
             {
                 simpleType = true;
@@ -437,7 +438,7 @@ namespace Apex.Serialization.Internal
 
         internal static Delegate GenerateReadMethodImpl(Type type, ImmutableSettings settings, bool isBoxed)
         {
-            var fields = TypeFields.GetFields(type);
+            var fields = TypeFields.GetOrderedFields(type);
             var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 8;
 
             var stream = Expression.Parameter(typeof(TStream), "stream");
@@ -769,7 +770,7 @@ namespace Apex.Serialization.Internal
                 return true;
             }
 
-            return elementType.IsExplicitLayout && TypeFields.GetFields(elementType).All(x => IsBlittable(x.FieldType));
+            return elementType.IsExplicitLayout && TypeFields.GetOrderedFields(elementType).All(x => IsBlittable(x.FieldType));
         }
 
         private static Expression ReadArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
@@ -805,7 +806,7 @@ namespace Apex.Serialization.Internal
                 && !typeof(Type).IsAssignableFrom(elementType)
                 && !typeof(Delegate).IsAssignableFrom(elementType))
             {
-                var fields = TypeFields.GetFields(elementType);
+                var fields = TypeFields.GetOrderedFields(elementType);
                 readValue = Expression.Block(GetReadStatementsForType(elementType, settings, stream, fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 12, output,
                     accessExpression, fields, localVariables));
 
@@ -951,7 +952,7 @@ namespace Apex.Serialization.Internal
                 return nullableExpression;
             }
 
-            var readStructExpression = ReadStructExpression(declaredType, stream, TypeFields.GetFields(declaredType));
+            var readStructExpression = ReadStructExpression(declaredType, stream, TypeFields.GetOrderedFields(declaredType));
             if (readStructExpression != null)
             {
                 isSimpleRead = true;

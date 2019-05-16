@@ -17,6 +17,19 @@ namespace Apex.Serialization.Tests
             public int Value;
         }
 
+        public struct Test4
+        {
+            public Test3 Value;
+        }
+
+        public sealed class Test5
+        {
+            public int Value1;
+            public int Value2;
+            public int Value3;
+            public Test4 Test4;
+        }
+
         public class Test
         {
             public int[] IntArray;
@@ -156,6 +169,14 @@ namespace Apex.Serialization.Tests
             var x = new int[][] {new int[] {1, 2, 3, 4}, new[] {4, 5, 6, 7}};
 
             RoundTrip(x);
+        }
+
+        [Fact]
+        public void ArrayOfSealedContainingStructWithSingleRefField()
+        {
+            var x = new[] { new Test5 { Test4 = new Test4 { Value = new Test3() { Value = 1 } } } };
+
+            RoundTrip(x, (a,b) => a[0].Test4.Value.Value == b[0].Test4.Value.Value);
         }
     }
 }

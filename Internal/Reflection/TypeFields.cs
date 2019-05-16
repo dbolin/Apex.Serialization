@@ -32,6 +32,7 @@ namespace Apex.Serialization.Internal.Reflection
         }
 
         private static DictionarySlim<Type, List<FieldInfo>> _cache = new DictionarySlim<Type, List<FieldInfo>>();
+        private static DictionarySlim<Type, List<FieldInfo>> _orderedCache = new DictionarySlim<Type, List<FieldInfo>>();
 
         private static object _cacheLock = new object();
 
@@ -73,7 +74,7 @@ namespace Apex.Serialization.Internal.Reflection
             {typeof(Guid), 16},
         };
         
-        private static Dictionary<Type, int> structSizeDictionary = new Dictionary<Type, int>();
+        private static DictionarySlim<Type, int> structSizeDictionary = new DictionarySlim<Type, int>();
 
         internal static (int size, bool isRef) GetSizeForType(Type type)
         {
@@ -95,21 +96,22 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static bool TryGetSizeForStruct(Type type, out int sizeForField)
         {
-            if (structSizeDictionary.TryGetValue(type, out sizeForField))
+            ref int size = ref structSizeDictionary.GetOrAddValueRef(type);
+            if (size != 0)
             {
+                sizeForField = size;
                 return true;
             }
 
-            if (type.IsValueType && GetFields(type).Count <= 1)
+            var fields = GetFields(type);
+
+            if (type.IsValueType && fields.Count <= 1 && fields.All(f => IsPrimitive(f)))
             {
-                var result = (int) typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type)
+                size = (int) typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type)
                     .Invoke(null, Array.Empty<Type>());
 
-                structSizeDictionary.Add(type, result);
-                {
-                    sizeForField = result;
-                    return true;
-                }
+                sizeForField = size;
+                return true;
             }
 
             sizeForField = 5;
@@ -128,56 +130,68 @@ namespace Apex.Serialization.Internal.Reflection
             return null;
         }
 
-        internal static List<FieldInfo> GetFields(Type type)
+        internal static List<FieldInfo> GetOrderedFields(Type type)
         {
             lock (_cacheLock)
             {
-                var originalType = type;
-                ref var fields = ref _cache.GetOrAddValueRef(type);
+                ref var fields = ref _orderedCache.GetOrAddValueRef(type);
                 if (fields == null)
                 {
-                    var start = Enumerable.Empty<FieldInfo>();
-                    while (type != null)
-                    {
-                        if (IsKnownCollection(type))
-                        {
-                            _collections.GetOrAddValueRef(originalType) = type;
-                            //break;
-                        }
-
-                        if (type.Module.ScopeName == "CommonLanguageRuntimeLibrary")
-                        {
-                            start = start.Concat(type.GetFields(BindingFlags.Instance | BindingFlags.Public |
-                                                                BindingFlags.NonPublic |
-                                                                BindingFlags.DeclaredOnly));
-                        }
-                        else
-                        {
-                            start = start.Concat(type.GetFields(BindingFlags.Instance | BindingFlags.Public |
-                                                                BindingFlags.NonPublic |
-                                                                BindingFlags.DeclaredOnly)
-                                .Where(x => x.CustomAttributes.All(a =>
-                                    a.AttributeType != typeof(NonSerializedAttribute))));
-                        }
-
-                        type = type.BaseType;
-                    }
-
+                    var unorderedFields = GetFields(type);
                     if (FieldInfoModifier.MustUseReflectionToSetReadonly)
                     {
-                        fields = start.OrderBy(x => IsPrimitive(x) ? 0 : 1)
+                        fields = unorderedFields.OrderBy(x => IsPrimitive(x) ? 0 : 1)
                             .ThenBy(x => x.IsInitOnly ? 0 : 1)
                             .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
                             .ThenBy(x => x.Name).ToList();
                     }
                     else
                     {
-                        fields = start.OrderBy(x => IsPrimitive(x) ? 0 : 1)
+                        fields = unorderedFields.OrderBy(x => IsPrimitive(x) ? 0 : 1)
                             .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
                             .ThenBy(x => x.Name).ToList();
                     }
                 }
 
+                return fields;
+            }
+        }
+
+        private static List<FieldInfo> GetFields(Type type)
+        {
+            lock (_cacheLock)
+            {
+                ref var fields = ref _cache.GetOrAddValueRef(type);
+
+                var originalType = type;
+                var start = Enumerable.Empty<FieldInfo>();
+                while (type != null)
+                {
+                    if (IsKnownCollection(type))
+                    {
+                        _collections.GetOrAddValueRef(originalType) = type;
+                        //break;
+                    }
+
+                    if (type.Module.ScopeName == "CommonLanguageRuntimeLibrary")
+                    {
+                        start = start.Concat(type.GetFields(BindingFlags.Instance | BindingFlags.Public |
+                                                            BindingFlags.NonPublic |
+                                                            BindingFlags.DeclaredOnly));
+                    }
+                    else
+                    {
+                        start = start.Concat(type.GetFields(BindingFlags.Instance | BindingFlags.Public |
+                                                            BindingFlags.NonPublic |
+                                                            BindingFlags.DeclaredOnly)
+                            .Where(x => x.CustomAttributes.All(a =>
+                                a.AttributeType != typeof(NonSerializedAttribute))));
+                    }
+
+                    type = type.BaseType;
+                }
+
+                fields = start.ToList();
                 return fields;
             }
         }
