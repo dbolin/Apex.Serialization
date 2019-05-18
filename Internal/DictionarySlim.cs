@@ -3,14 +3,10 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
-using System;
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Runtime.CompilerServices;
 
 namespace Apex.Serialization.Internal
