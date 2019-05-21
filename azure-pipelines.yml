@@ -4,7 +4,7 @@ variables:
   BuildConfiguration: 'Release'
 
 steps:
-- script: 'dotnet build **/Apex.Serialization.csproj -c $(BuildConfiguration)'
+- script: 'dotnet build Apex.Serialization.csproj -c $(BuildConfiguration)'
   displayName: 'dotnet build'
 - task: DeleteFiles@1
   inputs:
@@ -31,7 +31,7 @@ steps:
   displayName: 'dotnet pack'
   inputs:
     command: pack
-    packagesToPack: '**/Apex.Serialization.csproj'
+    packagesToPack: 'Apex.Serialization.csproj'
     nobuild: true
     versioningScheme: byPrereleaseNumber
     verbosityPack: Minimal
