@@ -11,7 +11,7 @@ steps:
     Contents: '**/*.trx'
 - script: |
    dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp2.2 -c Debug --logger "trx;LogFileName=results.trx"
-   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp2.2 -c Release /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:UseSourceLink=true /p:Include="[Apex.*]*" --logger "trx;LogFileName=results.trx"
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp2.2 -c Release /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" --logger "trx;LogFileName=results.trx"
   displayName: 'dotnet test'
 
 - task: PublishCodeCoverageResults@1
