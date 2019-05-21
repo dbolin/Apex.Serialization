@@ -6,44 +6,13 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
 
 namespace Apex.Serialization.Internal
 {
-    internal static class ThrowHelper
-    {
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        internal static void ThrowInvalidOperationException_ConcurrentOperationsNotSupported()
-        {
-            throw new InvalidOperationException("Strings.InvalidOperation_ConcurrentOperationsNotSupported");
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        internal static void ThrowKeyArgumentNullException()
-        {
-            throw new ArgumentNullException("key");
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        internal static void ThrowCapacityArgumentOutOfRangeException()
-        {
-            throw new ArgumentOutOfRangeException("capacity");
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        internal static bool ThrowNotSupportedException_ReadOnly_Modification()
-        {
-            throw new NotSupportedException("Strings.ReadOnly_Modification");
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        internal static bool ThrowNotSupportedException()
-        {
-            throw new NotSupportedException();
-        }
-    }
-
+    [ExcludeFromCodeCoverage]
     internal static partial class HashHelpers
     {
         internal static readonly int[] DictionarySlimSizeOneIntArray = new int[1];
@@ -133,6 +102,7 @@ namespace Apex.Serialization.Internal
     /// </summary>
     [DebuggerTypeProxy(typeof(DictionarySlimDebugView<,>))]
     [DebuggerDisplay("Count = {Count}")]
+    [ExcludeFromCodeCoverage]
     internal class DictionarySlim<TKey, TValue> : IReadOnlyCollection<KeyValuePair<TKey, TValue>>
     {
         // We want to initialize without allocating arrays. We also want to avoid null checks.
@@ -167,8 +137,6 @@ namespace Apex.Serialization.Internal
 
         public DictionarySlim(int capacity)
         {
-            if (capacity < 0)
-                ThrowHelper.ThrowCapacityArgumentOutOfRangeException();
             if (capacity < 2)
                 capacity = 2;
             capacity = HashHelpers.PowerOf2(capacity);
@@ -182,21 +150,12 @@ namespace Apex.Serialization.Internal
 
         public bool ContainsKey(TKey key)
         {
-            if (key == null) ThrowHelper.ThrowKeyArgumentNullException();
             Entry[] entries = _entries;
-            int collisionCount = 0;
             for (int i = _buckets[key.GetHashCode() & (_buckets.Length - 1)] - 1;
                 (uint)i < (uint)entries.Length; i = entries[i].next)
             {
                 if (key.Equals(entries[i].key))
                     return true;
-                if (collisionCount == entries.Length)
-                {
-                    // The chain of entries forms a loop; which means a concurrent update has happened.
-                    // Break out of the loop and throw, rather than looping forever.
-                    ThrowHelper.ThrowInvalidOperationException_ConcurrentOperationsNotSupported();
-                }
-                collisionCount++;
             }
 
             return false;
@@ -204,9 +163,7 @@ namespace Apex.Serialization.Internal
 
         public bool TryGetValue(TKey key, out TValue value)
         {
-            if (key == null) ThrowHelper.ThrowKeyArgumentNullException();
             Entry[] entries = _entries;
-            int collisionCount = 0;
             for (int i = _buckets[key.GetHashCode() & (_buckets.Length - 1)] - 1;
                 (uint)i < (uint)entries.Length; i = entries[i].next)
             {
@@ -215,13 +172,6 @@ namespace Apex.Serialization.Internal
                     value = entries[i].value;
                     return true;
                 }
-                if (collisionCount == entries.Length)
-                {
-                    // The chain of entries forms a loop; which means a concurrent update has happened.
-                    // Break out of the loop and throw, rather than looping forever.
-                    ThrowHelper.ThrowInvalidOperationException_ConcurrentOperationsNotSupported();
-                }
-                collisionCount++;
             }
 
             value = default;
@@ -230,13 +180,11 @@ namespace Apex.Serialization.Internal
 
         public bool Remove(TKey key)
         {
-            if (key == null) ThrowHelper.ThrowKeyArgumentNullException();
             Entry[] entries = _entries;
             int bucketIndex = key.GetHashCode() & (_buckets.Length - 1);
             int entryIndex = _buckets[bucketIndex] - 1;
 
             int lastIndex = -1;
-            int collisionCount = 0;
             while (entryIndex != -1)
             {
                 Entry candidate = entries[entryIndex];
@@ -261,14 +209,6 @@ namespace Apex.Serialization.Internal
                 }
                 lastIndex = entryIndex;
                 entryIndex = candidate.next;
-
-                if (collisionCount == entries.Length)
-                {
-                    // The chain of entries forms a loop; which means a concurrent update has happened.
-                    // Break out of the loop and throw, rather than looping forever.
-                    ThrowHelper.ThrowInvalidOperationException_ConcurrentOperationsNotSupported();
-                }
-                collisionCount++;
             }
 
             return false;
@@ -278,20 +218,12 @@ namespace Apex.Serialization.Internal
         public ref TValue GetOrAddValueRef(TKey key)
         {
             Entry[] entries = _entries;
-            int collisionCount = 0;
             int bucketIndex = key.GetHashCode() & (_buckets.Length - 1);
             for (int i = _buckets[bucketIndex] - 1;
                 (uint)i < (uint)entries.Length; i = entries[i].next)
             {
                 if (key.Equals(entries[i].key))
                     return ref entries[i].value;
-                if (collisionCount == entries.Length)
-                {
-                    // The chain of entries forms a loop; which means a concurrent update has happened.
-                    // Break out of the loop and throw, rather than looping forever.
-                    ThrowHelper.ThrowInvalidOperationException_ConcurrentOperationsNotSupported();
-                }
-                collisionCount++;
             }
 
             return ref AddKey(key, bucketIndex);
@@ -397,6 +329,7 @@ namespace Apex.Serialization.Internal
             new Enumerator(this);
         IEnumerator IEnumerable.GetEnumerator() => new Enumerator(this);
 
+        [ExcludeFromCodeCoverage]
         public struct Enumerator : IEnumerator<KeyValuePair<TKey, TValue>>
         {
             private readonly DictionarySlim<TKey, TValue> _dictionary;
@@ -444,6 +377,7 @@ namespace Apex.Serialization.Internal
             public void Dispose() { }
         }
 
+        [ExcludeFromCodeCoverage]
         public struct KeyCollection : ICollection<TKey>, IReadOnlyCollection<TKey>
         {
             private readonly DictionarySlim<TKey, TValue> _dictionary;
@@ -458,15 +392,15 @@ namespace Apex.Serialization.Internal
             bool ICollection<TKey>.IsReadOnly => true;
 
             void ICollection<TKey>.Add(TKey item) =>
-                ThrowHelper.ThrowNotSupportedException_ReadOnly_Modification();
+                throw new NotSupportedException();
 
             void ICollection<TKey>.Clear() =>
-                ThrowHelper.ThrowNotSupportedException_ReadOnly_Modification();
+                throw new NotSupportedException();
 
             public bool Contains(TKey item) => _dictionary.ContainsKey(item);
 
             bool ICollection<TKey>.Remove(TKey item) =>
-                ThrowHelper.ThrowNotSupportedException_ReadOnly_Modification();
+                throw new NotSupportedException();
 
             void ICollection<TKey>.CopyTo(TKey[] array, int index)
             {
@@ -493,6 +427,7 @@ namespace Apex.Serialization.Internal
             IEnumerator<TKey> IEnumerable<TKey>.GetEnumerator() => new Enumerator(_dictionary);
             IEnumerator IEnumerable.GetEnumerator() => new Enumerator(_dictionary);
 
+            [ExcludeFromCodeCoverage]
             public struct Enumerator : IEnumerator<TKey>
             {
                 private readonly DictionarySlim<TKey, TValue> _dictionary;
@@ -539,6 +474,7 @@ namespace Apex.Serialization.Internal
             }
         }
 
+        [ExcludeFromCodeCoverage]
         public struct ValueCollection : ICollection<TValue>, IReadOnlyCollection<TValue>
         {
             private readonly DictionarySlim<TKey, TValue> _dictionary;
@@ -553,16 +489,16 @@ namespace Apex.Serialization.Internal
             bool ICollection<TValue>.IsReadOnly => true;
 
             void ICollection<TValue>.Add(TValue item) =>
-                ThrowHelper.ThrowNotSupportedException_ReadOnly_Modification();
+                throw new NotSupportedException();
 
             void ICollection<TValue>.Clear() =>
-                ThrowHelper.ThrowNotSupportedException_ReadOnly_Modification();
+                throw new NotSupportedException();
 
             bool ICollection<TValue>.Contains(TValue item) =>
-                ThrowHelper.ThrowNotSupportedException(); // performance antipattern
+                throw new NotSupportedException();
 
             bool ICollection<TValue>.Remove(TValue item) =>
-                ThrowHelper.ThrowNotSupportedException_ReadOnly_Modification();
+                throw new NotSupportedException();
 
             void ICollection<TValue>.CopyTo(TValue[] array, int index)
             {
@@ -588,6 +524,7 @@ namespace Apex.Serialization.Internal
             IEnumerator<TValue> IEnumerable<TValue>.GetEnumerator() => new Enumerator(_dictionary);
             IEnumerator IEnumerable.GetEnumerator() => new Enumerator(_dictionary);
 
+            [ExcludeFromCodeCoverage]
             public struct Enumerator : IEnumerator<TValue>
             {
                 private readonly DictionarySlim<TKey, TValue> _dictionary;
@@ -635,6 +572,7 @@ namespace Apex.Serialization.Internal
         }
     }
 
+    [ExcludeFromCodeCoverage]
     internal sealed class DictionarySlimDebugView<K, V>
     {
         private readonly DictionarySlim<K, V> _dictionary;
