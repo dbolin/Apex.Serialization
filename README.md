@@ -9,15 +9,13 @@ Suitable for realtime workloads where the serialized data will not persist for l
 [![Build Status](https://numenfall.visualstudio.com/Libraries/_apis/build/status/dbolin.Apex.Serialization?branchName=master)](https://numenfall.visualstudio.com/Libraries/_build/latest?definitionId=11&branchName=master) [![Tests](https://img.shields.io/azure-devops/tests/numenfall/Libraries/11.svg?compact_message)](https://numenfall.visualstudio.com/Libraries/_build/latest?definitionId=11&branchName=master)
 [![Code Coverage](https://img.shields.io/azure-devops/coverage/numenfall/Libraries/11/master.svg)](https://numenfall.visualstudio.com/Libraries/_build/latest?definitionId=11&branchName=master)
 
-Currently BETA
-
 [Nuget Package](https://www.nuget.org/packages/Apex.Serialization/)
 
 ### Limitations
 
 As the serialization is contract-less, the binary format produced depends on precise characteristics of the types serialized. Most changes to types, such as adding or removing fields, renaming types, or changing relationships between types will break compatibility with previously serialized data.  Serializing and deserializing between different chip architectures and .NET runtimes is not supported.
 
-For performance reasons, the serializer and deserializer make use of pointers and direct memory access.  This will usually cause attempting to deserialize incompatible data to immediately crash the application instead of throwing an exception.
+For performance reasons, the serializer and deserializer make use of pointers and direct memory access.  This will often cause attempting to deserialize incompatible data to immediately crash the application instead of throwing an exception.
 
 NEVER deserialize data from an untrusted source.
 
@@ -30,7 +28,7 @@ Some types aren't supported:
 - ImmutableDictionary and ImmutableHashSet when the Key type hashcode can be randomized
 - Any class inheriting from standard collections when the Key type hashcode can be randomized
 
-Requires code generation capabilities, most likely only operates under full trust
+Requires code generation capabilities
 
 ### Usage
 
