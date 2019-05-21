@@ -7,3 +7,5 @@ bin
 obj
 /Benchmark/BenchmarkDotNet.Artifacts
 /Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj.user
+/Tests/Apex.Serialization.Tests/TestResults
+/Tests/Apex.Serialization.Tests/coverage.cobertura.xml
