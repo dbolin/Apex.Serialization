@@ -111,6 +111,7 @@ namespace Apex.Serialization.Tests
             };
 
             RoundTrip(x);
+            RoundTrip(x);
         }
 
         [Fact]
