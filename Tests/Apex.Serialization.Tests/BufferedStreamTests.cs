@@ -213,6 +213,36 @@ namespace Apex.Serialization.Tests
             y[1].Should().Be(2);
             y[2].Should().Be(3);
             y[3].Should().Be(4);
+
+            memoryStream.Seek(0, SeekOrigin.Begin);
+            Sut.WriteTo(memoryStream);
+
+            var largeBuffer = new byte[2_000_000];
+
+            for(int i=0;i<2_000_000;++i)
+            {
+                largeBuffer[i] = (byte)i;
+            }
+
+            fixed (byte* p = &largeBuffer[0])
+            {
+                Sut.WriteBytes(p, 2_000_000);
+            }
+
+            Sut.Flush();
+
+            memoryStream.Seek(0, SeekOrigin.Begin);
+            Sut.ReadFrom(memoryStream);
+
+            fixed (byte* p = &largeBuffer[0])
+            {
+                Sut.ReadBytes(p, 2_000_000);
+            }
+
+            for (int i = 0; i < 2_000_000; ++i)
+            {
+                largeBuffer[i].Should().Be((byte)i);
+            }
         }
 
         [Fact]
