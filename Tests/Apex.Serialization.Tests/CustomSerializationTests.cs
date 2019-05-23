@@ -46,5 +46,15 @@ namespace Apex.Serialization.Tests
 
             y.Value.Should().Be(x.Value - 1);
         }
+
+        [Fact]
+        public void Precompile()
+        {
+            var binary = new Binary(new Settings { SupportSerializationHooks = true });
+
+            binary.Precompile(typeof(Settings));
+            binary.Precompile<Settings>();
+            binary.Precompile<CustomSerializationTests>();
+        }
     }
 }

@@ -111,7 +111,7 @@ namespace Apex.Serialization.Internal
             if (genericTypeDef == typeof(LinkedList<>))
             {
                 addMethod = "AddLast";
-            } else if (genericTypeDef == typeof(Stack<>) | genericTypeDef == typeof(ConcurrentStack<>))
+            } else if (genericTypeDef == typeof(Stack<>) || genericTypeDef == typeof(ConcurrentStack<>))
             {
                 addMethod = "Push";
             } else if (genericTypeDef == typeof(Queue<>) || genericTypeDef == typeof(ConcurrentQueue<>))
