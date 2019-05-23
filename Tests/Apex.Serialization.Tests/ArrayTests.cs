@@ -1,6 +1,8 @@
-﻿using System;
+﻿using FluentAssertions;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using Xunit;
 
@@ -8,6 +10,15 @@ namespace Apex.Serialization.Tests
 {
     public class ArrayTests : AbstractSerializerTestBase
     {
+        [StructLayout(LayoutKind.Explicit)]
+        public struct ExplicitLayoutTest2
+        {
+            [FieldOffset(0)]
+            public int Value;
+            [FieldOffset(0)]
+            public int Value2;
+        }
+
         public struct Test2
         {
             public int Value;
@@ -76,6 +87,20 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
+        public void BlittableArrays()
+        {
+            RoundTrip(new byte[] { 0, 1 });
+            RoundTrip(new sbyte[] { 0, -1 });
+            RoundTrip(new short[] { 0, -1 });
+            RoundTrip(new ushort[] { 0, 1 });
+            RoundTrip(new uint[] { 0, 1 });
+            RoundTrip(new long[] { 0, -1 });
+            RoundTrip(new ulong[] { 0, 1 });
+            RoundTrip(new float[] { 0, 1 });
+            RoundTrip(new double[] { 0, 1 });
+        }
+
+        [Fact]
         public void StringArray()
         {
             var x = new[] {"asd", null, "qwe"};
@@ -89,6 +114,12 @@ namespace Apex.Serialization.Tests
             var x = new[] {new Test2 {Value = 4}};
 
             RoundTrip(x);
+
+            var y = new[] { new ExplicitLayoutTest2 { Value = 5 } };
+
+            var y2 = RoundTrip(y);
+
+            y2[0].Value2.Should().Be(5);
         }
 
         [Fact]
