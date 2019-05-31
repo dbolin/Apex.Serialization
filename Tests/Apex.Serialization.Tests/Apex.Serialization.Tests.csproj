@@ -32,7 +32,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\Apex.Serialization.csproj" />
+    <ProjectReference Include="..\..\Apex.Serialization\Apex.Serialization.csproj" />
   </ItemGroup>
 
   <ItemGroup>
