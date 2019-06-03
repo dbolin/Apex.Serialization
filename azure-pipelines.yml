@@ -10,7 +10,7 @@ steps:
   inputs:
     Contents: '**/*.trx'
 - script: |
-   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp2.2 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp2.2 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
    dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp2.2 -c Release --logger "trx;LogFileName=results.trx"
   displayName: 'dotnet test'
 
