@@ -10,6 +10,7 @@
     <PackageTags>Serializer, Binary</PackageTags>
     <RepositoryUrl>https://github.com/dbolin/Apex.Serialization.git</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
