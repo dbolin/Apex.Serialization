@@ -2,10 +2,10 @@
 
   <PropertyGroup>
     <TargetFrameworks>net47;netcoreapp2.2</TargetFrameworks>
-
     <IsPackable>false</IsPackable>
-
     <LangVersion>7.1</LangVersion>
+    <SignAssembly>true</SignAssembly>
+    <AssemblyOriginatorKeyFile>Apex.Serialization.Tests.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">

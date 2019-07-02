@@ -114,7 +114,7 @@ namespace Apex.Serialization.Tests
             var ptr = Sut.ReadTypeId(out var len1, out var len2);
 
             len1.Should().Be(44);
-            len2.Should().Be(79);
+            len2.Should().Be(91);
 
             var type = Sut.RestoreTypeFromId(ref ptr, len1, len2);
             type.AssemblyQualifiedName.Should().Be(typeof(BufferedStreamTests).AssemblyQualifiedName);
@@ -133,7 +133,7 @@ namespace Apex.Serialization.Tests
             ptr = Sut.ReadTypeId(out var len3, out var len4);
 
             len3.Should().Be(51);
-            len4.Should().Be(79);
+            len4.Should().Be(91);
 
             type = Sut.RestoreTypeFromId(ref ptr, len3, len4);
             type.AssemblyQualifiedName.Should().Be(typeof(AbstractSerializerTestBase).AssemblyQualifiedName);
