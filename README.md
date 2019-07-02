@@ -20,13 +20,11 @@ For performance reasons, the serializer and deserializer make use of pointers an
 NEVER deserialize data from an untrusted source.
 
 Some types aren't supported:
-- Objects that use randomized hashing or other runtime specific data to determine their behavior
+- Objects that use randomized hashing or other runtime specific data to determine their behavior (including HashSet<>, Dictionary<,> and their immutable counterparts)
 - Structs with explicit layout that contain reference fields
 - Objects containing pointers or handles to unmanaged resources
-- BlockingCollection\<T>
+- BlockingCollection\<>
 - Non-generic standard collections
-- ImmutableDictionary and ImmutableHashSet when the Key type hashcode can be randomized
-- Any class inheriting from standard collections when the Key type hashcode can be randomized
 
 Requires code generation capabilities
 
