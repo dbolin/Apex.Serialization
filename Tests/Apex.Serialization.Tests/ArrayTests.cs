@@ -98,6 +98,7 @@ namespace Apex.Serialization.Tests
             RoundTrip(new ulong[] { 0, 1 });
             RoundTrip(new float[] { 0, 1 });
             RoundTrip(new double[] { 0, 1 });
+            RoundTrip(new char[] { 'a', 'b' });
         }
 
         [Fact]

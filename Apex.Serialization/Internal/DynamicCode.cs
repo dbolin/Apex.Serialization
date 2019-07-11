@@ -744,6 +744,10 @@ namespace Apex.Serialization.Internal
             {
                 return true;
             }
+            if (elementType == typeof(char))
+            {
+                return true;
+            }
             if (elementType == typeof(int))
             {
                 return true;
