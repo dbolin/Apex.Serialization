@@ -6,7 +6,7 @@ Suitable for realtime workloads where the serialized data will not persist for l
 
 ### Status
 
-[![Build Status](https://numenfall.visualstudio.com/Libraries/_apis/build/status/dbolin.Apex.Serialization?branchName=master)](https://numenfall.visualstudio.com/Libraries/_build/latest?definitionId=11&branchName=master) [![Tests](https://img.shields.io/azure-devops/tests/numenfall/Libraries/11.svg?compact_message)](https://numenfall.visualstudio.com/Libraries/_build/latest?definitionId=11&branchName=master)
+[![Build Status](https://numenfall.visualstudio.com/Libraries/_apis/build/status/dbolin.Apex.Serialization?branchName=master)](https://numenfall.visualstudio.com/Libraries/_build/latest?definitionId=11&branchName=master) <!-- [![Tests](https://img.shields.io/azure-devops/tests/numenfall/Libraries/11.svg?compact_message)](https://numenfall.visualstudio.com/Libraries/_build/latest?definitionId=11&branchName=master) -->
 [![Code Coverage](https://img.shields.io/azure-devops/coverage/numenfall/Libraries/11/master.svg)](https://numenfall.visualstudio.com/Libraries/_build/latest?definitionId=11&branchName=master)
 
 [Nuget Package](https://www.nuget.org/packages/Apex.Serialization/)
