@@ -36,6 +36,58 @@ namespace Apex.Serialization.Tests
             }
         }
 
+        public class StaticTest
+        {
+            public int InnerValue;
+
+            [NonSerialized]
+            public int CachedValue;
+
+            [AfterDeserialization]
+            private static void AfterDeserializationMethod(StaticTest o)
+            {
+                o.CachedValue = o.InnerValue;
+            }
+        }
+
+        public class StaticTestContext
+        {
+            public int Value;
+        }
+
+        public class StaticTestWithContext
+        {
+            public int InnerValue;
+
+            [NonSerialized]
+            public int CachedValue;
+
+            [AfterDeserialization]
+            private static void AfterDeserializationMethod(StaticTestWithContext o, StaticTestContext context)
+            {
+                o.CachedValue = (context?.Value) ?? 0;
+            }
+        }
+
+        public class MethodTestContext
+        {
+            public int Value;
+        }
+
+        public class MethodTestWithContext
+        {
+            public int InnerValue;
+
+            [NonSerialized]
+            public int CachedValue;
+
+            [AfterDeserialization]
+            private void AfterDeserializationMethod(MethodTestContext context)
+            {
+                CachedValue = (context?.Value) ?? 0;
+            }
+        }
+
         [Fact]
         public void MethodIsCalled()
         {
@@ -51,5 +103,46 @@ namespace Apex.Serialization.Tests
 
             RoundTrip(x);
         }
+
+        [Fact]
+        public void StaticMethod()
+        {
+            var x = new StaticTest { InnerValue = 3, CachedValue = 3 };
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void StaticMethodWithContext()
+        {
+            var context = new StaticTestContext { Value = 3 };
+            var x = new StaticTestWithContext { InnerValue = 3, CachedValue = 3 };
+
+            (_serializer as IBinary).SetCustomHookContext(context);
+            (_serializerGraph as IBinary).SetCustomHookContext(context);
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void NullContext()
+        {
+            var x = new StaticTestWithContext { InnerValue = 3, CachedValue = 0 };
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void MethodWithContext()
+        {
+            var context = new MethodTestContext { Value = 3 };
+            var x = new MethodTestWithContext { InnerValue = 3, CachedValue = 3 };
+
+            (_serializer as IBinary).SetCustomHookContext(context);
+            (_serializerGraph as IBinary).SetCustomHookContext(context);
+
+            RoundTrip(x);
+        }
+
     }
 }

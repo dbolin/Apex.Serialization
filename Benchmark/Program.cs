@@ -26,8 +26,8 @@ namespace Benchmark
             Add(DefaultConfig.Instance.GetExporters().ToArray()); // manual config has no exporters by default
             Add(DefaultConfig.Instance.GetColumnProviders().ToArray()); // manual config has no columns by default
 
-            Add(Job.Core.With(CsProjCoreToolchain.NetCoreApp22).WithGcServer(false));
-            //Add(Job.Core.With(CsProjCoreToolchain.NetCoreApp22).WithGcServer(true));
+            //Add(Job.Core.With(CsProjCoreToolchain.NetCoreApp30).WithGcServer(false));
+            Add(Job.Core.With(CsProjCoreToolchain.NetCoreApp30).WithGcServer(true));
             //Add(Job.Clr.With(CsProjClassicNetToolchain.Net472));
             //Add(Job.CoreRT);
             //Add(HardwareCounter.BranchMispredictions, HardwareCounter.BranchInstructions);
@@ -44,10 +44,11 @@ namespace Benchmark
     {
         static void Main(string[] args)
         {
-            //var t = new SerializationMutablePoco();
-            //while(true)
-                //t.MessagePack();
-
+            /*
+            var t = new SerializationImmutablePoco();
+            while(true)
+                t.Apex();
+              */
 
             var summaries = BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(config: new Config());
 

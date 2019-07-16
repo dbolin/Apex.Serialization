@@ -6,7 +6,7 @@ using System.Reflection;
 
 namespace Apex.Serialization.Internal
 {
-    internal unsafe interface IBufferedStream : IDisposable
+    internal unsafe interface IBinaryStream : IDisposable
     {
         void ReadFrom(Stream stream);
         void WriteTo(Stream stream);
@@ -25,7 +25,7 @@ namespace Apex.Serialization.Internal
         void ReadBytes(void* destination, uint length);
     }
 
-    internal static class BufferedStreamMethods<TStream> where TStream : IBufferedStream
+    internal static class BinaryStreamMethods<TStream> where TStream : IBinaryStream
     {
         internal static readonly MethodInfo ReserveSizeMethodInfo = typeof(TStream).GetMethod("ReserveSize", new[] { typeof(int) });
 

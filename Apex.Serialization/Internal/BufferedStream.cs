@@ -8,7 +8,7 @@ using System.Text;
 
 namespace Apex.Serialization.Internal
 {
-    internal sealed unsafe class BufferedStream : IBufferedStream, IDisposable
+    internal unsafe struct BufferedStream : IBinaryStream, IDisposable
     {
         private struct TypeIdCacheEntry
         {
@@ -25,26 +25,31 @@ namespace Apex.Serialization.Internal
         private int _typeIdLengthRemaining;
 
         private GCHandle _bufferGCHandle;
-        private List<GCHandle> _typeIdBufferGCHandles = new List<GCHandle>();
+        private List<GCHandle> _typeIdBufferGCHandles;
 
         private void* _bufferPtr;
         private byte* _typeIdBufferPtr;
 
         private uint _bufferPosition;
         private const uint MaxSize = 1024*1024;
-        private int _size = (int)MaxSize;
+        private int _size;
 
-        private DictionarySlim<Type, TypeIdCacheEntry> _typeIdCache = new DictionarySlim<Type, TypeIdCacheEntry>();
+        private DictionarySlim<Type, TypeIdCacheEntry> _typeIdCache;
 
         // DEV fields
         private uint _reserved;
 
-        internal BufferedStream()
+        internal static BufferedStream Create()
         {
-            _buffer = new byte[MaxSize];
-            _bufferGCHandle = GCHandle.Alloc(_buffer, GCHandleType.Pinned);
-            _bufferPtr = _bufferGCHandle.AddrOfPinnedObject().ToPointer();
-            CreateNewTypeIdBuffer();
+            var stream = new BufferedStream();
+            stream._size = (int)MaxSize;
+            stream._typeIdBufferGCHandles = new List<GCHandle>();
+            stream._typeIdCache = new DictionarySlim<Type, TypeIdCacheEntry>();
+            stream._buffer = new byte[MaxSize];
+            stream._bufferGCHandle = GCHandle.Alloc(stream._buffer, GCHandleType.Pinned);
+            stream._bufferPtr = stream._bufferGCHandle.AddrOfPinnedObject().ToPointer();
+            stream.CreateNewTypeIdBuffer();
+            return stream;
         }
 
         private void CreateNewTypeIdBuffer()
@@ -152,6 +157,19 @@ namespace Apex.Serialization.Internal
             var byteCount = (uint)input.Length;
             Write(byteCount);
             byteCount *= 2;
+
+#if !NETSTANDARD2_0
+            if (input.Length >= 2048)
+            {
+                Flush();
+                fixed (void* s = input)
+                {
+                    _target.Write(new ReadOnlySpan<byte>(s, (int)byteCount));
+                    return;
+                }
+            }
+#endif
+
             uint sourcePosition = 0;
             fixed (void* text = input)
             {
@@ -339,7 +357,7 @@ namespace Apex.Serialization.Internal
             return res;
         }
 
-        private bool disposedValue = false;
+        private bool disposedValue;
 
         void Dispose(bool disposing)
         {
@@ -361,6 +379,14 @@ namespace Apex.Serialization.Internal
 
         public void WriteBytes(void* source, uint length)
         {
+#if !NETSTANDARD2_0
+            if (length >= 4096)
+            {
+                Flush();
+                _target.Write(new ReadOnlySpan<byte>(source, (int)length));
+                return;
+            }
+#endif
             uint sourcePosition = 0;
             do
             {

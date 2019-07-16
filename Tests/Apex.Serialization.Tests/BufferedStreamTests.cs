@@ -10,11 +10,11 @@ namespace Apex.Serialization.Tests
     public class BufferedStreamTests : IDisposable
     {
         private MemoryStream memoryStream = new MemoryStream();
-        internal IBufferedStream Sut;
+        internal BufferedStream Sut;
 
         public BufferedStreamTests()
         {
-            Sut = new BufferedStream();
+            Sut = BufferedStream.Create();
             Sut.WriteTo(memoryStream);
         }
 

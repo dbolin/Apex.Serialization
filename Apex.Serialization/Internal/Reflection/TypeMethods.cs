@@ -26,10 +26,17 @@ namespace Apex.Serialization.Internal.Reflection
                     var start = Enumerable.Empty<MethodInfo>();
                     while (type != null)
                     {
-                        var newMethods = type.GetMethods(BindingFlags.Instance | BindingFlags.Public |
-                                                       BindingFlags.NonPublic |
-                                                       BindingFlags.DeclaredOnly)
-                            .Where(x => x.CustomAttributes.Any(a => a.AttributeType == typeof(AfterDeserialization)));
+                        var newMethods = type.GetMethods(
+                            BindingFlags.Instance
+                            | BindingFlags.Static
+                            | BindingFlags.Public
+                            | BindingFlags.NonPublic
+                            | BindingFlags.DeclaredOnly)
+                            .Where(x => x.CustomAttributes.Any(a => a.AttributeType == typeof(AfterDeserialization))
+                                && (
+                                    x.GetParameters().Length <= 1 && !x.IsStatic
+                                    || x.GetParameters().Length <= 2 && x.GetParameters().Length >= 1 && x.IsStatic
+                                    ));
 
                         start = start.Concat(newMethods);
                         type = type.BaseType;

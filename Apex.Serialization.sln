@@ -12,6 +12,14 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{914870ED-8CF3-43D7-8E9C-03F4A51F8C03}"
 	ProjectSection(SolutionItems) = preProject
 		azure-pipelines.yml = azure-pipelines.yml
+		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BenchmarkCases", "BenchmarkCases", "{3EE2B0EA-5F17-48B4-99D0-A133E2FC93C7}"
+	ProjectSection(SolutionItems) = preProject
+		BenchmarkCases\Functions.md = BenchmarkCases\Functions.md
+		BenchmarkCases\IntArray.md = BenchmarkCases\IntArray.md
+		BenchmarkCases\Poco.md = BenchmarkCases\Poco.md
 	EndProjectSection
 EndProject
 Global
@@ -35,6 +43,9 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{3EE2B0EA-5F17-48B4-99D0-A133E2FC93C7} = {914870ED-8CF3-43D7-8E9C-03F4A51F8C03}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {67F58515-84BE-4C20-949D-2F6AAED5F482}

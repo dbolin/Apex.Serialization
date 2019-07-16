@@ -9,7 +9,7 @@ using Apex.Serialization.Internal.Reflection;
 namespace Apex.Serialization.Internal
 {
     internal static partial class DynamicCode<TStream, TBinary>
-        where TStream : IBufferedStream
+        where TStream : IBinaryStream
         where TBinary : ISerializer
     {
         internal static Expression WriteDictionary(Type type, ParameterExpression output, Expression actualSource,
@@ -57,9 +57,9 @@ namespace Apex.Serialization.Internal
             var breakLabel = Expression.Label();
 
             var loop = Expression.Block(new[] { enumeratorVar, countVar },
-                Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)),
+                Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)),
                 Expression.Assign(countVar, Expression.Property(actualSource, collectionType.GetProperty("Count"))),
-                Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, countVar),
+                Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, countVar),
                 Expression.IfThen(Expression.LessThanOrEqual(countVar, Expression.Constant(0)), Expression.Goto(breakLabel)),
                 enumeratorAssign,
                 Expression.Loop(
@@ -67,9 +67,9 @@ namespace Apex.Serialization.Internal
                         Expression.Equal(moveNextCall, Expression.Constant(true)),
                         Expression.Block(new[] { loopVar },
                             Expression.Assign(loopVar, Expression.Property(enumeratorVar, "Current")),
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(keySize)),
+                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(keySize)),
                             WriteValue(stream, output, keyType, Expression.Property(loopVar, "Key"), settings, out _),
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(valueSize)),
+                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(valueSize)),
                             WriteValue(stream, output, valueType, Expression.Property(loopVar, "Value"), settings, out _)
                         ),
                         Expression.Break(breakLabel)
@@ -111,8 +111,8 @@ namespace Apex.Serialization.Internal
 
             var blockStatements = new List<Expression>();
             var countVar = Expression.Variable(typeof(int));
-            blockStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)));
-            blockStatements.Add(Expression.Assign(countVar, Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)));
+            blockStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)));
+            blockStatements.Add(Expression.Assign(countVar, Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)));
 
             // TODO: need to save equality comparer
             
@@ -160,9 +160,9 @@ namespace Apex.Serialization.Internal
                         Expression.Equal(countVar, Expression.Constant(0)),
                         Expression.Break(breakLabel),
                         Expression.Block( new [] {keyVar, valueVar},
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(keySize)),
+                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(keySize)),
                             Expression.Assign(keyVar, ReadValue(stream, output, keyType, out _)),
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(valueSize)),
+                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(valueSize)),
                             Expression.Assign(valueVar, ReadValue(stream, output, valueType, out _)),
                             Expression.Call(result, collectionType.GetMethod(addMethod, collectionType.GenericTypeArguments), keyVar, valueVar),
                             Expression.AddAssign(countVar, Expression.Constant(-1))

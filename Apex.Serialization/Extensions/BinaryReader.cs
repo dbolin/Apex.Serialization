@@ -1,12 +1,14 @@
-﻿using System.Runtime.CompilerServices;
+﻿using Apex.Serialization.Internal;
+using System.Runtime.CompilerServices;
 
 namespace Apex.Serialization.Extensions
 {
-    internal class BinaryReader : IBinaryReader
+    internal class BinaryReader<TStream> : IBinaryReader
+        where TStream : struct, IBinaryStream
     {
-        public Binary _instance;
+        public Binary<TStream> _instance;
 
-        public BinaryReader(Binary instance)
+        public BinaryReader(Binary<TStream> instance)
         {
             _instance = instance;
         }

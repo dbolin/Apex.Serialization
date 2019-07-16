@@ -4,29 +4,33 @@ using System.IO;
 using System.Reflection;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal;
-using BinaryReader = Apex.Serialization.Extensions.BinaryReader;
-using BinaryWriter = Apex.Serialization.Extensions.BinaryWriter;
-using BufferedStream = Apex.Serialization.Internal.BufferedStream;
 
 namespace Apex.Serialization
 {
-    internal static class WriteMethods<T>
+    internal static class WriteMethods<T, TStream>
+        where TStream : struct, IBinaryStream
     {
-        public static Action<T, BufferedStream, Binary>[] Methods = new Action<T, BufferedStream, Binary>[ImmutableSettings.MaxSettingsIndex + 1];
+        public delegate void WriteSealed(T obj, ref TStream stream, Binary<TStream> binary);
+
+        public static WriteSealed[] Methods = new WriteSealed[ImmutableSettings.MaxSettingsIndex + 1];
     }
 
-    internal static class ReadMethods<T>
+    internal static class ReadMethods<T, TStream>
+        where TStream : struct, IBinaryStream
     {
-        public static Func<BufferedStream, Binary, T>[] Methods = new Func<BufferedStream, Binary, T>[ImmutableSettings.MaxSettingsIndex + 1];
+        public delegate T ReadSealed(ref TStream stream, Binary<TStream> binary);
+
+        public static ReadSealed[] Methods = new ReadSealed[ImmutableSettings.MaxSettingsIndex + 1];
     }
 
-    public sealed partial class Binary : ISerializer, IDisposable
+    internal sealed partial class Binary<TStream> : ISerializer, IBinary where TStream : struct, IBinaryStream
     {
-        internal static bool Instantiated;
+        public delegate void WriteObject(object obj, ref TStream stream, Binary<TStream> binary);
+        public delegate object ReadObject(ref TStream stream, Binary<TStream> binary);
 
         public ImmutableSettings Settings { get; } = Serialization.Settings.Default;
         private readonly int _settingsIndex;
-        internal readonly BufferedStream _stream;
+        internal TStream _stream;
 
         List<object> ISerializer.LoadedObjectRefs => _loadedObjectRefs;
 
@@ -40,18 +44,21 @@ namespace Apex.Serialization
         private readonly DictionarySlim<Type, int> _savedTypeLookup = new DictionarySlim<Type, int>();
         private readonly List<Type> _loadedTypeRefs = new List<Type>();
 
-        private readonly DictionarySlim<Type, Action<object, BufferedStream, Binary>> VirtualWriteMethods = new DictionarySlim<Type, Action<object, BufferedStream, Binary>>();
-        private readonly DictionarySlim<Type, Func<BufferedStream, Binary, object>> VirtualReadMethods = new DictionarySlim<Type, Func<BufferedStream, Binary, object>>();
+        private readonly DictionarySlim<Type, WriteObject> VirtualWriteMethods = new DictionarySlim<Type, WriteObject>();
+        private readonly DictionarySlim<Type, ReadObject> VirtualReadMethods = new DictionarySlim<Type, ReadObject>();
 
         private Type _lastWriteType;
-        private Action<object, BufferedStream, Binary> _lastWriteMethod;
+        private WriteObject _lastWriteMethod;
 
         private Type _lastReadType;
-        private Func<BufferedStream, Binary, object> _lastReadMethod;
+        private ReadObject _lastReadMethod;
+
+        private Type _lastRefType;
+        private int _lastRefIndex;
 
         private readonly TypeLookup<Type> _knownTypes = new TypeLookup<Type>();
 
-        private readonly List<ValueTuple<Action<object>,object>> _deserializationHooks;
+        private readonly List<ValueTuple<Action<object, object>, object>> _deserializationHooks;
 
         private DictionarySlim<MethodInfo, Type[]> _methodParametersCache = new DictionarySlim<MethodInfo, Type[]>();
         private DictionarySlim<MethodInfo, Type[]> _methodGenericsCache = new DictionarySlim<MethodInfo, Type[]>();
@@ -66,13 +73,14 @@ namespace Apex.Serialization
         private readonly IBinaryWriter _binaryWriter;
         private readonly IBinaryReader _binaryReader;
 
-        public Binary()
+        private object _customContext;
+
+        internal Binary(TStream stream)
         {
-            Instantiated = true;
-            _binaryWriter = new BinaryWriter(this);
-            _binaryReader = new BinaryReader(this);
+            _binaryWriter = new BinaryWriter<TStream>(this);
+            _binaryReader = new BinaryReader<TStream>(this);
             _settingsIndex = Settings.SettingsIndex;
-            _stream = new BufferedStream();
+            _stream = stream;
             if (Settings.SerializationMode == Mode.Graph)
             {
                 _savedObjectLookup = new DictionarySlim<object, int>(16);
@@ -81,18 +89,17 @@ namespace Apex.Serialization
 
             if (Settings.SupportSerializationHooks)
             {
-                _deserializationHooks = new List<ValueTuple<Action<object>, object>>();
+                _deserializationHooks = new List<ValueTuple<Action<object, object>, object>>();
             }
         }
 
-        public Binary(Settings settings)
+        internal Binary(Settings settings, TStream stream)
         {
-            Instantiated = true;
-            _binaryWriter = new BinaryWriter(this);
-            _binaryReader = new BinaryReader(this);
+            _binaryWriter = new BinaryWriter<TStream>(this);
+            _binaryReader = new BinaryReader<TStream>(this);
             Settings = settings;
             _settingsIndex = Settings.SettingsIndex;
-            _stream = new BufferedStream();
+            _stream = stream;
             if (Settings.SerializationMode == Mode.Graph)
             {
                 _savedObjectLookup = new DictionarySlim<object, int>(16);
@@ -101,12 +108,13 @@ namespace Apex.Serialization
 
             if (Settings.SupportSerializationHooks)
             {
-                _deserializationHooks = new List<ValueTuple<Action<object>, object>>();
+                _deserializationHooks = new List<ValueTuple<Action<object, object>, object>>();
             }
         }
 
         public void Write<T>(T value, Stream outputStream)
         {
+            _lastRefType = null;
             _stream.WriteTo(outputStream);
 
             WriteObjectEntry(value);
@@ -147,7 +155,7 @@ namespace Apex.Serialization
             {
                 foreach (var a in _deserializationHooks)
                 {
-                    a.Item1(a.Item2);
+                    a.Item1(a.Item2, _customContext);
                 }
                 _deserializationHooks.Clear();
             }
@@ -160,34 +168,34 @@ namespace Apex.Serialization
             ref var readMethod = ref VirtualReadMethods.GetOrAddValueRef(type);
             if (readMethod == null)
             {
-                readMethod = (Func<BufferedStream, Binary, object>)DynamicCode<BufferedStream, Binary>.GenerateReadMethod(type, Settings, true);
+                readMethod = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadObject>(type, Settings, true);
             }
             ref var writeMethod = ref VirtualWriteMethods.GetOrAddValueRef(type);
             if (writeMethod == null)
             {
-                writeMethod = (Action<object, BufferedStream, Binary>)DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(type, Settings, true);
+                writeMethod = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
             }
         }
 
         public void Precompile<T>()
         {
-            var readMethod = ReadMethods<T>.Methods[_settingsIndex];
+            var readMethod = ReadMethods<T, TStream>.Methods[_settingsIndex];
             if (readMethod == null)
             {
-                readMethod = (Func<BufferedStream, Binary, T>)DynamicCode<BufferedStream, Binary>.GenerateReadMethod(typeof(T), Settings, false);
-                ReadMethods<T>.Methods[_settingsIndex] = readMethod;
+                readMethod = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadMethods<T, TStream>.ReadSealed>(typeof(T), Settings, false);
+                ReadMethods<T, TStream>.Methods[_settingsIndex] = readMethod;
             }
-            var writeMethod = WriteMethods<T>.Methods[_settingsIndex];
+            var writeMethod = WriteMethods<T, TStream>.Methods[_settingsIndex];
             if (writeMethod == null)
             {
-                writeMethod = (Action<T, BufferedStream, Binary>)DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(typeof(T), Settings, false);
-                WriteMethods<T>.Methods[_settingsIndex] = writeMethod;
+                writeMethod = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(typeof(T), Settings, false);
+                WriteMethods<T, TStream>.Methods[_settingsIndex] = writeMethod;
             }
         }
 
         public void Intern(object o)
         {
-            if(Settings.SerializationMode != Mode.Graph)
+            if (Settings.SerializationMode != Mode.Graph)
             {
                 throw new InvalidOperationException("Object interning is only supported for Graph serialization");
             }
@@ -196,6 +204,12 @@ namespace Apex.Serialization
 
             _savedObjectLookup.GetOrAddValueRef(o) = _savedObjectLookup.Count;
             _loadedObjectRefs.Add(o);
+        }
+
+        public void SetCustomHookContext<T>(T context)
+            where T : class
+        {
+            _customContext = context;
         }
 
         public void Dispose()
