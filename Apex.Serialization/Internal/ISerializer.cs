@@ -29,10 +29,12 @@ namespace Apex.Serialization.Internal
         void WriteValuesArray(object array, int length, int elementSize);
         void ReadIntoValuesArray(object array, int elementSize);
 
-        void QueueAfterDeserializationHook(Action<object> method, object instance);
+        void QueueAfterDeserializationHook(Action<object, object> method, object instance);
 
         IBinaryWriter BinaryWriter { get; }
         IBinaryReader BinaryReader { get; }
+
+        T GetCustomContext<T>() where T : class;
     }
 
     internal static class SerializerMethods
@@ -66,6 +68,9 @@ namespace Apex.Serialization.Internal
 
         internal static readonly MethodInfo BinaryReaderGetter =
             typeof(ISerializer).GetProperty("BinaryReader").GetMethod;
+
+        internal static readonly MethodInfo CustomContextGetter =
+            typeof(ISerializer).GetMethod("GetCustomContext");
 
         internal static readonly MethodInfo WriteNullByteMethod = typeof(ISerializer).GetMethod("WriteNullByte");
         internal static readonly MethodInfo WriteNullableByteMethod = typeof(ISerializer).GetMethod("WriteNullableByte");

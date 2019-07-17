@@ -1,12 +1,14 @@
-﻿using System.Runtime.CompilerServices;
+﻿using Apex.Serialization.Internal;
+using System.Runtime.CompilerServices;
 
 namespace Apex.Serialization.Extensions
 {
-    internal class BinaryWriter : IBinaryWriter
+    internal class BinaryWriter<TStream> : IBinaryWriter
+        where TStream : struct, IBinaryStream
     {
-        public Binary _instance;
+        public Binary<TStream> _instance;
 
-        public BinaryWriter(Binary instance)
+        public BinaryWriter(Binary<TStream> instance)
         {
             _instance = instance;
         }

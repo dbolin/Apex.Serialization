@@ -33,7 +33,7 @@ Requires code generation capabilities
 Serialization
 ```csharp
 var obj = ClassToSerializer();
-var binarySerializer = new Binary();
+var binarySerializer = Binary.Create();
 binarySerializer.Write(obj, outputStream);
 ```
 
@@ -48,7 +48,7 @@ Fields with the [Nonserialized] attribute will not be serialized or deserialized
 
 #### Settings
 
-You may pass a Settings object to the constructor of the binary class that lets you choose:
+You may pass a Settings object to Binary.Create that lets you choose:
 - between tree or graph serialization (graph serialization is required for cases where you have a cyclical reference or need to maintain object identity)
 - whether functions should be serialized
 - whether serialization hooks should be called (any methods with the [AfterDeserialization] attribute will be called after the object graph is completely deserialized.)
@@ -73,6 +73,8 @@ Both the write Action and read Action will be called with an instance of the typ
         void Write<T>(T value) where T : struct;
         void WriteObject<T>(T value);
 ```
+
+The Actions can optionally take a third parameter for context, which is set on the Binary instance with SetCustomHookContext.
 
 The reader has corresponding methods for reading back the values.  Behavior of the generic Write/Read method when passed a non-primitive is undefined.  If multiple customer serializers match an object, they will all be called in the order in which they were registered.
 

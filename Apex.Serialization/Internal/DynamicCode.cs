@@ -12,31 +12,33 @@ using Apex.Serialization.Internal.Reflection;
 namespace Apex.Serialization.Internal
 {
     internal static partial class DynamicCode<TStream, TBinary>
-        where TStream : IBufferedStream
+        where TStream : IBinaryStream
         where TBinary : ISerializer
     {
         private static readonly ConcurrentDictionary<TypeKey, Delegate> _virtualWriteMethods = new ConcurrentDictionary<TypeKey, Delegate>();
         private static readonly ConcurrentDictionary<TypeKey, Delegate> _virtualReadMethods = new ConcurrentDictionary<TypeKey, Delegate>();
 
-        internal static Delegate GenerateWriteMethod(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
+        internal static T GenerateWriteMethod<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
+            where T : Delegate
         {
             if (!shouldWriteTypeInfo)
             {
-                return GenerateWriteMethodImpl(type, settings, shouldWriteTypeInfo);
+                return GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo);
             }
 
-            return _virtualWriteMethods.GetOrAdd(new TypeKey {Type = type, SettingsIndex = settings.SettingsIndex}, 
-                t => GenerateWriteMethodImpl(type, settings, shouldWriteTypeInfo));
+            return (T)_virtualWriteMethods.GetOrAdd(new TypeKey {Type = type, SettingsIndex = settings.SettingsIndex}, 
+                t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo));
         }
 
-        internal static Delegate GenerateWriteMethodImpl(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
+        internal static T GenerateWriteMethodImpl<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
+            where T : Delegate
         {
             var fields = TypeFields.GetOrderedFields(type);
 
             var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 12;
 
             var source = Expression.Parameter(shouldWriteTypeInfo ? typeof(object) : type, "source");
-            var stream = Expression.Parameter(typeof(TStream), "stream");
+            var stream = Expression.Parameter(typeof(TStream).MakeByRefType(), "stream");
             var output = Expression.Parameter(typeof(TBinary), "io");
 
             var returnTarget = Expression.Label();
@@ -59,7 +61,7 @@ namespace Apex.Serialization.Internal
 
             writeStatements.Add(Expression.Label(returnTarget));
 
-            var lambda = Expression.Lambda(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new [] {source, stream, output}).Compile();
+            var lambda = Expression.Lambda<T>(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new [] {source, stream, output}).Compile();
             return lambda;
         }
 
@@ -68,7 +70,7 @@ namespace Apex.Serialization.Internal
             bool shouldWriteTypeInfo, Expression actualSource, List<FieldInfo> fields)
         {
             var writeStatements = new List<Expression>();
-            writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+            writeStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
                 Expression.Constant(maxSizeNeeded)));
 
             if (settings.SerializationMode == Mode.Graph)
@@ -83,7 +85,7 @@ namespace Apex.Serialization.Internal
                 else if (shouldWriteTypeInfo)
                 {
                     writeStatements.Add(Expression.Call(stream,
-                        BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo,
+                        BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo,
                         Expression.Constant(-1)));
                 }
             }
@@ -93,7 +95,7 @@ namespace Apex.Serialization.Internal
                 writeStatements.Add(
                     Expression.Call(output, SerializerMethods.WriteTypeRefMethod, Expression.Constant(type))
                 );
-                writeStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+                writeStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
                     Expression.Constant(maxSizeNeeded)));
             }
 
@@ -173,12 +175,12 @@ namespace Apex.Serialization.Internal
 
                 var statements = new List<Expression>();
 
-                statements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+                statements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
                     Expression.Constant(4 * dimensions)));
                 statements.AddRange(lengths.Select((x, i) =>
                     Expression.Assign(x, Expression.Call(actualSource, "GetLength", Array.Empty<Type>(), Expression.Constant(i)))));
                 statements.AddRange(lengths.Select(x =>
-                    Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
+                    Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
 
                 if (IsBlittable(elementType) && dimensions == 1)
                 {
@@ -225,7 +227,7 @@ namespace Apex.Serialization.Internal
 
             var shouldWriteTypeInfo = typeof(Delegate).IsAssignableFrom(elementType) || typeof(Type).IsAssignableFrom(elementType);
 
-            if (!isSimpleWrite && elementType.IsSealed)
+            if (!isSimpleWrite && StaticTypeInfo.IsSealedOrHasNoDescendents(elementType))
             {
                 var fields = TypeFields.GetOrderedFields(elementType);
                 writeValue = Expression.Block(GetWriteStatementsForType(elementType, settings, stream, output,
@@ -246,7 +248,7 @@ namespace Apex.Serialization.Internal
             else
             {
                 writeValue = Expression.Block(
-                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
+                    Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
                     writeValue);
             }
 
@@ -286,7 +288,7 @@ namespace Apex.Serialization.Internal
                     (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
                 )
                 {
-                    var method = (MethodInfo) typeof(BufferedStreamMethods<>.GenericMethods<>)
+                    var method = (MethodInfo) typeof(BinaryStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)
                         .GetField("WriteValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
                     return Expression.Call(stream, method, source);
@@ -344,7 +346,7 @@ namespace Apex.Serialization.Internal
                 return writeStruct;
             }
 
-            var shouldWriteTypeInfo = !declaredType.IsSealed || typeof(Delegate).IsAssignableFrom(declaredType)
+            var shouldWriteTypeInfo = !StaticTypeInfo.IsSealedOrHasNoDescendents(declaredType) || typeof(Delegate).IsAssignableFrom(declaredType)
                 || typeof(Type).IsAssignableFrom(declaredType);
 
             if (shouldWriteTypeInfo)
@@ -379,12 +381,27 @@ namespace Apex.Serialization.Internal
             {
                 if (entry.Key.IsAssignableFrom(declaredType))
                 {
-                    statements.Add(Expression.Call(
-                        Expression.Convert(
-                            Expression.Constant(entry.Value.Action),
-                            typeof(Action<,>).MakeGenericType(declaredType, typeof(IBinaryWriter))),
-                        entry.Value.InvokeMethodInfo, valueAccessExpression,
-                        Expression.Call(output, SerializerMethods.BinaryWriterGetter)));
+                    var customContextType = entry.Value.CustomContextType;
+                    if (customContextType != null)
+                    {
+                        var customContext = Expression.Call(output, SerializerMethods.CustomContextGetter.MakeGenericMethod(customContextType));
+                        statements.Add(Expression.Call(
+                            Expression.Convert(
+                                Expression.Constant(entry.Value.Action),
+                                typeof(Action<,,>).MakeGenericType(declaredType, typeof(IBinaryWriter), customContextType)),
+                            entry.Value.InvokeMethodInfo, valueAccessExpression,
+                            Expression.Call(output, SerializerMethods.BinaryWriterGetter),
+                            customContext));
+                    }
+                    else
+                    {
+                        statements.Add(Expression.Call(
+                            Expression.Convert(
+                                Expression.Constant(entry.Value.Action),
+                                typeof(Action<,>).MakeGenericType(declaredType, typeof(IBinaryWriter))),
+                            entry.Value.InvokeMethodInfo, valueAccessExpression,
+                            Expression.Call(output, SerializerMethods.BinaryWriterGetter)));
+                    }
                 }
             }
 
@@ -394,7 +411,7 @@ namespace Apex.Serialization.Internal
         private static Expression HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
             Expression valueAccessExpression)
         {
-            if(BufferedStreamMethods<TStream>.primitiveWriteMethods.TryGetValue(declaredType, out var method))
+            if(BinaryStreamMethods<TStream>.primitiveWriteMethods.TryGetValue(declaredType, out var method))
             {
                 return Expression.Call(stream, method, valueAccessExpression);
             }
@@ -402,7 +419,7 @@ namespace Apex.Serialization.Internal
             // TODO: string interning
             if (declaredType == typeof(string))
             {
-                return Expression.Call(stream, BufferedStreamMethods<TStream>.WriteStringMethodInfo, valueAccessExpression);
+                return Expression.Call(stream, BinaryStreamMethods<TStream>.WriteStringMethodInfo, valueAccessExpression);
             }
 
             return null;
@@ -424,23 +441,25 @@ namespace Apex.Serialization.Internal
         internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject");
         private static Type[] emptyTypes = new Type[0];
 
-        internal static Delegate GenerateReadMethod(Type type, ImmutableSettings settings, bool isBoxed)
+        internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed)
+            where T : Delegate
         {
             if (!isBoxed)
             {
-                return GenerateReadMethodImpl(type, settings, isBoxed);
+                return GenerateReadMethodImpl<T>(type, settings, isBoxed);
             }
 
-            return _virtualReadMethods.GetOrAdd(new TypeKey { Type = type, SettingsIndex = settings.SettingsIndex },
-                t => GenerateReadMethodImpl(type, settings, isBoxed));
+            return (T)_virtualReadMethods.GetOrAdd(new TypeKey { Type = type, SettingsIndex = settings.SettingsIndex },
+                t => GenerateReadMethodImpl<T>(type, settings, isBoxed));
         }
 
-        internal static Delegate GenerateReadMethodImpl(Type type, ImmutableSettings settings, bool isBoxed)
+        internal static T GenerateReadMethodImpl<T>(Type type, ImmutableSettings settings, bool isBoxed)
+            where T : Delegate
         {
             var fields = TypeFields.GetOrderedFields(type);
             var maxSizeNeeded = fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) + 8;
 
-            var stream = Expression.Parameter(typeof(TStream), "stream");
+            var stream = Expression.Parameter(typeof(TStream).MakeByRefType(), "stream");
             var output = Expression.Parameter(typeof(TBinary), "io");
 
             var readStatements = new List<Expression>();
@@ -465,7 +484,7 @@ namespace Apex.Serialization.Internal
                 readStatements.Add(result);
             }
 
-            var lambda = Expression.Lambda(Expression.Block(localVariables, readStatements), $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
+            var lambda = Expression.Lambda<T>(Expression.Block(localVariables, readStatements), $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
 
             return lambda;
         }
@@ -474,7 +493,7 @@ namespace Apex.Serialization.Internal
             int maxSizeNeeded, ParameterExpression output, Expression result, List<FieldInfo> fields, List<ParameterExpression> localVariables)
         {
             var readStatements = new List<Expression>();
-            readStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+            readStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
                 Expression.Constant(maxSizeNeeded)));
 
             // write fields for normal types, some things are special like collections
@@ -582,12 +601,13 @@ namespace Apex.Serialization.Internal
                 var methods = TypeMethods.GetAfterDeserializeMethods(type);
                 if (methods.Count > 0)
                 {
-                    var p = Expression.Parameter(typeof(object));
-                    var action = Expression.Lambda<Action<object>>(
+                    var objectParameter = Expression.Parameter(typeof(object));
+                    var contextParameter = Expression.Parameter(typeof(object));
+                    var action = Expression.Lambda<Action<object, object>>(
                         Expression.Block(
-                            methods.Select(m => Expression.Call(Expression.Convert(p, type), m))
+                            methods.Select(m => AfterDeserializeCallExpression(type, m, objectParameter, contextParameter))
                         )
-                        , $"AfterDeserialize_{type.FullName}", new[] {p}).Compile();
+                        , $"AfterDeserialize_{type.FullName}", new[] {objectParameter, contextParameter}).Compile();
 
                     readStatements.Add(Expression.Call(output, SerializerMethods.QueueAfterDeserializationHook,
                         Expression.Constant(action), result));
@@ -595,6 +615,30 @@ namespace Apex.Serialization.Internal
             }
 
             return readStatements;
+        }
+
+        private static Expression AfterDeserializeCallExpression(Type type, MethodInfo m,
+            ParameterExpression objectParameter, ParameterExpression contextParameter)
+        {
+            var castedObject = Expression.Convert(objectParameter, type);
+            var parameters = m.GetParameters();
+
+            if (m.IsStatic)
+            {
+                if (parameters.Length == 2)
+                {
+                    return Expression.Call(null, m, castedObject, Expression.Convert(contextParameter, parameters[1].ParameterType));
+                }
+
+                return Expression.Call(null, m, castedObject);
+            }
+
+            if(parameters.Length == 1)
+            {
+                return Expression.Call(castedObject, m, Expression.Convert(contextParameter, parameters[0].ParameterType));
+            }
+
+            return Expression.Call(castedObject, m);
         }
 
         internal static Expression HandleSpecialRead(Type type, ParameterExpression output, Expression result, ParameterExpression stream, List<FieldInfo> fields, ImmutableSettings settings,
@@ -663,10 +707,10 @@ namespace Apex.Serialization.Internal
                 }
 
                 var statements = new List<Expression>();
-                statements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo,
+                statements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
                     Expression.Constant(4 * dimensions)));
                 statements.AddRange(lengths.Select((x, i) => Expression.Assign(x,
-                    Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
+                    Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
 
                 statements.Add(Expression.Assign(result, Expression.NewArrayBounds(elementType, lengths)));
 
@@ -714,12 +758,27 @@ namespace Apex.Serialization.Internal
             {
                 if (entry.Key.IsAssignableFrom(type))
                 {
-                    statements.Add(Expression.Call(
-                        Expression.Convert(
-                            Expression.Constant(entry.Value.Action),
-                            typeof(Action<,>).MakeGenericType(type, typeof(IBinaryReader))),
-                        entry.Value.InvokeMethodInfo, result,
-                        Expression.Call(output, SerializerMethods.BinaryReaderGetter)));
+                    var customContextType = entry.Value.CustomContextType;
+                    if(customContextType != null)
+                    {
+                        var customContext = Expression.Call(output, SerializerMethods.CustomContextGetter.MakeGenericMethod(customContextType));
+                        statements.Add(Expression.Call(
+                            Expression.Convert(
+                                Expression.Constant(entry.Value.Action),
+                                typeof(Action<,,>).MakeGenericType(type, typeof(IBinaryReader), customContextType)),
+                            entry.Value.InvokeMethodInfo, result,
+                            Expression.Call(output, SerializerMethods.BinaryReaderGetter),
+                            customContext));
+                    }
+                    else
+                    {
+                        statements.Add(Expression.Call(
+                            Expression.Convert(
+                                Expression.Constant(entry.Value.Action),
+                                typeof(Action<,>).MakeGenericType(type, typeof(IBinaryReader))),
+                            entry.Value.InvokeMethodInfo, result,
+                            Expression.Call(output, SerializerMethods.BinaryReaderGetter)));
+                    }
                 }
             }
 
@@ -805,7 +864,7 @@ namespace Apex.Serialization.Internal
 
             var shouldReadTypeInfo = typeof(Delegate).IsAssignableFrom(elementType) || typeof(Type).IsAssignableFrom(elementType);
 
-            if (!isSimpleRead && elementType.IsSealed
+            if (!isSimpleRead && StaticTypeInfo.IsSealedOrHasNoDescendents(elementType)
                 && !typeof(Type).IsAssignableFrom(elementType)
                 && !typeof(Delegate).IsAssignableFrom(elementType))
             {
@@ -819,12 +878,12 @@ namespace Apex.Serialization.Internal
                     {
                         var refIndex = Expression.Variable(typeof(int), "refIndex");
                         readValue = Expression.Block(
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(5)),
+                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(5)),
                             Expression.IfThenElse(
-                                Expression.Equal(Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
+                                Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
                                 Expression.Continue(continueLabels[continueLabels.Count - 1]),
                                 Expression.Block(new[] { refIndex },
-                                    Expression.Assign(refIndex, Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)),
+                                    Expression.Assign(refIndex, Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)),
                                     Expression.IfThen(
                                         Expression.NotEqual(refIndex, Expression.Constant(-1)),
                                         Expression.Block(
@@ -846,9 +905,9 @@ namespace Apex.Serialization.Internal
                     else
                     {
                         readValue = Expression.Block(
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(1)),
+                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(1)),
                             Expression.IfThen(
-                                Expression.Equal(Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
+                                Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
                                 Expression.Continue(continueLabels[continueLabels.Count - 1])
                             ),
                             readValue
@@ -859,7 +918,7 @@ namespace Apex.Serialization.Internal
             else
             {
                 readValue = Expression.Block(
-                    Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
+                    Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
                     Expression.Assign(accessExpression, readValue));
             }
 
@@ -899,7 +958,7 @@ namespace Apex.Serialization.Internal
                     (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
                 )
                 {
-                    var method = (MethodInfo) typeof(BufferedStreamMethods<>.GenericMethods<>)
+                    var method = (MethodInfo) typeof(BinaryStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)
                         .GetField("ReadValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
                     return Expression.Call(stream, method);
@@ -962,7 +1021,7 @@ namespace Apex.Serialization.Internal
                 return readStructExpression;
             }
 
-            var shouldReadTypeInfo = !declaredType.IsSealed || typeof(Delegate).IsAssignableFrom(declaredType)
+            var shouldReadTypeInfo = !StaticTypeInfo.IsSealedOrHasNoDescendents(declaredType) || typeof(Delegate).IsAssignableFrom(declaredType)
                 || typeof(Type).IsAssignableFrom(declaredType);
 
             if (shouldReadTypeInfo)
@@ -985,7 +1044,7 @@ namespace Apex.Serialization.Internal
 
         private static Expression HandlePrimitiveRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
         {
-            if (BufferedStreamMethods<TStream>.primitiveReadMethods.TryGetValue(declaredType, out var method))
+            if (BinaryStreamMethods<TStream>.primitiveReadMethods.TryGetValue(declaredType, out var method))
             {
                 return Expression.Call(stream, method);
             }
@@ -993,7 +1052,7 @@ namespace Apex.Serialization.Internal
             // TODO: string interning
             if (declaredType == typeof(string))
             {
-                return Expression.Call(stream, BufferedStreamMethods<TStream>.ReadStringMethodInfo);
+                return Expression.Call(stream, BinaryStreamMethods<TStream>.ReadStringMethodInfo);
             }
 
             return null;

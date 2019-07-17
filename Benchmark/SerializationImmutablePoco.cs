@@ -40,8 +40,8 @@ namespace Benchmark
             public DateTime DateProp { get; }      //DateTime.Now
         }
 
-        private Binary _binary = new Binary();
-        private Serializer _hyperion = new Serializer();
+        private IBinary _binary = Binary.Create();
+        //private Serializer _hyperion = new Serializer();
         private NetSerializer.Serializer _netSerializer = new NetSerializer.Serializer(new[] { typeof(List<ImmutablePoco>) });
 
         private MemoryStream _m1 = new MemoryStream();
@@ -60,7 +60,7 @@ namespace Benchmark
             }
 
             _binary.Write(_t1, _m1);
-            _hyperion.Serialize(_t1, _m2);
+            //_hyperion.Serialize(_t1, _m2);
             ProtoBuf.Serializer.Serialize(_m3, _t1);
             MessagePackSerializer.Serialize(_m4, _t1);
             _netSerializer.Serialize(_m5, _t1);
@@ -87,12 +87,14 @@ namespace Benchmark
             MessagePackSerializer.Serialize(_m4, _t1);
         }
 
+        /*
         [Benchmark]
         public void Hyperion()
         {
             _m2.Seek(0, SeekOrigin.Begin);
             _hyperion.Serialize(_t1, _m2);
         }
+        */
 
         [Benchmark(Baseline = true)]
         public void Apex()

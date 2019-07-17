@@ -13,13 +13,11 @@ namespace Benchmark
     {
         [ProtoContract]
         [MessagePackObject]
-        [ZeroFormattable]
         public class Wrapper
         {
             [ProtoMember(1)]
             [Key(0)]
-            [Index(0)]
-            public virtual int[] _t1 { get; set; } = new int[50000];
+            public int[] _t1 = new int[50000];
         }
 
         private Wrapper _t1 = new Wrapper();
@@ -30,17 +28,17 @@ namespace Benchmark
         private readonly MemoryStream _m4 = new MemoryStream();
         private readonly MemoryStream _m5 = new MemoryStream();
 
-        private readonly Binary _binaryTree = new Binary(new Settings
+        private readonly IBinary _binaryTree = Binary.Create(new Settings
         { SerializationMode = Mode.Tree });
 
-        private readonly Serializer _hyperion = new Serializer(new SerializerOptions());
+        //private readonly Serializer _hyperion = new Serializer(new SerializerOptions());
 
         public DeserializationArray()
         {
             ProtoBuf.Serializer.Serialize(_m1, _t1);
             MessagePackSerializer.Serialize(_m2, _t1);
-            _hyperion.Serialize(_t1, _m3);
-            ZeroFormatterSerializer.Serialize(_m4, _t1);
+            //_hyperion.Serialize(_t1, _m3);
+            //ZeroFormatterSerializer.Serialize(_m4, _t1);
             _binaryTree.Write(_t1, _m5);
         }
 
@@ -58,6 +56,7 @@ namespace Benchmark
             return MessagePackSerializer.Deserialize<Wrapper>(_m2)._t1[0];
         }
 
+        /*
         [Benchmark]
         public object Hyperion()
         {
@@ -71,6 +70,7 @@ namespace Benchmark
             _m4.Seek(0, SeekOrigin.Begin);
             return ZeroFormatterSerializer.Deserialize<Wrapper>(_m4)._t1[0];
         }
+        */
 
         [Benchmark(Baseline = true)]
         public object Apex()

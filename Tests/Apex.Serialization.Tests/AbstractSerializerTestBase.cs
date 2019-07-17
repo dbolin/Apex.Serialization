@@ -13,8 +13,8 @@ namespace Apex.Serialization.Tests
 
         protected AbstractSerializerTestBase()
         {
-            _serializer = new Binary(new Settings {AllowFunctionSerialization = true, SupportSerializationHooks = true});
-            _serializerGraph = new Binary(new Settings {SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true});
+            _serializer = (ISerializer)Binary.Create(new Settings {AllowFunctionSerialization = true, SupportSerializationHooks = true});
+            _serializerGraph = (ISerializer)Binary.Create(new Settings {SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true});
         }
 
         protected T RoundTrip<T>(T obj)

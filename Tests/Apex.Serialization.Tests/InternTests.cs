@@ -1,4 +1,5 @@
-﻿using FluentAssertions;
+﻿using Apex.Serialization.Internal;
+using FluentAssertions;
 using Xunit;
 
 namespace Apex.Serialization.Tests
@@ -10,7 +11,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void InternedObjectShouldKeepReferenceEquality()
         {
-            (_serializerGraph as Binary).Intern(TheObject);
+            (_serializerGraph as IBinary).Intern(TheObject);
             RoundTripGraphOnly(TheObject, (original, loaded) => ReferenceEquals(loaded, TheObject).Should().BeTrue());
         }
     }

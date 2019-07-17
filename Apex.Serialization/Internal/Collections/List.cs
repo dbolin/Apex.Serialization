@@ -9,7 +9,7 @@ using Apex.Serialization.Internal.Reflection;
 namespace Apex.Serialization.Internal
 {
     internal static partial class DynamicCode<TStream, TBinary>
-        where TStream : IBufferedStream
+        where TStream : IBinaryStream
         where TBinary : ISerializer
     {
         internal static Expression WriteList(Type type, ParameterExpression output, Expression actualSource,
@@ -58,8 +58,8 @@ namespace Apex.Serialization.Internal
             var breakLabel = Expression.Label();
 
             var loop = Expression.Block(new[] { enumeratorVar },
-                Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)),
-                Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo,
+                Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)),
+                Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo,
                     Expression.Property(actualSource, collectionType.GetProperty("Count"))),
                 enumeratorAssign,
                 Expression.Loop(
@@ -67,7 +67,7 @@ namespace Apex.Serialization.Internal
                         Expression.Equal(moveNextCall, Expression.Constant(true)),
                         Expression.Block(new[] { loopVar },
                             Expression.Assign(loopVar, Expression.Property(enumeratorVar, "Current")),
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
+                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
                             WriteValue(stream, output, valueType, loopVar, settings, out _)
                         ),
                         Expression.Break(breakLabel)
@@ -123,8 +123,8 @@ namespace Apex.Serialization.Internal
 
             var blockStatements = new List<Expression>();
             var countVar = Expression.Variable(typeof(int));
-            blockStatements.Add(Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)));
-            blockStatements.Add(Expression.Assign(countVar, Expression.Call(stream, BufferedStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)));
+            blockStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)));
+            blockStatements.Add(Expression.Assign(countVar, Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)));
 
             if (type == collectionType)
             {
@@ -166,7 +166,7 @@ namespace Apex.Serialization.Internal
                         Expression.Equal(countVar, Expression.Constant(0)),
                         Expression.Break(breakLabel),
                         Expression.Block(
-                            Expression.Call(stream, BufferedStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
+                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
                             Expression.Call(result, collectionType.GetMethod(addMethod, collectionType.GenericTypeArguments),
                                 ReadValue(stream, output, valueType, out _)
                                 ),

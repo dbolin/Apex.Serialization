@@ -1,4 +1,5 @@
-﻿using Apex.Serialization.Internal;
+﻿using Apex.Serialization.Extensions;
+using Apex.Serialization.Internal;
 using Apex.Serialization.Internal.Reflection;
 using System;
 using System.Collections.Generic;
@@ -9,11 +10,12 @@ using System.Runtime.InteropServices;
 
 namespace Apex.Serialization
 {
-    public sealed partial class Binary
+    internal sealed partial class Binary<TStream>
+        where TStream : struct, IBinaryStream
     {
         internal void WriteObjectEntry<T>(T value)
         {
-            if (StaticTypeInfo<T>.IsSealed)
+            if (StaticTypeInfo<T>.IsSealedOrHasNoDescendents)
             {
                 if (StaticTypeInfo<T>.IsValueType)
                 {
@@ -33,7 +35,7 @@ namespace Apex.Serialization
         internal T ReadObjectEntry<T>()
         {
             object result;
-            if (StaticTypeInfo<T>.IsSealed)
+            if (StaticTypeInfo<T>.IsSealedOrHasNoDescendents)
             {
                 if (StaticTypeInfo<T>.IsValueType)
                 {
@@ -63,20 +65,20 @@ namespace Apex.Serialization
 
             if (_lastReadType == type)
             {
-                return _lastReadMethod(_stream, this);
+                return _lastReadMethod(ref _stream, this);
             }
 
             ref var method = ref VirtualReadMethods.GetOrAddValueRef(type);
 
             if (method == null)
             {
-                method = (Func<BufferedStream, Binary, object>)DynamicCode<BufferedStream, Binary>.GenerateReadMethod(type, Settings, true);
+                method = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadObject>(type, Settings, true);
             }
 
             _lastReadType = type;
             _lastReadMethod = method;
 
-            return method(_stream, this);
+            return method(ref _stream, this);
         }
 
         Type ISerializer.ReadTypeRef()
@@ -111,14 +113,14 @@ namespace Apex.Serialization
 
         internal T ReadValueInternal<T>()
         {
-            var method = ReadMethods<T>.Methods[_settingsIndex];
+            var method = ReadMethods<T, TStream>.Methods[_settingsIndex];
             if (method == null)
             {
-                method = (Func<BufferedStream, Binary, T>)DynamicCode<BufferedStream, Binary>.GenerateReadMethod(typeof(T), Settings, false);
-                ReadMethods<T>.Methods[_settingsIndex] = method;
+                method = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadMethods<T, TStream>.ReadSealed>(typeof(T), Settings, false);
+                ReadMethods<T, TStream>.Methods[_settingsIndex] = method;
             }
 
-            return method(_stream, this);
+            return method(ref _stream, this);
         }
 
         internal T ReadSealedInternal<T>()
@@ -128,14 +130,14 @@ namespace Apex.Serialization
                 return result;
             }
 
-            var method = ReadMethods<T>.Methods[_settingsIndex];
+            var method = ReadMethods<T, TStream>.Methods[_settingsIndex];
             if (method == null)
             {
-                method = (Func<BufferedStream, Binary, T>)DynamicCode<BufferedStream, Binary>.GenerateReadMethod(typeof(T), Settings, false);
-                ReadMethods<T>.Methods[_settingsIndex] = method;
+                method = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadMethods<T, TStream>.ReadSealed>(typeof(T), Settings, false);
+                ReadMethods<T, TStream>.Methods[_settingsIndex] = method;
             }
 
-            return method(_stream, this);
+            return method(ref _stream, this);
         }
 
         private bool ReadObjectRefHeader<T>(out T result)
@@ -199,6 +201,14 @@ namespace Apex.Serialization
 
         internal void WriteTypeRefInternal(Type value)
         {
+            if(_lastRefType == value)
+            {
+                _stream.Write(_lastRefIndex);
+                return;
+            }
+
+            _lastRefType = value;
+
             ref var index = ref _savedTypeLookup.GetOrAddValueRef(value);
             if (index == 0)
             {
@@ -210,6 +220,8 @@ namespace Apex.Serialization
             {
                 _stream.Write(index);
             }
+
+            _lastRefIndex = index;
         }
 
         internal void WriteInternal(object value)
@@ -223,7 +235,7 @@ namespace Apex.Serialization
 
             if (_lastWriteType == type)
             {
-                _lastWriteMethod(value, _stream, this);
+                _lastWriteMethod(value, ref _stream, this);
                 return;
             }
 
@@ -231,13 +243,13 @@ namespace Apex.Serialization
 
             if (method == null)
             {
-                method = (Action<object, BufferedStream, Binary>)DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(type, Settings, true);
+                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
             }
 
             _lastWriteType = type;
             _lastWriteMethod = method;
 
-            method(value, _stream, this);
+            method(value, ref _stream, this);
         }
 
         internal bool WriteNullByteInternal(object value)
@@ -556,16 +568,16 @@ namespace Apex.Serialization
 
         internal void WriteValueInternal<T>(T value)
         {
-            var method = WriteMethods<T>.Methods[_settingsIndex];
+            var method = WriteMethods<T, TStream>.Methods[_settingsIndex];
             if (method == null)
             {
                 CheckTypes(value);
 
-                method = (Action<T, BufferedStream, Binary>)DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(value.GetType(), Settings, false);
-                WriteMethods<T>.Methods[_settingsIndex] = method;
+                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value.GetType(), Settings, false);
+                WriteMethods<T, TStream>.Methods[_settingsIndex] = method;
             }
 
-            method(value, _stream, this);
+            method(value, ref _stream, this);
         }
 
         internal void WriteSealedInternal<T>(T value)
@@ -581,16 +593,16 @@ namespace Apex.Serialization
                 _stream.Write((byte)1);
             }
 
-            var method = WriteMethods<T>.Methods[_settingsIndex];
+            var method = WriteMethods<T, TStream>.Methods[_settingsIndex];
             if (method == null)
             {
                 CheckTypes(value);
 
-                method = (Action<T, BufferedStream, Binary>)DynamicCode<BufferedStream, Binary>.GenerateWriteMethod(value.GetType(), Settings, false);
-                WriteMethods<T>.Methods[_settingsIndex] = method;
+                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value.GetType(), Settings, false);
+                WriteMethods<T, TStream>.Methods[_settingsIndex] = method;
             }
 
-            method(value, _stream, this);
+            method(value, ref _stream, this);
         }
 
         [Conditional("DEV")]
@@ -602,7 +614,7 @@ namespace Apex.Serialization
             }
         }
 
-        void ISerializer.QueueAfterDeserializationHook(Action<object> method, object instance)
+        void ISerializer.QueueAfterDeserializationHook(Action<object, object> method, object instance)
         {
             _deserializationHooks.Add((method, instance));
         }
@@ -637,6 +649,14 @@ namespace Apex.Serialization
             {
                 handle.Free();
             }
+        }
+
+        IBinaryWriter ISerializer.BinaryWriter => _binaryWriter;
+        IBinaryReader ISerializer.BinaryReader => _binaryReader;
+
+        T ISerializer.GetCustomContext<T>()
+        {
+            return _customContext as T;
         }
     }
 }
