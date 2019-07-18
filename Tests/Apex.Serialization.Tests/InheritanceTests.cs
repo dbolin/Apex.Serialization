@@ -25,12 +25,33 @@ namespace Apex.Serialization.Tests
             public int DerivedValue;
         }
 
+        public class DerivedFromList : List<int>
+        {
+            public int Value;
+        }
+
         [Fact]
         public void InheritedFields()
         {
             var x = new Derived(1) {DerivedValue = 3};
 
             RoundTrip(x);
+        }
+
+        [Fact]
+        public void InheritFromList()
+        {
+            var x = new DerivedFromList { Value = 5 };
+            x.Add(2);
+            x.Add(3);
+
+            RoundTrip(x);
+
+            var y = new List<int>();
+            y.Add(2);
+            y.Add(3);
+
+            RoundTrip(y);
         }
     }
 }
