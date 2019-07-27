@@ -506,12 +506,10 @@ namespace Apex.Serialization.Internal
 
             if (!created && !type.IsValueType)
             {
-                var defaultCtor = type.GetConstructor(new Type[] { });
-                var il = defaultCtor?.GetMethodBody()?.GetILAsByteArray();
-                var sideEffectFreeCtor = il != null && il.Length <= 8;
-                if (sideEffectFreeCtor)
+                var ctor = Cil.FindDeserializationConstructor(type);
+                if (ctor != null)
                 {
-                    readStatements.Add(Expression.Assign(result, Expression.New(defaultCtor)));
+                    readStatements.Add(Expression.Assign(result, Expression.New(ctor)));
                 }
                 else
                 {

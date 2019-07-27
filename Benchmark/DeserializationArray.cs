@@ -33,12 +33,21 @@ namespace Benchmark
 
         //private readonly Serializer _hyperion = new Serializer(new SerializerOptions());
 
-        public DeserializationArray()
+        [GlobalSetup(Target = nameof(Protobuf))]
+        public void SetupProtobuf()
         {
             ProtoBuf.Serializer.Serialize(_m1, _t1);
+        }
+
+        [GlobalSetup(Target = nameof(MessagePack))]
+        public void SetupMessagePack()
+        {
             MessagePackSerializer.Serialize(_m2, _t1);
-            //_hyperion.Serialize(_t1, _m3);
-            //ZeroFormatterSerializer.Serialize(_m4, _t1);
+        }
+
+        [GlobalSetup(Target = nameof(Apex))]
+        public void SetupApex()
+        {
             _binaryTree.Write(_t1, _m5);
         }
 

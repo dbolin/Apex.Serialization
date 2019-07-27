@@ -38,12 +38,38 @@ namespace Apex.Serialization.Tests
             public bool Val2 { get; }
         }
 
+        public class TestEmpty1
+        {
+            [NonSerialized]
+            public int BaseField;
+            public TestEmpty1()
+            {
+                BaseField = 1;
+            }
+        }
+
+        public sealed class TestEmpty2 : TestEmpty1
+        {
+            public TestEmpty2()
+            {
+            }
+        }
+
+
         [Fact]
         public void ConstructUsingEmpty()
         {
             var x = new Test {Value = 5};
 
             RoundTrip(x, (a, b) => { b.Value.Should().Be(0); });
+        }
+
+        [Fact]
+        public void DoNotConstructUsingEmptyWithBaseClass()
+        {
+            var x = new TestEmpty2 { BaseField = 5 };
+
+            RoundTrip(x, (a, b) => { b.BaseField.Should().Be(0); });
         }
 
         [InlineData(true, false)]
