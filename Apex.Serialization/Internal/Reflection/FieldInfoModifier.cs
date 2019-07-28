@@ -11,6 +11,10 @@ namespace Apex.Serialization.Internal.Reflection
     {
         private class TestReadonly
         {
+            public TestReadonly()
+            {
+            }
+
             public TestReadonly(int v)
             {
                 Value = v;

@@ -97,5 +97,48 @@ namespace Apex.Serialization.Internal.Reflection
                 }
             }
         }
+
+        internal static bool CannotReferenceSelf(Type type)
+        {
+            var testedTypes = new HashSet<Type>();
+            return CannotReference(type, type, testedTypes);
+        }
+
+        private static bool CannotReference(Type originalType, Type currentType, HashSet<Type> testedTypes)
+        {
+            if(!testedTypes.Add(currentType))
+            {
+                return true;
+            }
+
+            var fields = TypeFields.GetOrderedFields(currentType);
+
+            foreach (var field in fields)
+            {
+                if (TypeFields.IsPrimitive(field))
+                {
+                    continue;
+                }
+
+                var fieldType = field.FieldType;
+
+                if (fieldType == typeof(string))
+                {
+                    continue;
+                }
+
+                if(fieldType.IsAssignableFrom(originalType))
+                {
+                    return false;
+                }
+
+                if(!CannotReference(originalType, fieldType, testedTypes))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
     }
 }

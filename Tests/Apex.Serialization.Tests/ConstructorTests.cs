@@ -55,6 +55,43 @@ namespace Apex.Serialization.Tests
             }
         }
 
+        public sealed class Test8Args
+        {
+            public readonly int A;
+            public readonly int B;
+            public readonly string C;
+            public readonly int D;
+            public readonly int E;
+            public readonly int F;
+            public readonly int G;
+            public readonly string H;
+
+            public Test8Args(int a, int b, string c, int d, int e, int f, int g, string h)
+            {
+                A = a;
+                B = b;
+                D = d;
+                E = e;
+                C = c;
+                F = f;
+                G = g;
+                H = h;
+            }
+        }
+
+        public class PartialConstructorTest
+        {
+            public readonly int A;
+            public readonly int B;
+            public readonly int C;
+
+            public PartialConstructorTest(int a)
+            {
+                A = a;
+                B = 1;
+                C = 2;
+            }
+        }
 
         [Fact]
         public void ConstructUsingEmpty()
@@ -80,6 +117,30 @@ namespace Apex.Serialization.Tests
         public void DefaultCtorArguments(bool val1, bool val2)
         {
             var x = new Test2(val1, val2);
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void ConstructorWith8Args()
+        {
+            var x = new Test8Args(1, 2, "3", 4, 5, 6, 7, "8");
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void AnonymousTypeWith8Fields()
+        {
+            var x = new { a = 1, b = 2, c = 3, d = "d", e = 5, f = 6, g = "g", h = 8 };
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void PartialConstructor()
+        {
+            var x = new PartialConstructorTest(1);
 
             RoundTrip(x);
         }

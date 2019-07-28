@@ -504,18 +504,52 @@ namespace Apex.Serialization.Internal
                 readStatements.Add(specialExpression);
             }
 
+            bool specificConstructorDeserialization = false;
+
             if (!created && !type.IsValueType)
             {
-                var ctor = Cil.FindDeserializationConstructor(type);
+                var ctor = Cil.FindEmptyDeserializationConstructor(type);
                 if (ctor != null)
                 {
                     readStatements.Add(Expression.Assign(result, Expression.New(ctor)));
                 }
                 else
                 {
-                    readStatements.Add(Expression.Assign(result,
-                        Expression.Convert(
-                            Expression.Call(null, GetUnitializedObjectMethodInfo, Expression.Constant(type)), type)));
+                    var shouldCheckForSpecificConstructor = settings.SerializationMode == Mode.Tree || StaticTypeInfo.CannotReferenceSelf(type);
+                    var useConstructorDeserialization = shouldCheckForSpecificConstructor ? Cil.FindSpecificDeserializationConstructor(type, fields) : null;
+                    if(useConstructorDeserialization.HasValue)
+                    {
+                        specificConstructorDeserialization = true;
+                        var constructor = useConstructorDeserialization.Value.constructor;
+                        var fieldOrder = useConstructorDeserialization.Value.fieldOrder;
+
+                        var constructorLocalVariables = new List<ParameterExpression>();
+                        var constructorLocalStatements = new List<Expression>();
+
+                        foreach(var field in fields)
+                        {
+                            var variableExpression = Expression.Variable(field.FieldType, field.Name);
+                            constructorLocalVariables.Add(variableExpression);
+                            var readValueExpression = ReadValue(stream, output, field.FieldType, out _);
+                            constructorLocalStatements.Add(Expression.Assign(variableExpression, readValueExpression));
+                        }
+
+                        var constructorParams = new Expression[fieldOrder.Count];
+                        for (int i = 0; i < fieldOrder.Count; ++i)
+                        {
+                            constructorParams[i] = constructorLocalVariables[fieldOrder[i]];
+                        }
+
+                        constructorLocalStatements.Add(Expression.Assign(result, Expression.New(constructor, constructorParams)));
+
+                        readStatements.Add(Expression.Block(constructorLocalVariables, constructorLocalStatements));
+                    }
+                    else
+                    {
+                        readStatements.Add(Expression.Assign(result,
+                            Expression.Convert(
+                                Expression.Call(null, GetUnitializedObjectMethodInfo, Expression.Constant(type)), type)));
+                    }
                 }
             }
 
@@ -532,7 +566,7 @@ namespace Apex.Serialization.Internal
             {
                 readStatements.Add(specialExpression);
             }
-            else if (specialExpression == null)
+            else if (specialExpression == null && !specificConstructorDeserialization)
             {
                 if (type.IsPointer || fields.Any(x => x.FieldType.IsPointer))
                 {
