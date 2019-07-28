@@ -10,7 +10,7 @@ namespace Apex.Serialization.Tests.Collections
         [Fact]
         public void QueueObject()
         {
-            var x = new Queue<object>();
+            var x = new Queue<object?>();
             x.Enqueue(1);
             x.Enqueue("asd");
             x.Enqueue(null);

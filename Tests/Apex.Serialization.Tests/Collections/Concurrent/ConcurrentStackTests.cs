@@ -12,7 +12,7 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
         [Fact]
         public void ConcurrentStackObject()
         {
-            var x = new ConcurrentStack<object>();
+            var x = new ConcurrentStack<object?>();
             x.Push(1);
             x.Push("");
             x.Push(null);

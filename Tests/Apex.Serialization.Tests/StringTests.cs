@@ -9,8 +9,8 @@ namespace Apex.Serialization.Tests
     {
         public class Test
         {
-            public string Value;
-            public object MightBeAString;
+            public string? Value;
+            public object? MightBeAString;
         }
 
         [Fact]

@@ -11,9 +11,16 @@ namespace Apex.Serialization
         internal static bool Instantiated;
         internal class CustomSerializerDelegate
         {
-            public Delegate Action;
-            public MethodInfo InvokeMethodInfo;
-            public Type CustomContextType;
+            public readonly Delegate Action;
+            public readonly MethodInfo InvokeMethodInfo;
+            public readonly Type? CustomContextType;
+
+            public CustomSerializerDelegate(Delegate action, MethodInfo invokeMethodInfo, Type? customContextType)
+            {
+                Action = action;
+                InvokeMethodInfo = invokeMethodInfo;
+                CustomContextType = customContextType;
+            }
         }
 
         internal static Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>();
@@ -42,16 +49,15 @@ namespace Apex.Serialization
         public static void RegisterCustomSerializer<T>(Action<T, IBinaryWriter> writeMethod, Action<T, IBinaryReader> readMethod)
         {
             Check();
-            CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate
-            {
-                Action = writeMethod,
-                InvokeMethodInfo = typeof(Action<T, IBinaryWriter>).GetMethod("Invoke")
-            });
-            CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate
-            {
-                Action = readMethod,
-                InvokeMethodInfo = typeof(Action<T, IBinaryReader>).GetMethod("Invoke")
-            });
+            CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
+                writeMethod,
+                typeof(Action<T, IBinaryWriter>).GetMethod("Invoke"),
+                null
+                ));
+            CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate(
+                readMethod,
+                typeof(Action<T, IBinaryReader>).GetMethod("Invoke"),
+                null));
         }
 
         /// <summary>
@@ -66,18 +72,16 @@ namespace Apex.Serialization
             where TContext : class
         {
             Check();
-            CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate
-            {
-                Action = writeMethod,
-                InvokeMethodInfo = typeof(Action<T, IBinaryWriter, TContext>).GetMethod("Invoke"),
-                CustomContextType = typeof(TContext)
-            });
-            CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate
-            {
-                Action = readMethod,
-                InvokeMethodInfo = typeof(Action<T, IBinaryReader, TContext>).GetMethod("Invoke"),
-                CustomContextType = typeof(TContext)
-            });
+            CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
+                writeMethod,
+                typeof(Action<T, IBinaryWriter, TContext>).GetMethod("Invoke"),
+                typeof(TContext)
+                ));
+            CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate(
+                readMethod,
+                typeof(Action<T, IBinaryReader, TContext>).GetMethod("Invoke"),
+                typeof(TContext)
+                ));
         }
 
         private static void Check()

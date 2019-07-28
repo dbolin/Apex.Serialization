@@ -30,20 +30,21 @@ namespace Apex.Serialization.Tests
 
         public class Test
         {
-            public Func<int> A;
-            public Func<int> B;
-            public Func<int> C;
-            public Func<int> D;
+            public Func<int>? A;
+            public Func<int>? B;
+            public Func<int>? C;
+            public Func<int>? D;
         }
 
         public class Test2
         {
-            public object A;
-            public object B;
-            public object C;
-            public object D;
+            public object? A;
+            public object? B;
+            public object? C;
+            public object? D;
         }
 
+#pragma warning disable CS8653 // A default expression introduces a null value for a type parameter.
         public class Test3<T>
         {
             public static T F1(T value)
@@ -57,6 +58,7 @@ namespace Apex.Serialization.Tests
             }
 
             public T2 F3<T2>(T value)
+                where T2 : struct
             {
                 return default;
             }
@@ -65,6 +67,7 @@ namespace Apex.Serialization.Tests
             {
             }
         }
+#pragma warning restore CS8653 // A default expression introduces a null value for a type parameter.
 
         [Fact]
         public void Functions()
@@ -102,10 +105,10 @@ namespace Apex.Serialization.Tests
 
             var y = RoundTrip(x, (a, b) => true);
 
-            ((Func<int>)y.A)().Should().Be(3);
-            ((Func<int>)y.B)().Should().Be(4);
-            ((Func<int>)y.C)().Should().Be(5);
-            ((Func<int>)y.D)().Should().Be(6);
+            ((Func<int>)y.A!)().Should().Be(3);
+            ((Func<int>)y.B!)().Should().Be(4);
+            ((Func<int>)y.C!)().Should().Be(5);
+            ((Func<int>)y.D!)().Should().Be(6);
         }
 
         [Fact]

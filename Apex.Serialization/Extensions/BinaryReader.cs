@@ -13,7 +13,7 @@ namespace Apex.Serialization.Extensions
             _instance = instance;
         }
 
-        public string Read()
+        public string? Read()
         {
             return _instance._stream.Read();
         }

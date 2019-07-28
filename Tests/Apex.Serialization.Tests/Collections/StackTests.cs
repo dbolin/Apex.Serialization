@@ -11,7 +11,7 @@ namespace Apex.Serialization.Tests.Collections
         [Fact]
         public void StackObject()
         {
-            var x = new Stack<object>();
+            var x = new Stack<object?>();
             x.Push(1);
             x.Push("12");
             x.Push(null);

@@ -14,7 +14,7 @@ namespace Apex.Serialization.Tests.Collections.Immutable
         [Fact]
         public void ImmutableSortedDictionaryObject()
         {
-            var x = ImmutableSortedDictionary<string, object>.Empty;
+            var x = ImmutableSortedDictionary<string, object?>.Empty;
             x = x.Add("1", 1);
             x = x.Add("2", "2");
             x = x.Add("3", null);

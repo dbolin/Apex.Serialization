@@ -23,7 +23,7 @@ namespace Apex.Serialization.Internal.Reflection
             public readonly int Value;
         }
 
-        internal static Action<FieldInfo> setFieldInfoNotReadonly;
+        internal static Action<FieldInfo>? setFieldInfoNotReadonly;
 
         internal static bool MustUseReflectionToSetReadonly => setFieldInfoNotReadonly == null;
 

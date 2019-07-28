@@ -2,7 +2,7 @@
 {
     public interface IBinaryReader
     {
-        string Read();
+        string? Read();
         T Read<T>() where T : struct;
 
         T ReadObject<T>();

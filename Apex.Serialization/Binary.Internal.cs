@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Apex.Serialization
@@ -19,7 +20,7 @@ namespace Apex.Serialization
             {
                 if (StaticTypeInfo<T>.IsValueType)
                 {
-                    WriteValueInternal(value);
+                    WriteValueInternal(value!);
                 }
                 else
                 {
@@ -34,7 +35,7 @@ namespace Apex.Serialization
 
         internal T ReadObjectEntry<T>()
         {
-            object result;
+            object? result;
             if (StaticTypeInfo<T>.IsSealedOrHasNoDescendents)
             {
                 if (StaticTypeInfo<T>.IsValueType)
@@ -51,7 +52,7 @@ namespace Apex.Serialization
                 result = ReadInternal();
             }
 
-            return (T)result;
+            return (T)result!;
         }
 
         internal object ReadInternal()
@@ -142,7 +143,7 @@ namespace Apex.Serialization
 
         private bool ReadObjectRefHeader<T>(out T result)
         {
-            result = default;
+            result = default!;
             _stream.ReserveSize(5);
             var isNull = _stream.Read<byte>() == 0;
             if (isNull)
@@ -180,7 +181,7 @@ namespace Apex.Serialization
 
         bool ISerializer.WriteObjectRef(object value)
         {
-            ref var index = ref _savedObjectLookup.GetOrAddValueRef(value);
+            ref var index = ref _savedObjectLookup!.GetOrAddValueRef(value);
             if (index == 0)
             {
                 index = _savedObjectLookup.Count;
@@ -224,14 +225,14 @@ namespace Apex.Serialization
             _lastRefIndex = index;
         }
 
-        internal void WriteInternal(object value)
+        internal void WriteInternal(object? value)
         {
             if (WriteNullByteInternal(value))
             {
                 return;
             }
 
-            var type = value.GetType();
+            var type = value!.GetType();
 
             if (_lastWriteType == type)
             {
@@ -252,7 +253,7 @@ namespace Apex.Serialization
             method(value, ref _stream, this);
         }
 
-        internal bool WriteNullByteInternal(object value)
+        internal bool WriteNullByteInternal([NotNullWhenFalse] object? value)
         {
             _stream.ReserveSize(1);
             if (ReferenceEquals(value, null))
@@ -478,14 +479,14 @@ namespace Apex.Serialization
 
             for (int i = 0; i < genericCount; ++i)
             {
-                genericTypeBuffer[i] = ReadTypeRefInternal();
+                genericTypeBuffer![i] = ReadTypeRefInternal();
             }
 
             _stream.ReserveSize(1);
             bool hasTarget = _stream.Read<bool>();
             Delegate result;
             var methods = TypeMethods.GetMethods(declaringType);
-            MethodInfo delegateMethod = null;
+            MethodInfo? delegateMethod = null;
             for (int i = 0; i < methods.Count; ++i)
             {
                 var m = methods[i];
@@ -524,7 +525,7 @@ namespace Apex.Serialization
             if (hasTarget)
             {
                 var target = ReadInternal();
-                ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod));
+                ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod!));
                 if (cachedDelegate == null)
                 {
                     cachedDelegate = Delegate.CreateDelegate(delegateType, null, delegateMethod);
@@ -535,7 +536,7 @@ namespace Apex.Serialization
             }
             else
             {
-                ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod));
+                ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod!));
                 if (cachedDelegate == null)
                 {
                     cachedDelegate = Delegate.CreateDelegate(delegateType, delegateMethod);
@@ -573,7 +574,7 @@ namespace Apex.Serialization
             {
                 CheckTypes(value);
 
-                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value.GetType(), Settings, false);
+                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value!.GetType(), Settings, false);
                 WriteMethods<T, TStream>.Methods[_settingsIndex] = method;
             }
 
@@ -596,9 +597,9 @@ namespace Apex.Serialization
             var method = WriteMethods<T, TStream>.Methods[_settingsIndex];
             if (method == null)
             {
-                CheckTypes(value);
+                CheckTypes(value!);
 
-                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value.GetType(), Settings, false);
+                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value!.GetType(), Settings, false);
                 WriteMethods<T, TStream>.Methods[_settingsIndex] = method;
             }
 
@@ -608,7 +609,7 @@ namespace Apex.Serialization
         [Conditional("DEV")]
         private void CheckTypes<T>(T value)
         {
-            if (typeof(T) != value.GetType())
+            if (typeof(T) != value!.GetType())
             {
                 throw new InvalidOperationException("Actual type found while attempting to write a sealed type does not match");
             }
@@ -656,7 +657,7 @@ namespace Apex.Serialization
 
         T ISerializer.GetCustomContext<T>()
         {
-            return _customContext as T;
+            return (_customContext as T)!;
         }
     }
 }

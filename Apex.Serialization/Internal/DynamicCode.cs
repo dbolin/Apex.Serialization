@@ -46,7 +46,7 @@ namespace Apex.Serialization.Internal
             var writeStatements = new List<Expression>();
             var localVariables = new List<ParameterExpression>();
 
-            var castedSourceType = (ParameterExpression)null;
+            var castedSourceType = (ParameterExpression?)null;
 
             if (shouldWriteTypeInfo)
             {
@@ -125,7 +125,7 @@ namespace Apex.Serialization.Internal
             return writeStatements;
         }
 
-        internal static Expression HandleSpecialWrite(Type type, ParameterExpression output, Expression actualSource, ParameterExpression stream, Expression source, List<FieldInfo> fields, ImmutableSettings settings)
+        internal static Expression? HandleSpecialWrite(Type type, ParameterExpression output, Expression actualSource, ParameterExpression stream, Expression source, List<FieldInfo> fields, ImmutableSettings settings)
         {
             var primitive = HandlePrimitiveWrite(stream, output, type, actualSource);
             if(primitive != null)
@@ -270,7 +270,7 @@ namespace Apex.Serialization.Internal
             return Expression.Block(indices, loop);
         }
 
-        private static Expression WriteStructExpression(Type type, Expression source, ParameterExpression stream,
+        private static Expression? WriteStructExpression(Type type, Expression source, ParameterExpression stream,
             List<FieldInfo> fields)
         {
             if (type.IsValueType)
@@ -298,7 +298,7 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
-        internal static Expression WriteCollection(Type type, ParameterExpression output,
+        internal static Expression? WriteCollection(Type type, ParameterExpression output,
             Expression actualSource, ParameterExpression stream, Expression source, ImmutableSettings
                 settings)
         {
@@ -367,7 +367,7 @@ namespace Apex.Serialization.Internal
             }
         }
 
-        private static Expression HandleCustomWrite(ParameterExpression output, Type declaredType,
+        private static Expression? HandleCustomWrite(ParameterExpression output, Type declaredType,
             Expression valueAccessExpression, ImmutableSettings settings)
         {
             if (!settings.SupportSerializationHooks)
@@ -408,7 +408,7 @@ namespace Apex.Serialization.Internal
             return statements.Count > 0 ? Expression.Block(statements) : null;
         }
 
-        private static Expression HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
+        private static Expression? HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
             Expression valueAccessExpression)
         {
             if(BinaryStreamMethods<TStream>.primitiveWriteMethods.TryGetValue(declaredType, out var method))
@@ -425,7 +425,7 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
-        private static Expression HandleNullableWrite(ParameterExpression stream, ParameterExpression output,
+        private static Expression? HandleNullableWrite(ParameterExpression stream, ParameterExpression output,
             Type declaredType,
             Expression valueAccessExpression)
         {
@@ -673,7 +673,7 @@ namespace Apex.Serialization.Internal
             return Expression.Call(castedObject, m);
         }
 
-        internal static Expression HandleSpecialRead(Type type, ParameterExpression output, Expression result, ParameterExpression stream, List<FieldInfo> fields, ImmutableSettings settings,
+        internal static Expression? HandleSpecialRead(Type type, ParameterExpression output, Expression result, ParameterExpression stream, List<FieldInfo> fields, ImmutableSettings settings,
             out bool created)
         {
             var primitive = HandlePrimitiveRead(stream, output, type);
@@ -777,7 +777,7 @@ namespace Apex.Serialization.Internal
             return collection;
         }
 
-        private static Expression HandleCustomRead(Type type, ParameterExpression output, Expression result, ImmutableSettings settings)
+        private static Expression? HandleCustomRead(Type type, ParameterExpression output, Expression result, ImmutableSettings settings)
         {
             if (!settings.SupportSerializationHooks)
             {
@@ -972,7 +972,7 @@ namespace Apex.Serialization.Internal
             return Expression.Block(indices.Concat(localVariables), loop);
         }
 
-        private static Expression ReadStructExpression(Type type, ParameterExpression stream,
+        private static Expression? ReadStructExpression(Type type, ParameterExpression stream,
             List<FieldInfo> fields)
         {
             if (type.IsValueType)
@@ -1000,7 +1000,7 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
-        internal static Expression ReadCollection(Type type, ParameterExpression output, Expression result, ParameterExpression stream, ImmutableSettings settings)
+        internal static Expression? ReadCollection(Type type, ParameterExpression output, Expression result, ParameterExpression stream, ImmutableSettings settings)
         {
             return ReadDictionary(type, output, result, stream, settings)
                 ?? ReadList(type, output, result, stream, settings);
@@ -1074,7 +1074,7 @@ namespace Apex.Serialization.Internal
             }
         }
 
-        private static Expression HandlePrimitiveRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
+        private static Expression? HandlePrimitiveRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
         {
             if (BinaryStreamMethods<TStream>.primitiveReadMethods.TryGetValue(declaredType, out var method))
             {
@@ -1090,7 +1090,7 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
-        private static Expression HandleNullableRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
+        private static Expression? HandleNullableRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
         {
             if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
             {

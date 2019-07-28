@@ -12,7 +12,7 @@ namespace Apex.Serialization.Internal
         where TStream : IBinaryStream
         where TBinary : ISerializer
     {
-        internal static Expression WriteList(Type type, ParameterExpression output, Expression actualSource,
+        internal static Expression? WriteList(Type type, ParameterExpression output, Expression actualSource,
             ParameterExpression stream, Expression source, ImmutableSettings settings)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
@@ -78,7 +78,7 @@ namespace Apex.Serialization.Internal
             return loop;
         }
 
-        internal static Expression ReadList(Type type, ParameterExpression output, Expression result, ParameterExpression stream, ImmutableSettings settings)
+        internal static Expression? ReadList(Type type, ParameterExpression output, Expression result, ParameterExpression stream, ImmutableSettings settings)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
             var collectionType = type;

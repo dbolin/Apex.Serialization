@@ -120,7 +120,7 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static DictionarySlim<Type, Type> _collections = new DictionarySlim<Type, Type>();
 
-        internal static Type GetCustomCollectionBaseCollection(Type type)
+        internal static Type? GetCustomCollectionBaseCollection(Type type)
         {
             if (_collections.TryGetValue(type, out var result))
             {

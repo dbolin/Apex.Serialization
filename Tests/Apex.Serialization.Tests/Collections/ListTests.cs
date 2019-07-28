@@ -67,7 +67,7 @@ namespace Apex.Serialization.Tests.Collections
         [Fact]
         public void ListOfObject()
         {
-            var x = new List<object> {null, "asd", 1, new Test {Value = 3}, Guid.NewGuid()};
+            var x = new List<object?> {null, "asd", 1, new Test {Value = 3}, Guid.NewGuid()};
 
             RoundTrip(x);
         }

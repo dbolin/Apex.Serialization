@@ -21,7 +21,7 @@ namespace Benchmark
         {
             [Key(0)]
             [ProtoMember(1)]
-            public string StringProp { get; set; }      //using the text "hello"
+            public string? StringProp { get; set; }      //using the text "hello"
             [Key(1)]
             [ProtoMember(2)]
             public int IntProp { get; set; }            //123

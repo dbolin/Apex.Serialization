@@ -13,7 +13,7 @@ namespace Apex.Serialization.Tests.Collections
         [Fact]
         public void SortedDictionaryObject()
         {
-            var x = new SortedDictionary<object, object>();
+            var x = new SortedDictionary<object, object?>();
             x.Add("", "A");
             x.Add("A", "A");
             x.Add("B", null);

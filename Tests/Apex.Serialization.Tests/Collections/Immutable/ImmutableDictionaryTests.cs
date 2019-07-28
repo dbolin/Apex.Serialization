@@ -14,7 +14,7 @@ namespace Apex.Serialization.Tests.Collections.Immutable
         [Fact]
         public void ImmutableDictionaryObject()
         {
-            var x = ImmutableDictionary<string, object>.Empty;
+            var x = ImmutableDictionary<string, object?>.Empty;
             x = x.Add("1", 1);
             x = x.Add("2", "2");
             x = x.Add("3", null);
@@ -24,6 +24,7 @@ namespace Apex.Serialization.Tests.Collections.Immutable
             x.ContainsKey("2").Should().Be(true);
         }
 
+        /*
         public void RandomHashcodes()
         {
             var element = new RandomHashcode { Value = 10 };
@@ -40,5 +41,6 @@ namespace Apex.Serialization.Tests.Collections.Immutable
             y.ContainsKey(element).Should().Be(true);
             y[element].Should().Be(1);
         }
+        */
     }
 }

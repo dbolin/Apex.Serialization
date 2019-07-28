@@ -9,7 +9,7 @@ namespace Apex.Serialization.Tests.Collections.Immutable
         [Fact]
         public void ImmutableStackObject()
         {
-            var x = ImmutableStack<object>.Empty;
+            var x = ImmutableStack<object?>.Empty;
             x = x.Push(1);
             x = x.Push("2");
             x = x.Push(null);

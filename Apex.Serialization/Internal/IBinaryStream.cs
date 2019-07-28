@@ -13,12 +13,12 @@ namespace Apex.Serialization.Internal
 
         void ReserveSize(int sizeNeeded);
         bool Flush();
-        void Write(string input);
+        void Write(string? input);
         void WriteTypeId(Type type);
         void Write<T>(T value) where T : struct;
         void WriteBytes(void* source, uint length);
 
-        string Read();
+        string? Read();
         byte* ReadTypeId(out int length1, out int length2);
         Type RestoreTypeFromId(ref byte* typeId, int typeLen1, int typeLen2);
         T Read<T>() where T : struct;

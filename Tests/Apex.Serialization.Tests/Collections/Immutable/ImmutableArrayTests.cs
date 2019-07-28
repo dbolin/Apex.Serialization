@@ -11,7 +11,7 @@ namespace Apex.Serialization.Tests.Collections.Immutable
         [Fact]
         public void ImmutableArrayObject()
         {
-            var x = ImmutableArray<object>.Empty;
+            var x = ImmutableArray<object?>.Empty;
             x = x.Add(1);
             x = x.Add("2");
             x = x.Add(null);

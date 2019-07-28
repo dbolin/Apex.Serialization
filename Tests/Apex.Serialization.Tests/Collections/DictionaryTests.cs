@@ -17,16 +17,16 @@ namespace Apex.Serialization.Tests.Collections
 
         public class Test2
         {
-            public Dictionary<string, string> Values;
+            public Dictionary<string, string>? Values;
         }
 
         public class InheritedDictionary : Dictionary<string, object>
         {
             public int OwnField;
 
-            public int Count => 123;
+            public new int Count => 123;
 
-            public IEnumerator<int> GetEnumerator()
+            public new IEnumerator<int> GetEnumerator()
             {
                 throw new NotSupportedException();
             }

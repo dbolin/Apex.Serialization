@@ -39,20 +39,20 @@ namespace Apex.Serialization.Tests
 
     public sealed class TestObject1
     {
-        public Value Value { get; }
-        public string StringValue { get; }
-        public string Description { get; }
+        public Value? Value { get; }
+        public string? StringValue { get; }
+        public string? Description { get; }
         public bool IsVisible { get; }
         public bool IsLocked { get; }
         public decimal Order { get; }
-        public string ImageLink { get; }
-        public string Tooltip { get; }
-        public string InfoMessage { get; }
-        public ImmutableArray<CustomProperty> CustomProperties { get; }
+        public string? ImageLink { get; }
+        public string? Tooltip { get; }
+        public string? InfoMessage { get; }
+        public ImmutableArray<CustomProperty>? CustomProperties { get; }
 
-        public TestObject1(Value value, string description, bool isVisible, bool isLocked, decimal order,
-            string imageLink, string tooltip, string infoMessage,
-            ImmutableArray<CustomProperty> customProperties)
+        public TestObject1(Value? value, string? description, bool isVisible, bool isLocked, decimal order,
+            string? imageLink, string? tooltip, string? infoMessage,
+            ImmutableArray<CustomProperty>? customProperties)
         {
             Value = value;
             StringValue = value.ToString();
@@ -82,9 +82,9 @@ namespace Apex.Serialization.Tests
     public sealed class Value
     {
         internal PrimitiveValue? _primitive;
-        internal string _string;
-        internal object _collection;
-        internal object _array;
+        internal string? _string;
+        internal object? _collection;
+        internal object? _array;
     }
 
     [StructLayout(LayoutKind.Explicit)]

@@ -51,9 +51,16 @@ namespace Apex.Serialization.Internal.Reflection
 
         internal class MethodInformation
         {
-            public MethodInfo MethodInfo;
-            public Type[] ParameterTypes;
-            public Type[] GenericArguments;
+            public readonly MethodInfo MethodInfo;
+            public readonly Type[] ParameterTypes;
+            public readonly Type[] GenericArguments;
+
+            public MethodInformation(MethodInfo methodInfo, Type[] parameterTypes, Type[] genericArguments)
+            {
+                MethodInfo = methodInfo;
+                ParameterTypes = parameterTypes;
+                GenericArguments = genericArguments;
+            }
         }
 
         internal static List<MethodInformation> GetMethods(Type type)
@@ -69,12 +76,11 @@ namespace Apex.Serialization.Internal.Reflection
                                                     BindingFlags.DeclaredOnly | BindingFlags.Static).ToList();
                     for (int i = 0; i < methodInfos.Count; ++i)
                     {
-                        methods.Add(new MethodInformation
-                        {
-                            MethodInfo = methodInfos[i],
-                            ParameterTypes = methodInfos[i].GetParameters().Select(x => x.ParameterType).ToArray(),
-                            GenericArguments = methodInfos[i].GetGenericArguments()
-                        });
+                        methods.Add(new MethodInformation(
+                            methodInfos[i],
+                            methodInfos[i].GetParameters().Select(x => x.ParameterType).ToArray(),
+                            methodInfos[i].GetGenericArguments()
+                            ));
                     }
                 }
 

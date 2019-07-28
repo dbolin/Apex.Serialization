@@ -1,5 +1,7 @@
 ﻿using System;
 
+#nullable disable
+
 namespace Apex.Serialization.Internal
 {
     internal sealed unsafe class TypeLookup<T>

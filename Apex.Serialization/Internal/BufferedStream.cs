@@ -145,7 +145,7 @@ namespace Apex.Serialization.Internal
         }
 
 
-        public void Write(string input)
+        public void Write(string? input)
         {
             ReserveSize(40);
             if (input == null)
@@ -264,7 +264,7 @@ namespace Apex.Serialization.Internal
             }
         }
 
-        public string Read()
+        public string? Read()
         {
             ReserveSize(4);
             var byteCount = Read<uint>();

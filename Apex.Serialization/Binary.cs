@@ -5,6 +5,8 @@ using System.Reflection;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal;
 
+#nullable disable
+
 namespace Apex.Serialization
 {
     internal static class WriteMethods<T, TStream>

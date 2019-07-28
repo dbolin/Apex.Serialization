@@ -28,20 +28,20 @@ namespace Apex.Serialization.Tests
 
         public class Test2
         {
-            public object a;
-            public object b;
-            public object c;
-            public object d;
-            public object e;
-            public object f;
-            public object g;
-            public object h;
-            public object i;
-            public object j;
-            public object k;
-            public object l;
-            public object m;
-            public object n;
+            public object? a;
+            public object? b;
+            public object? c;
+            public object? d;
+            public object? e;
+            public object? f;
+            public object? g;
+            public object? h;
+            public object? i;
+            public object? j;
+            public object? k;
+            public object? l;
+            public object? m;
+            public object? n;
         }
 
         [Fact]

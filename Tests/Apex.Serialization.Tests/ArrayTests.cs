@@ -44,17 +44,17 @@ namespace Apex.Serialization.Tests
 
         public class Test
         {
-            public int[] IntArray;
-            public string[] StringArray;
-            public Test2[] StructArray;
-            public Test3[] RefArray;
-            public object[] ObjectArray;
+            public int[]? IntArray;
+            public string[]? StringArray;
+            public Test2[]? StructArray;
+            public Test3[]? RefArray;
+            public object[]? ObjectArray;
 
-            public int[][] ArrayOfArrays;
-            public int[,] MultiDimensionalArray;
-            public DateTime[] DateTimeArray;
-            public Guid[] GuidArray;
-            public decimal?[] NullableDecimalArray;
+            public int[][]? ArrayOfArrays;
+            public int[,]? MultiDimensionalArray;
+            public DateTime[]? DateTimeArray;
+            public Guid[]? GuidArray;
+            public decimal?[]? NullableDecimalArray;
         }
 
         public class TestClass
@@ -135,7 +135,7 @@ namespace Apex.Serialization.Tests
         public void ObjectArray()
         {
             var o = new Test3 {Value = 6};
-            var x = new object[] {1, "asd", o, o, new Test2 {Value = 7}, null, new object[] {1, "zxc"}};
+            var x = new object?[] {1, "asd", o, o, new Test2 {Value = 7}, null, new object[] {1, "zxc"}};
 
             RoundTrip(x);
         }
@@ -215,7 +215,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void ArrayOfManyNullsAndThenValue()
         {
-            var x = Enumerable.Repeat((Test5)null, 1000).Concat(new Test5[] { new Test5 { Value1 = 1} }).ToArray();
+            var x = Enumerable.Repeat((Test5?)null, 1000).Concat(new Test5[] { new Test5 { Value1 = 1} }).ToArray();
 
             RoundTrip(x);
         }

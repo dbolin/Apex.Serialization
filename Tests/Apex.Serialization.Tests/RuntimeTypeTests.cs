@@ -9,9 +9,9 @@ namespace Apex.Serialization.Tests
     {
         public class Test
         {
-            public Type A;
-            public Type B;
-            public object C;
+            public Type? A;
+            public Type? B;
+            public object? C;
         }
 
         [Fact]

@@ -14,7 +14,7 @@ namespace Apex.Serialization.Tests.Collections.Immutable
         [Fact]
         public void ImmutableHashSetObject()
         {
-            var x = ImmutableHashSet<object>.Empty;
+            var x = ImmutableHashSet<object?>.Empty;
             x = x.Add(1);
             x = x.Add("2");
             x = x.Add(null);
@@ -22,6 +22,7 @@ namespace Apex.Serialization.Tests.Collections.Immutable
             RoundTrip(x);
         }
 
+        /*
         public void RandomHashcodes()
         {
             var element = new RandomHashcode { Value = 10 };
@@ -37,5 +38,6 @@ namespace Apex.Serialization.Tests.Collections.Immutable
 
             y.Contains(element).Should().Be(true);
         }
+        */
     }
 }

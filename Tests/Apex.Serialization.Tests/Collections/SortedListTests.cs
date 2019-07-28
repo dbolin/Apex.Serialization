@@ -8,7 +8,7 @@ namespace Apex.Serialization.Tests.Collections
         [Fact]
         public void SortedListObject()
         {
-            var x = new SortedList<int, object> {{1, 1}, {2, "2"}, {3, null}};
+            var x = new SortedList<int, object?> {{1, 1}, {2, "2"}, {3, null}};
 
             RoundTrip(x);
         }

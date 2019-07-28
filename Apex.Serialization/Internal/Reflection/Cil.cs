@@ -4,14 +4,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using MethodAttributes = Mono.Cecil.MethodAttributes;
 
 namespace Apex.Serialization.Internal.Reflection
 {
     internal static class Cil
     {
-        public static ConstructorInfo FindEmptyDeserializationConstructor(Type type)
+        public static ConstructorInfo? FindEmptyDeserializationConstructor(Type type)
         {
             try
             {
@@ -89,7 +87,7 @@ namespace Apex.Serialization.Internal.Reflection
             }
         }
 
-        private static List<int> ConstructorMatchesFields(TypeReference typeRef, MethodDefinition method, List<FieldInfo> fields)
+        private static List<int>? ConstructorMatchesFields(TypeReference typeRef, MethodDefinition method, List<FieldInfo> fields)
         {
             if(method.Parameters.Count != fields.Count)
             {

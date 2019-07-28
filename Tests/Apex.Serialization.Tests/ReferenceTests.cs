@@ -18,21 +18,21 @@ namespace Apex.Serialization.Tests
 
         public class TestD : TestC
         {
-            internal int Value = 3;
+            internal new int Value = 3;
         }
 
         public sealed class TestObject
         {
             public int Value;
-            public string Name;
-            public TestB Ref;
+            public string? Name;
+            public TestB? Ref;
         }
 
         public sealed class TestObject2
         {
             public int Value;
-            public string Name;
-            public TestC Ref;
+            public string? Name;
+            public TestC? Ref;
         }
 
         public struct TestStruct1
@@ -47,8 +47,8 @@ namespace Apex.Serialization.Tests
 
         public class TestE
         {
-            public object Ref;
-            public object Struct;
+            public object? Ref;
+            public object? Struct;
         }
 
         [Fact]

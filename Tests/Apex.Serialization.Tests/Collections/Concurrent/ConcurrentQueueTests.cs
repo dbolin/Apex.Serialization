@@ -11,7 +11,7 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
         [Fact]
         public void ConcurrentQueueObject()
         {
-            var x = new ConcurrentQueue<object>();
+            var x = new ConcurrentQueue<object?>();
             x.Enqueue(1);
             x.Enqueue("asd");
             x.Enqueue(null);
