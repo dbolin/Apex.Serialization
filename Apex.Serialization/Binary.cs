@@ -5,8 +5,6 @@ using System.Reflection;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal;
 
-#nullable disable
-
 namespace Apex.Serialization
 {
     internal static class WriteMethods<T, TStream>
@@ -49,13 +47,13 @@ namespace Apex.Serialization
         private readonly DictionarySlim<Type, WriteObject> VirtualWriteMethods = new DictionarySlim<Type, WriteObject>();
         private readonly DictionarySlim<Type, ReadObject> VirtualReadMethods = new DictionarySlim<Type, ReadObject>();
 
-        private Type _lastWriteType;
-        private WriteObject _lastWriteMethod;
+        private Type? _lastWriteType;
+        private WriteObject? _lastWriteMethod;
 
-        private Type _lastReadType;
-        private ReadObject _lastReadMethod;
+        private Type? _lastReadType;
+        private ReadObject? _lastReadMethod;
 
-        private Type _lastRefType;
+        private Type? _lastRefType;
         private int _lastRefIndex;
 
         private readonly TypeLookup<Type> _knownTypes = new TypeLookup<Type>();
@@ -77,7 +75,9 @@ namespace Apex.Serialization
 
         private object _customContext;
 
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
         internal Binary(TStream stream)
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             _binaryWriter = new BinaryWriter<TStream>(this);
             _binaryReader = new BinaryReader<TStream>(this);
@@ -95,7 +95,9 @@ namespace Apex.Serialization
             }
         }
 
+#pragma warning disable CS8618 // Non-nullable field is uninitialized.
         internal Binary(Settings settings, TStream stream)
+#pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
             _binaryWriter = new BinaryWriter<TStream>(this);
             _binaryReader = new BinaryReader<TStream>(this);

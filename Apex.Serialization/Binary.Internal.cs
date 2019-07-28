@@ -66,7 +66,7 @@ namespace Apex.Serialization
 
             if (_lastReadType == type)
             {
-                return _lastReadMethod(ref _stream, this);
+                return _lastReadMethod!(ref _stream, this);
             }
 
             ref var method = ref VirtualReadMethods.GetOrAddValueRef(type);
@@ -236,7 +236,7 @@ namespace Apex.Serialization
 
             if (_lastWriteType == type)
             {
-                _lastWriteMethod(value, ref _stream, this);
+                _lastWriteMethod!(value, ref _stream, this);
                 return;
             }
 
