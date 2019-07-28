@@ -13,7 +13,7 @@
     <PackageReference Include="Hyperion" Version="0.9.8" />
     <PackageReference Include="MessagePack" Version="1.7.3.7" />
     <PackageReference Include="NetSerializer" Version="4.1.0" />
-    <PackageReference Include="protobuf-net" Version="2.4.0" />
+    <PackageReference Include="protobuf-net" Version="3.0.0-alpha.43" />
     <PackageReference Include="ZeroFormatter" Version="1.6.4" />
   </ItemGroup>
 
