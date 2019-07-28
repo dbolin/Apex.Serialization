@@ -39,7 +39,7 @@ namespace Apex.Serialization.Internal.Reflection
                                     ));
 
                         start = start.Concat(newMethods);
-                        type = type.BaseType;
+                        type = type.BaseType!;
                     }
 
                     methods = start.Reverse().ToList();

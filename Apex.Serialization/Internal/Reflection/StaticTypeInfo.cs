@@ -74,7 +74,7 @@ namespace Apex.Serialization.Internal.Reflection
             }
         }
 
-        private static void Add(HashSet<Assembly> allAssemblies, Assembly initial)
+        private static void Add(HashSet<Assembly> allAssemblies, Assembly? initial)
         {
             if(initial == null)
             {

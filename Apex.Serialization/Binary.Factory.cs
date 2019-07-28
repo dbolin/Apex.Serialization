@@ -51,12 +51,12 @@ namespace Apex.Serialization
             Check();
             CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
                 writeMethod,
-                typeof(Action<T, IBinaryWriter>).GetMethod("Invoke"),
+                typeof(Action<T, IBinaryWriter>).GetMethod("Invoke")!,
                 null
                 ));
             CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate(
                 readMethod,
-                typeof(Action<T, IBinaryReader>).GetMethod("Invoke"),
+                typeof(Action<T, IBinaryReader>).GetMethod("Invoke")!,
                 null));
         }
 
@@ -74,12 +74,12 @@ namespace Apex.Serialization
             Check();
             CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
                 writeMethod,
-                typeof(Action<T, IBinaryWriter, TContext>).GetMethod("Invoke"),
+                typeof(Action<T, IBinaryWriter, TContext>).GetMethod("Invoke")!,
                 typeof(TContext)
                 ));
             CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate(
                 readMethod,
-                typeof(Action<T, IBinaryReader, TContext>).GetMethod("Invoke"),
+                typeof(Action<T, IBinaryReader, TContext>).GetMethod("Invoke")!,
                 typeof(TContext)
                 ));
         }

@@ -27,22 +27,22 @@ namespace Apex.Serialization.Internal
 
     internal static class BinaryStreamMethods<TStream> where TStream : IBinaryStream
     {
-        internal static readonly MethodInfo ReserveSizeMethodInfo = typeof(TStream).GetMethod("ReserveSize", new[] { typeof(int) });
+        internal static readonly MethodInfo ReserveSizeMethodInfo = typeof(TStream).GetMethod("ReserveSize", new[] { typeof(int) })!;
 
         internal static readonly MethodInfo WriteStringMethodInfo =
-            typeof(TStream).GetMethod("Write", new[] { typeof(string) });
+            typeof(TStream).GetMethod("Write", new[] { typeof(string) })!;
 
         internal static readonly MethodInfo ReadStringMethodInfo =
             typeof(TStream).GetMethods().Single(x => x.Name == "Read" && !x.IsGenericMethod);
 
         internal static readonly MethodInfo WriteTypeIdMethodInfo =
-            typeof(TStream).GetMethod("WriteTypeId", new[] { typeof(Type) });
+            typeof(TStream).GetMethod("WriteTypeId", new[] { typeof(Type) })!;
 
         internal static readonly MethodInfo WriteBytesMethodInfo =
-            typeof(TStream).GetMethod("WriteBytes", new[] { typeof(void*), typeof(uint) });
+            typeof(TStream).GetMethod("WriteBytes", new[] { typeof(void*), typeof(uint) })!;
 
         internal static readonly MethodInfo ReadBytesMethodInfo =
-            typeof(TStream).GetMethod("ReadBytes", new[] { typeof(void*), typeof(uint) });
+            typeof(TStream).GetMethod("ReadBytes", new[] { typeof(void*), typeof(uint) })!;
 
         internal static Dictionary<Type, MethodInfo> primitiveWriteMethods = new Dictionary<Type, MethodInfo>
         {

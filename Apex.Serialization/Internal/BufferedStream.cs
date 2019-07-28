@@ -213,8 +213,8 @@ namespace Apex.Serialization.Internal
                 }
             }
 
-            var name = type.FullName;
-            var qualifiedInfo = type.Assembly.FullName;
+            var name = type.FullName!;
+            var qualifiedInfo = type.Assembly.FullName!;
             var infoBytes = new byte[(name.Length + qualifiedInfo.Length) * Encoding.UTF8.GetMaxByteCount(1)];
 
             fixed (char* namePtr = name, asmPtr = qualifiedInfo)
@@ -335,7 +335,7 @@ namespace Apex.Serialization.Internal
             var totalLen = typeLen1 + typeLen2 + 2;
             _typeIdBufferPtr += totalLen;
             _typeIdLengthRemaining -= totalLen;
-            return Type.GetType(typeName, true);
+            return Type.GetType(typeName, true)!;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

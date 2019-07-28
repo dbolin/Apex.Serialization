@@ -328,7 +328,7 @@ namespace Apex.Serialization
             _stream.ReserveSize(4);
             WriteTypeRefInternal(delegateType);
             _stream.ReserveSize(4);
-            WriteTypeRefInternal(value.Method.DeclaringType);
+            WriteTypeRefInternal(value.Method.DeclaringType!);
             _stream.Write(value.Method.Name);
             _stream.ReserveSize(2);
             var parameters = GetMethodParameterTypes(value.Method);
@@ -407,7 +407,7 @@ namespace Apex.Serialization
             public Type DeclaringType;
             public MethodInfo DelegateMethod;
 
-            public override bool Equals(object obj)
+            public override bool Equals(object? obj)
             {
                 return obj is DelegateID id && Equals(id);
             }
@@ -516,7 +516,7 @@ namespace Apex.Serialization
                 delegateMethod = m.MethodInfo;
                 if (m.GenericArguments.Length > 0)
                 {
-                    delegateMethod = delegateMethod.MakeGenericMethod(genericTypeBuffer);
+                    delegateMethod = delegateMethod.MakeGenericMethod(genericTypeBuffer!);
                 }
                 break;
                 next:;
@@ -528,7 +528,7 @@ namespace Apex.Serialization
                 ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod!));
                 if (cachedDelegate == null)
                 {
-                    cachedDelegate = Delegate.CreateDelegate(delegateType, null, delegateMethod);
+                    cachedDelegate = Delegate.CreateDelegate(delegateType, null, delegateMethod!);
                 }
 
                 result = (Delegate)_clone(cachedDelegate);
@@ -539,7 +539,7 @@ namespace Apex.Serialization
                 ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod!));
                 if (cachedDelegate == null)
                 {
-                    cachedDelegate = Delegate.CreateDelegate(delegateType, delegateMethod);
+                    cachedDelegate = Delegate.CreateDelegate(delegateType, delegateMethod!);
                 }
 
                 result = cachedDelegate;
@@ -564,7 +564,7 @@ namespace Apex.Serialization
                 list[i] = ReadFunctionInternal();
             }
 
-            return Delegate.Combine(list);
+            return Delegate.Combine(list)!;
         }
 
         internal void WriteValueInternal<T>(T value)

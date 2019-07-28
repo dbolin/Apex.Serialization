@@ -162,7 +162,7 @@ namespace Apex.Serialization.Internal
 
             if(type.IsArray)
             {
-                var elementType = type.GetElementType();
+                var elementType = type.GetElementType()!;
                 var dimensions = type.GetArrayRank();
 
                 var (elementSize, isRef) = TypeFields.GetSizeForType(elementType);
@@ -290,7 +290,7 @@ namespace Apex.Serialization.Internal
                 {
                     var method = (MethodInfo) typeof(BinaryStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)
-                        .GetField("WriteValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+                        .GetField("WriteValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
                     return Expression.Call(stream, method, source);
                 }
             }
@@ -438,7 +438,7 @@ namespace Apex.Serialization.Internal
                 Expression.Call(output, "WriteValueInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
         }
 
-        internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject");
+        internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject")!;
         private static Type[] emptyTypes = new Type[0];
 
         internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed)
@@ -727,7 +727,7 @@ namespace Apex.Serialization.Internal
             {
                 created = true;
 
-                var elementType = type.GetElementType();
+                var elementType = type.GetElementType()!;
                 var dimensions = type.GetArrayRank();
 
                 var (elementSize, isRef) = TypeFields.GetSizeForType(elementType);
@@ -992,7 +992,7 @@ namespace Apex.Serialization.Internal
                 {
                     var method = (MethodInfo) typeof(BinaryStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)
-                        .GetField("ReadValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic).GetValue(null);
+                        .GetField("ReadValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
                     return Expression.Call(stream, method);
                 }
             }
@@ -1006,7 +1006,7 @@ namespace Apex.Serialization.Internal
                 ?? ReadList(type, output, result, stream, settings);
         }
 
-        private static MethodInfo fieldInfoSetValueMethod = typeof(FieldInfo).GetMethod("SetValue", new[] { typeof(object), typeof(object) });
+        private static MethodInfo fieldInfoSetValueMethod = typeof(FieldInfo).GetMethod("SetValue", new[] { typeof(object), typeof(object) })!;
 
         internal static Expression GetReadFieldExpression(FieldInfo fieldInfo, Expression result,
             ParameterExpression stream, ParameterExpression output)

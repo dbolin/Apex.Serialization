@@ -12,7 +12,7 @@ namespace Apex.Serialization.Tests.Collections.Objects
 
         public int Value;
 
-        public override bool Equals(object obj) => obj is RandomHashcode && Equals((RandomHashcode)obj);
+        public override bool Equals(object? obj) => obj is RandomHashcode && Equals((RandomHashcode)obj);
         public bool Equals(RandomHashcode other) => Value == other.Value;
 
         public override int GetHashCode()

@@ -8,7 +8,7 @@ namespace Apex.Serialization.Internal
         public Type Type;
         public int SettingsIndex;
 
-        public override bool Equals(object obj) => obj is TypeKey && Equals((TypeKey)obj);
+        public override bool Equals(object? obj) => obj is TypeKey && Equals((TypeKey)obj);
         public bool Equals(TypeKey other) => EqualityComparer<Type>.Default.Equals(Type, other.Type) && SettingsIndex == other.SettingsIndex;
 
         public override int GetHashCode()

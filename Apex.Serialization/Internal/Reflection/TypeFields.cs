@@ -107,8 +107,8 @@ namespace Apex.Serialization.Internal.Reflection
 
             if (type.IsValueType && fields.Count <= 1 && fields.All(f => IsPrimitive(f)))
             {
-                size = (int) typeof(Unsafe).GetMethod("SizeOf").MakeGenericMethod(type)
-                    .Invoke(null, Array.Empty<Type>());
+                size = (int) typeof(Unsafe).GetMethod("SizeOf")!.MakeGenericMethod(type)!
+                    .Invoke(null, Array.Empty<Type>())!;
 
                 sizeForField = size;
                 return true;
@@ -188,7 +188,7 @@ namespace Apex.Serialization.Internal.Reflection
                                 a.AttributeType != typeof(NonSerializedAttribute))));
                     }
 
-                    type = type.BaseType;
+                    type = type.BaseType!;
                 }
 
                 fields = start.ToList();

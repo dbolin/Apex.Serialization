@@ -42,7 +42,7 @@ namespace Apex.Serialization.Internal
 
             var elementType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
             var enumeratorType = collectionType.GetMethod("GetEnumerator",
-                BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public).ReturnType;
+                BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public)!.ReturnType;
             var enumeratorVar = Expression.Variable(enumeratorType);
             var getEnumeratorCall = Expression.Convert(Expression.Call(actualSource, collectionType.GetMethod("GetEnumerator")), enumeratorType);
             var enumeratorAssign = Expression.Assign(enumeratorVar, getEnumeratorCall);
