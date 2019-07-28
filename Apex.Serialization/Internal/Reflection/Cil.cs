@@ -11,20 +11,6 @@ namespace Apex.Serialization.Internal.Reflection
 {
     internal static class Cil
     {
-        private static readonly TypeReference _voidReference = ModuleDefinition.ReadModule(typeof(void).Module.Assembly.Location)
-            .ImportReference(typeof(void));
-
-        public static void AddEmptyConstructor(TypeDefinition type)
-        {
-            var methodAttributes = MethodAttributes.Private | MethodAttributes.HideBySig | MethodAttributes.SpecialName | MethodAttributes.RTSpecialName;
-            var method = new MethodDefinition(".ctor", methodAttributes, _voidReference);
-            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ldarg_0));
-            var methodReference = new MethodReference(".ctor", _voidReference, type.BaseType) { HasThis = true };
-            method.Body.Instructions.Add(Instruction.Create(OpCodes.Call, methodReference));
-            method.Body.Instructions.Add(Instruction.Create(OpCodes.Ret));
-            type.Methods.Add(method);
-        }
-
         public static ConstructorInfo FindEmptyDeserializationConstructor(Type type)
         {
             try
@@ -66,30 +52,41 @@ namespace Apex.Serialization.Internal.Reflection
             // we need to find a constructor that, when combined with the base constructor, assigns values to all fields
             // and does nothing else
 
-            var module = ModuleDefinition.ReadModule(type.Assembly.Location);
-            var typeRef = module.ImportReference(type);
-            var typeDef = typeRef.Resolve();
-            var constructors = typeDef.Methods.Where(x => x.IsConstructor && !x.IsStatic);
-
-            foreach(var method in constructors)
+            try
             {
-                var fieldOrder = ConstructorMatchesFields(typeRef, method, fields);
-                if (fieldOrder != null)
+                var module = ModuleDefinition.ReadModule(type.Assembly.Location);
+                var typeRef = module.ImportReference(type);
+                var typeDef = typeRef.Resolve();
+                var constructors = typeDef.Methods.Where(x => x.IsConstructor && !x.IsStatic);
+
+                foreach (var method in constructors)
                 {
-                    var allConstructors = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                    foreach(var constructor in allConstructors)
+                    var fieldOrder = ConstructorMatchesFields(typeRef, method, fields);
+                    if (fieldOrder != null)
                     {
-                        if(Matches(typeRef, constructor, method))
+                        var allConstructors = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        foreach (var constructor in allConstructors)
                         {
-                            return (constructor, fieldOrder);
+                            if (Matches(typeRef, constructor, method))
+                            {
+                                return (constructor, fieldOrder);
+                            }
                         }
+
+                        return null;
                     }
-
-                    return null;
                 }
-            }
 
-            return null;
+                return null;
+            }
+            catch
+            {
+#if DEBUG
+                throw;
+#else
+                return null;
+#endif
+            }
         }
 
         private static List<int> ConstructorMatchesFields(TypeReference typeRef, MethodDefinition method, List<FieldInfo> fields)

@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;netcoreapp3.0</TargetFrameworks>
     <LangVersion>7.3</LangVersion>
-    <Version>1.1.0</Version>
+    <Version>1.1.0-pre.2</Version>
     <Authors>Dominic Bolin</Authors>
     <Description>A high performance contract-less binary serializer</Description>
     <PackageProjectUrl>https://github.com/dbolin/Apex.Serialization</PackageProjectUrl>
