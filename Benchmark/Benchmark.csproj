@@ -5,6 +5,10 @@
     <TargetFramework>netcoreapp3.0</TargetFramework>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>Benchmark.snk</AssemblyOriginatorKeyFile>
+    <LangVersion>8.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NoWarn>NU1701;CS8002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
