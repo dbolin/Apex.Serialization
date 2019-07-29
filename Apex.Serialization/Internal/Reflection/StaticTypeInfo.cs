@@ -127,9 +127,8 @@ namespace Apex.Serialization.Internal.Reflection
                     continue;
                 }
 
-                if(fieldType.IsAbstract || fieldType.IsInterface)
+                if(!HasNoDescendents(fieldType))
                 {
-                    // possibly can do better here
                     return false;
                 }
 

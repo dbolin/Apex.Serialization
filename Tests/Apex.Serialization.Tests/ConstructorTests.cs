@@ -95,19 +95,19 @@ namespace Apex.Serialization.Tests
 
         public class TLoop
         {
-            public AbstractLoop x;
+            public BaseLoop x;
 
-            public TLoop(AbstractLoop x)
+            public TLoop(BaseLoop x)
             {
                 this.x = x;
             }
         }
 
-        public abstract class AbstractLoop
+        public class BaseLoop
         {
         }
 
-        public class ConcreteLoop : AbstractLoop
+        public class ConcreteLoop : BaseLoop
         {
             public int A;
             public int B;
