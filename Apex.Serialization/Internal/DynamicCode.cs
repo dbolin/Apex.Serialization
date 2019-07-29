@@ -515,7 +515,7 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    var shouldCheckForSpecificConstructor = settings.SerializationMode == Mode.Tree || StaticTypeInfo.CannotReferenceSelf(type);
+                    var shouldCheckForSpecificConstructor = settings.UseConstructors && (settings.SerializationMode == Mode.Tree || StaticTypeInfo.CannotReferenceSelf(type));
                     var useConstructorDeserialization = shouldCheckForSpecificConstructor ? Cil.FindSpecificDeserializationConstructor(type, fields) : null;
                     if(useConstructorDeserialization.HasValue)
                     {
@@ -524,12 +524,24 @@ namespace Apex.Serialization.Internal
                         var fieldOrder = useConstructorDeserialization.Value.fieldOrder;
 
                         var constructorLocalVariables = new List<ParameterExpression>();
+                        var constructorLocalFieldVariables = new List<ParameterExpression>();
                         var constructorLocalStatements = new List<Expression>();
 
-                        foreach(var field in fields)
+                        var currentSavedReferencesIndexVariable = Expression.Variable(typeof(int), "currentSavedRefIndex");
+
+                        if (settings.SerializationMode == Mode.Graph && !type.IsValueType)
+                        {
+                            constructorLocalVariables.Add(currentSavedReferencesIndexVariable);
+                            constructorLocalStatements.Add(Expression.Assign(currentSavedReferencesIndexVariable, Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter), SerializerMethods.SavedReferencesListCountGetter)));
+                            constructorLocalStatements.Add(Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
+                            SerializerMethods.SavedReferencesListAdd, Expression.Constant(null)));
+                        }
+
+                        foreach (var field in fields)
                         {
                             var variableExpression = Expression.Variable(field.FieldType, field.Name);
                             constructorLocalVariables.Add(variableExpression);
+                            constructorLocalFieldVariables.Add(variableExpression);
                             var readValueExpression = ReadValue(stream, output, field.FieldType, out _);
                             constructorLocalStatements.Add(Expression.Assign(variableExpression, readValueExpression));
                         }
@@ -537,12 +549,24 @@ namespace Apex.Serialization.Internal
                         var constructorParams = new Expression[fieldOrder.Count];
                         for (int i = 0; i < fieldOrder.Count; ++i)
                         {
-                            constructorParams[i] = constructorLocalVariables[fieldOrder[i]];
+                            constructorParams[i] = constructorLocalFieldVariables[fieldOrder[i]];
                         }
 
                         constructorLocalStatements.Add(Expression.Assign(result, Expression.New(constructor, constructorParams)));
 
+                        if (settings.SerializationMode == Mode.Graph && !type.IsValueType)
+                        {
+                            constructorLocalStatements.Add(
+                                Expression.Assign(
+                                    Expression.Property(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
+                                        SerializerMethods.SavedReferencesListIndexer, currentSavedReferencesIndexVariable),
+                                result)
+                            );
+                        }
+
                         readStatements.Add(Expression.Block(constructorLocalVariables, constructorLocalStatements));
+
+                        created = true;
                     }
                     else
                     {

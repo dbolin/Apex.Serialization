@@ -54,6 +54,9 @@ namespace Apex.Serialization.Internal
         internal static readonly MethodInfo SavedReferencesListAdd =
             typeof(List<object>).GetMethod("Add")!;
 
+        internal static readonly MethodInfo SavedReferencesListCountGetter =
+            typeof(List<object>).GetProperty("Count")!.GetMethod!;
+
         internal static readonly PropertyInfo SavedReferencesListIndexer =
             typeof(List<object>).GetProperty("Item", new[] {typeof(int)})!;
 

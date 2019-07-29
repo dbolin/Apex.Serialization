@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Text;
 using FluentAssertions;
 using Xunit;
@@ -176,6 +177,24 @@ namespace Apex.Serialization.Tests
             y.Inst = x;
 
             RoundTripGraphOnly(x);
+        }
+
+        [Fact]
+        public void ImmutableList()
+        {
+            var start = ImmutableList<int>.Empty;
+            var a1 = start.Add(1);
+            var a2 = a1.Add(2);
+            var a3 = a2.Add(3);
+            var a4 = a3.Add(4);
+            var b3 = a2.Add(6);
+            var b4 = b3.Add(7);
+
+            var x = new { start, a1, a2, a3, a4, b3, b4 };
+
+            var y = new { a1 = x, a2 = x };
+
+            RoundTripGraphOnly(y);
         }
     }
 }
