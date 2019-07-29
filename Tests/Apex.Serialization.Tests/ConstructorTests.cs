@@ -93,6 +93,28 @@ namespace Apex.Serialization.Tests
             }
         }
 
+        public class TLoop
+        {
+            public AbstractLoop x;
+
+            public TLoop(AbstractLoop x)
+            {
+                this.x = x;
+            }
+        }
+
+        public abstract class AbstractLoop
+        {
+        }
+
+        public class ConcreteLoop : AbstractLoop
+        {
+            public int A;
+            public int B;
+            public TLoop? Inst;
+            public string? Test;
+        }
+
         [Fact]
         public void ConstructUsingEmpty()
         {
@@ -143,6 +165,17 @@ namespace Apex.Serialization.Tests
             var x = new PartialConstructorTest(1);
 
             RoundTrip(x);
+        }
+
+        [Fact]
+        public void LoopWithConstructor()
+        {
+            var y = new ConcreteLoop { A = 1, B = 2, Test = "asd" };
+            var x = new TLoop(null!);
+            x.x = y;
+            y.Inst = x;
+
+            RoundTripGraphOnly(x);
         }
     }
 }

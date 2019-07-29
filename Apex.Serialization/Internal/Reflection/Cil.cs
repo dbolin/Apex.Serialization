@@ -1,6 +1,7 @@
 ﻿using Mono.Cecil;
 using Mono.Cecil.Cil;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -9,11 +10,13 @@ namespace Apex.Serialization.Internal.Reflection
 {
     internal static class Cil
     {
+        private static readonly ConcurrentDictionary<string, ModuleDefinition> _moduleDefinitions = new ConcurrentDictionary<string, ModuleDefinition>();
+
         public static ConstructorInfo? FindEmptyDeserializationConstructor(Type type)
         {
             try
             {
-                var module = ModuleDefinition.ReadModule(type.Assembly.Location);
+                var module = _moduleDefinitions.GetOrAdd(type.Assembly.Location, k => ModuleDefinition.ReadModule(k));
                 var typeRef = module.ImportReference(type);
                 var typeDef = typeRef.Resolve();
                 var defaultCtor = typeDef.Methods.FirstOrDefault(x => x.IsConstructor && x.Parameters.Count == 0 && !x.IsStatic);
@@ -52,7 +55,7 @@ namespace Apex.Serialization.Internal.Reflection
 
             try
             {
-                var module = ModuleDefinition.ReadModule(type.Assembly.Location);
+                var module = _moduleDefinitions.GetOrAdd(type.Assembly.Location, k => ModuleDefinition.ReadModule(k));
                 var typeRef = module.ImportReference(type);
                 var typeDef = typeRef.Resolve();
                 var constructors = typeDef.Methods.Where(x => x.IsConstructor && !x.IsStatic);
@@ -103,8 +106,7 @@ namespace Apex.Serialization.Internal.Reflection
                 {
                     var t1 = GetResolvedParameter(typeRef, methodParam.ParameterType);
                     var t2 = field.FieldType;
-                    if(t1.Module.Assembly.FullName == t2.Assembly.FullName
-                        && t1.FullName == t2.FullName)
+                    if (TypesMatch(t1, t2))
                     {
                         found = true;
                         fieldsToMatch.Remove(field);
@@ -112,7 +114,7 @@ namespace Apex.Serialization.Internal.Reflection
                     }
                 }
 
-                if(!found)
+                if (!found)
                 {
                     return null;
                 }
@@ -240,6 +242,31 @@ namespace Apex.Serialization.Internal.Reflection
             return null;
         }
 
+        private static bool TypesMatch(TypeDefinition t1, Type t2)
+        {
+            if(t1.Module.Assembly.FullName != t2.Assembly.FullName)
+            {
+                return false;
+            }
+
+            if(t1.Name != t2.Name)
+            {
+                return false;
+            }
+
+            if(t1.DeclaringType != null)
+            {
+                if(t2.DeclaringType == null)
+                {
+                    return false;
+                }
+
+                return t1.Name == t2.Name && TypesMatch(t1.DeclaringType, t2.DeclaringType);
+            }
+
+            return t1.Namespace == t2.Namespace;
+        }
+
         private static TypeDefinition GetResolvedParameter(TypeReference typeRef, TypeReference parameterType)
         {
             if(parameterType.IsGenericParameter)
@@ -271,8 +298,7 @@ namespace Apex.Serialization.Internal.Reflection
                 var t1 = p1[i].ParameterType;
                 var t2 = GetResolvedParameter(typeRef, p2[i].ParameterType);
 
-                if (t1.Assembly.FullName != t2.Module.Assembly.FullName
-                    || t1.FullName != t2.FullName)
+                if (!TypesMatch(t2, t1))
                 {
                     return false;
                 }

@@ -127,6 +127,12 @@ namespace Apex.Serialization.Internal.Reflection
                     continue;
                 }
 
+                if(fieldType.IsAbstract || fieldType.IsInterface)
+                {
+                    // possibly can do better here
+                    return false;
+                }
+
                 if(fieldType.IsAssignableFrom(originalType))
                 {
                     return false;

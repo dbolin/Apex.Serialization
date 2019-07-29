@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal;
@@ -169,15 +170,28 @@ namespace Apex.Serialization
 
         public void Precompile(Type type)
         {
-            ref var readMethod = ref VirtualReadMethods.GetOrAddValueRef(type);
-            if (readMethod == null)
+            lock (VirtualReadMethods)
             {
-                readMethod = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadObject>(type, Settings, true);
+                ref var readMethod = ref VirtualReadMethods.GetOrAddValueRef(type);
+                if (readMethod == null)
+                {
+                    readMethod = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadObject>(type, Settings, true);
+                }
             }
-            ref var writeMethod = ref VirtualWriteMethods.GetOrAddValueRef(type);
-            if (writeMethod == null)
+
+            lock (VirtualWriteMethods)
             {
-                writeMethod = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
+                ref var writeMethod = ref VirtualWriteMethods.GetOrAddValueRef(type);
+                if (writeMethod == null)
+                {
+                    writeMethod = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
+                }
+            }
+
+            if(type.IsSealed || type.IsValueType)
+            {
+                typeof(Binary<TStream>).GetMethods().Single(x => x.IsGenericMethod && x.Name == "Precompile")
+                    .MakeGenericMethod(type).Invoke(this, Array.Empty<object>());
             }
         }
 
