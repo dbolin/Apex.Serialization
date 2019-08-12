@@ -182,7 +182,7 @@ namespace Apex.Serialization.Internal
                 statements.AddRange(lengths.Select(x =>
                     Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
 
-                if (IsBlittable(elementType))
+                if (StaticTypeInfo.IsBlittable(elementType))
                 {
                     statements.Add(WriteArrayOfBlittableValues(output, actualSource, stream, dimensions, elementType, elementSize));
                 }
@@ -776,7 +776,7 @@ namespace Apex.Serialization.Internal
                         SerializerMethods.SavedReferencesListAdd, result));
                 }
 
-                if (IsBlittable(elementType))
+                if (StaticTypeInfo.IsBlittable(elementType))
                 {
                     statements.Add(ReadArrayOfBlittableValues(output, result, stream, dimensions, elementType, elementSize));
                 }
@@ -839,73 +839,6 @@ namespace Apex.Serialization.Internal
             }
 
             return statements.Count > 0 ? Expression.Block(statements) : null;
-        }
-
-        private static bool IsBlittable(Type elementType)
-        {
-            if (elementType == typeof(byte))
-            {
-                return true;
-            }
-            if (elementType == typeof(sbyte))
-            {
-                return true;
-            }
-            if (elementType == typeof(short))
-            {
-                return true;
-            }
-            if (elementType == typeof(ushort))
-            {
-                return true;
-            }
-            if (elementType == typeof(int))
-            {
-                return true;
-            }
-            if (elementType == typeof(uint))
-            {
-                return true;
-            }
-            if (elementType == typeof(long))
-            {
-                return true;
-            }
-            if (elementType == typeof(ulong))
-            {
-                return true;
-            }
-            if (elementType == typeof(char))
-            {
-                return true;
-            }
-            if (elementType == typeof(float))
-            {
-                return true;
-            }
-            if (elementType == typeof(double))
-            {
-                return true;
-            }
-            if (elementType == typeof(decimal))
-            {
-                return true;
-            }
-            if (elementType == typeof(bool))
-            {
-                return true;
-            }
-            if(elementType.IsEnum)
-            {
-                return true;
-            }
-
-            if (elementType.IsGenericType && elementType.GetGenericTypeDefinition() == typeof(Nullable<>))
-            {
-                return false;
-            }
-
-            return (elementType.IsExplicitLayout || elementType.IsLayoutSequential) && TypeFields.GetOrderedFields(elementType).All(x => IsBlittable(x.FieldType));
         }
 
         private static Expression ReadArrayOfBlittableValues(ParameterExpression output, Expression actualSource,

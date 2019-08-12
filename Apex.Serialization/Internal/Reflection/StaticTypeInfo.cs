@@ -2,7 +2,9 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace Apex.Serialization.Internal.Reflection
 {
@@ -20,7 +22,7 @@ namespace Apex.Serialization.Internal.Reflection
         internal static bool IsSealedOrHasNoDescendents(Type t) => t.IsSealed || HasNoDescendents(t);
         internal static bool HasNoDescendents(Type t)
         {
-            if(t.IsInterface || t.IsAbstract)
+            if (t.IsInterface || t.IsAbstract)
             {
                 return false;
             }
@@ -53,7 +55,7 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static IEnumerable<Assembly> AllAssemblies()
         {
-            if(_allAssemblies != null)
+            if (_allAssemblies != null)
             {
                 return _allAssemblies;
             }
@@ -76,7 +78,7 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static void Add(HashSet<Assembly> allAssemblies, Assembly? initial)
         {
-            if(initial == null)
+            if (initial == null)
             {
                 return;
             }
@@ -106,7 +108,7 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static bool CannotReference(Type originalType, Type currentType, HashSet<Type> testedTypes)
         {
-            if(!testedTypes.Add(currentType))
+            if (!testedTypes.Add(currentType))
             {
                 return true;
             }
@@ -127,23 +129,100 @@ namespace Apex.Serialization.Internal.Reflection
                     continue;
                 }
 
-                if(!HasNoDescendents(fieldType))
+                if (!HasNoDescendents(fieldType))
                 {
                     return false;
                 }
 
-                if(fieldType.IsAssignableFrom(originalType))
+                if (fieldType.IsAssignableFrom(originalType))
                 {
                     return false;
                 }
 
-                if(!CannotReference(originalType, fieldType, testedTypes))
+                if (!CannotReference(originalType, fieldType, testedTypes))
                 {
                     return false;
                 }
             }
 
             return true;
+        }
+
+        private static ConcurrentDictionary<Type, bool> _isBlittableCache = new ConcurrentDictionary<Type, bool>();
+
+        internal static bool IsBlittable(Type elementType)
+        {
+            return _isBlittableCache.GetOrAdd(elementType, _ =>
+            {
+                if(!elementType.IsValueType)
+                {
+                    return false;
+                }
+
+                if (elementType == typeof(byte))
+                {
+                    return true;
+                }
+                if (elementType == typeof(sbyte))
+                {
+                    return true;
+                }
+                if (elementType == typeof(short))
+                {
+                    return true;
+                }
+                if (elementType == typeof(ushort))
+                {
+                    return true;
+                }
+                if (elementType == typeof(int))
+                {
+                    return true;
+                }
+                if (elementType == typeof(uint))
+                {
+                    return true;
+                }
+                if (elementType == typeof(long))
+                {
+                    return true;
+                }
+                if (elementType == typeof(ulong))
+                {
+                    return true;
+                }
+                if (elementType == typeof(char))
+                {
+                    return true;
+                }
+                if (elementType == typeof(float))
+                {
+                    return true;
+                }
+                if (elementType == typeof(double))
+                {
+                    return true;
+                }
+                if (elementType == typeof(decimal))
+                {
+                    return true;
+                }
+                if (elementType == typeof(bool))
+                {
+                    return true;
+                }
+                if (elementType.IsEnum)
+                {
+                    return true;
+                }
+
+                if (elementType.IsGenericType && elementType.GetGenericTypeDefinition() == typeof(Nullable<>))
+                {
+                    return false;
+                }
+
+                return (elementType.IsExplicitLayout || elementType.IsLayoutSequential) && TypeFields.GetOrderedFields(elementType).All(x => IsBlittable(x.FieldType));
+            });
         }
     }
 }
