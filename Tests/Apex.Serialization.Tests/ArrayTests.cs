@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Xunit;
@@ -99,6 +100,8 @@ namespace Apex.Serialization.Tests
             RoundTrip(new float[] { 0, 1 });
             RoundTrip(new double[] { 0, 1 });
             RoundTrip(new char[] { 'a', 'b' });
+            RoundTrip(new decimal[] { 12.1m, 0.00m });
+            RoundTrip(new bool[] { false, true });
         }
 
         [Fact]
@@ -141,9 +144,18 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
-        public void MultiDimensionalArray()
+        public void MultiDimensionalArrayInt()
         {
             var x = new int[,] {{1, 2, 3}, {4, 5, 6}, {7, 8, 9}};
+
+            RoundTrip(x);
+        }
+
+        [Fact]
+        public void MultiDimensionalArrayStruct()
+        {
+            var v = new Vector3(1, 2, 3);
+            var x = new Vector3[,] { { v, v*2, v*3 }, { v*4, v*5, v*6 }, { v*7, v*8, v*9 } };
 
             RoundTrip(x);
         }

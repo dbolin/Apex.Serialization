@@ -105,7 +105,7 @@ namespace Apex.Serialization.Internal.Reflection
 
             var fields = GetFields(type);
 
-            if (type.IsValueType && fields.Count <= 1 && fields.All(f => IsPrimitive(f)))
+            if (type.IsValueType && fields.All(f => IsPrimitive(f)))
             {
                 size = (int) typeof(Unsafe).GetMethod("SizeOf")!.MakeGenericMethod(type)!
                     .Invoke(null, Array.Empty<Type>())!;

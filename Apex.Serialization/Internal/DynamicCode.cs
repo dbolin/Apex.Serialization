@@ -182,7 +182,7 @@ namespace Apex.Serialization.Internal
                 statements.AddRange(lengths.Select(x =>
                     Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
 
-                if (IsBlittable(elementType) && dimensions == 1)
+                if (IsBlittable(elementType))
                 {
                     statements.Add(WriteArrayOfBlittableValues(output, actualSource, stream, dimensions, elementType, elementSize));
                 }
@@ -776,7 +776,7 @@ namespace Apex.Serialization.Internal
                         SerializerMethods.SavedReferencesListAdd, result));
                 }
 
-                if (IsBlittable(elementType) && dimensions == 1)
+                if (IsBlittable(elementType))
                 {
                     statements.Add(ReadArrayOfBlittableValues(output, result, stream, dimensions, elementType, elementSize));
                 }
@@ -859,10 +859,6 @@ namespace Apex.Serialization.Internal
             {
                 return true;
             }
-            if (elementType == typeof(char))
-            {
-                return true;
-            }
             if (elementType == typeof(int))
             {
                 return true;
@@ -879,6 +875,10 @@ namespace Apex.Serialization.Internal
             {
                 return true;
             }
+            if (elementType == typeof(char))
+            {
+                return true;
+            }
             if (elementType == typeof(float))
             {
                 return true;
@@ -887,8 +887,25 @@ namespace Apex.Serialization.Internal
             {
                 return true;
             }
+            if (elementType == typeof(decimal))
+            {
+                return true;
+            }
+            if (elementType == typeof(bool))
+            {
+                return true;
+            }
+            if(elementType.IsEnum)
+            {
+                return true;
+            }
 
-            return elementType.IsExplicitLayout && TypeFields.GetOrderedFields(elementType).All(x => IsBlittable(x.FieldType));
+            if (elementType.IsGenericType && elementType.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                return false;
+            }
+
+            return (elementType.IsExplicitLayout || elementType.IsLayoutSequential) && TypeFields.GetOrderedFields(elementType).All(x => IsBlittable(x.FieldType));
         }
 
         private static Expression ReadArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
