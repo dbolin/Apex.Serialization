@@ -56,22 +56,22 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static Dictionary<Type, int> primitiveTypeSizeDictionary = new Dictionary<Type, int>
         {
-            {typeof(bool), 1},
-            {typeof(byte), 1},
-            {typeof(sbyte), 1},
-            {typeof(char), 2},
-            {typeof(decimal), 16},
-            {typeof(double), 8},
-            {typeof(float), 4},
-            {typeof(int), 4},
-            {typeof(uint), 4},
-            {typeof(long), 8},
-            {typeof(ulong), 8},
-            {typeof(short), 2},
-            {typeof(ushort), 2},
-            {typeof(IntPtr), 8},
-            {typeof(UIntPtr), 8},
-            {typeof(Guid), 16},
+            {typeof(bool), Unsafe.SizeOf<bool>()},
+            {typeof(byte), Unsafe.SizeOf<byte>()},
+            {typeof(sbyte), Unsafe.SizeOf<sbyte>()},
+            {typeof(char), Unsafe.SizeOf<char>()},
+            {typeof(decimal), Unsafe.SizeOf<decimal>()},
+            {typeof(double), Unsafe.SizeOf<double>()},
+            {typeof(float), Unsafe.SizeOf<float>()},
+            {typeof(int), Unsafe.SizeOf<int>()},
+            {typeof(uint), Unsafe.SizeOf<uint>()},
+            {typeof(long), Unsafe.SizeOf<long>()},
+            {typeof(ulong), Unsafe.SizeOf<ulong>()},
+            {typeof(short), Unsafe.SizeOf<short>()},
+            {typeof(ushort), Unsafe.SizeOf<ushort>()},
+            {typeof(IntPtr), IntPtr.Size},
+            {typeof(UIntPtr), UIntPtr.Size},
+            {typeof(Guid), Unsafe.SizeOf<Guid>()},
         };
         
         private static DictionarySlim<Type, int> structSizeDictionary = new DictionarySlim<Type, int>();
