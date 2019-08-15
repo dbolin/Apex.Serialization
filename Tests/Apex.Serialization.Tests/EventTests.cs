@@ -12,7 +12,7 @@ namespace Apex.Serialization.Tests
         {
             public delegate void EventHandler(int v);
 
-            public event EventHandler OnEvent;
+            public event EventHandler? OnEvent;
 
             public void RaiseEvent()
             {
