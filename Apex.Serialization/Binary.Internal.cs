@@ -253,7 +253,7 @@ namespace Apex.Serialization
             method(value, ref _stream, this);
         }
 
-        internal bool WriteNullByteInternal([NotNullWhenFalse] object? value)
+        internal bool WriteNullByteInternal(object? value)
         {
             _stream.ReserveSize(1);
             if (ReferenceEquals(value, null))
