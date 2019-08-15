@@ -195,17 +195,17 @@ namespace Apex.Serialization
             }
         }
 
-        void ISerializer.WriteTypeRef(Type value)
+        bool ISerializer.WriteTypeRef(Type value)
         {
-            WriteTypeRefInternal(value);
+            return WriteTypeRefInternal(value);
         }
 
-        internal void WriteTypeRefInternal(Type value)
+        internal bool WriteTypeRefInternal(Type value)
         {
             if(_lastRefType == value)
             {
                 _stream.Write(_lastRefIndex);
-                return;
+                return false;
             }
 
             _lastRefType = value;
@@ -216,13 +216,13 @@ namespace Apex.Serialization
                 index = _savedTypeLookup.Count;
                 _stream.Write(-1);
                 _stream.WriteTypeId(value);
-            }
-            else
-            {
-                _stream.Write(index);
+                _lastRefIndex = index;
+                return true;
             }
 
+            _stream.Write(index);
             _lastRefIndex = index;
+            return false;
         }
 
         internal void WriteInternal(object? value)

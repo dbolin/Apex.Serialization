@@ -78,7 +78,8 @@ namespace Apex.Serialization.Internal
             return loop;
         }
 
-        internal static Expression? ReadList(Type type, ParameterExpression output, Expression result, ParameterExpression stream, ImmutableSettings settings)
+        internal static Expression? ReadList(Type type, ParameterExpression output, Expression result,
+            ParameterExpression stream, ImmutableSettings settings, List<ParameterExpression> localVariables)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
             var collectionType = type;
@@ -168,7 +169,7 @@ namespace Apex.Serialization.Internal
                         Expression.Block(
                             Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
                             Expression.Call(result, collectionType.GetMethod(addMethod, collectionType.GenericTypeArguments),
-                                ReadValue(stream, output, valueType, out _)
+                                ReadValue(stream, output, settings, valueType, localVariables, out _)
                                 ),
                             Expression.AddAssign(countVar, Expression.Constant(-1))
                             )

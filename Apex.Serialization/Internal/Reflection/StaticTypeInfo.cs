@@ -117,7 +117,7 @@ namespace Apex.Serialization.Internal.Reflection
 
             foreach (var field in fields)
             {
-                if (TypeFields.IsPrimitive(field))
+                if (TypeFields.IsPrimitive(field.FieldType))
                 {
                     continue;
                 }

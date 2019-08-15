@@ -36,16 +36,16 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static object _cacheLock = new object();
 
-        internal static bool IsPrimitive(FieldInfo x)
+        internal static bool IsPrimitive(Type x)
         {
             lock (_cacheLock)
             {
-                if (primitiveTypeSizeDictionary.ContainsKey(x.FieldType))
+                if (primitiveTypeSizeDictionary.ContainsKey(x))
                 {
                     return true;
                 }
 
-                if (TryGetSizeForStruct(x.FieldType, out _))
+                if (TryGetSizeForStruct(x, out _))
                 {
                     return true;
                 }
@@ -105,7 +105,7 @@ namespace Apex.Serialization.Internal.Reflection
 
             var fields = GetFields(type);
 
-            if (type.IsValueType && fields.All(f => IsPrimitive(f)))
+            if (type.IsValueType && fields.All(f => IsPrimitive(f.FieldType)))
             {
                 size = (int) typeof(Unsafe).GetMethod("SizeOf")!.MakeGenericMethod(type)!
                     .Invoke(null, Array.Empty<Type>())!;
@@ -140,14 +140,14 @@ namespace Apex.Serialization.Internal.Reflection
                     var unorderedFields = GetFields(type);
                     if (FieldInfoModifier.MustUseReflectionToSetReadonly)
                     {
-                        fields = unorderedFields.OrderBy(x => IsPrimitive(x) ? 0 : 1)
+                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType) ? 0 : 1)
                             .ThenBy(x => x.IsInitOnly ? 0 : 1)
                             .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
                             .ThenBy(x => x.Name).ToList();
                     }
                     else
                     {
-                        fields = unorderedFields.OrderBy(x => IsPrimitive(x) ? 0 : 1)
+                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType) ? 0 : 1)
                             .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
                             .ThenBy(x => x.Name).ToList();
                     }

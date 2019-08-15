@@ -15,7 +15,7 @@ namespace Apex.Serialization.Internal
         List<Type> LoadedTypeRefs { get; }
 
         bool WriteObjectRef(object value);
-        void WriteTypeRef(Type value);
+        bool WriteTypeRef(Type value);
 
         Type ReadTypeRef();
 
@@ -75,7 +75,6 @@ namespace Apex.Serialization.Internal
         internal static readonly MethodInfo CustomContextGetter =
             typeof(ISerializer).GetMethod("GetCustomContext")!;
 
-        internal static readonly MethodInfo WriteNullByteMethod = typeof(ISerializer).GetMethod("WriteNullByte")!;
         internal static readonly MethodInfo WriteNullableByteMethod = typeof(ISerializer).GetMethod("WriteNullableByte")!;
         internal static readonly MethodInfo ReadNullByteMethod = typeof(ISerializer).GetMethod("ReadNullByte")!;
 
