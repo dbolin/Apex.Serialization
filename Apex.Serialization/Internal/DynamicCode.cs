@@ -580,9 +580,8 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    var shouldCheckForSpecificConstructor = settings.UseConstructors && (settings.SerializationMode == Mode.Tree || StaticTypeInfo.CannotReferenceSelf(type));
-                    var useConstructorDeserialization = shouldCheckForSpecificConstructor ? Cil.FindSpecificDeserializationConstructor(type, fields) : null;
-                    if(useConstructorDeserialization.HasValue)
+                    var useConstructorDeserialization = ShouldCheckForSpecificConstructor(type, settings) ? Cil.FindSpecificDeserializationConstructor(type, fields) : null;
+                    if (useConstructorDeserialization.HasValue)
                     {
                         specificConstructorDeserialization = true;
                         var constructor = useConstructorDeserialization.Value.constructor;
@@ -736,6 +735,16 @@ namespace Apex.Serialization.Internal
             }
 
             return readStatements;
+        }
+
+        private static bool ShouldCheckForSpecificConstructor(Type type, ImmutableSettings settings)
+        {
+            return settings.UseConstructors
+                && (
+                    settings.SerializationMode == Mode.Tree
+                    || (Attribute.GetCustomAttribute(type, typeof(ImmutableAttribute)) as ImmutableAttribute)?.OnFaith == false
+                    || StaticTypeInfo.CannotReferenceSelf(type)
+                    );
         }
 
         private static Expression AfterDeserializeCallExpression(Type type, MethodInfo m,

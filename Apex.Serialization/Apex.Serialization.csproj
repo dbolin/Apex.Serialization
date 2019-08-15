@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>netstandard2.0;netcoreapp3.0</TargetFrameworks>
     <LangVersion>8.0</LangVersion>
-    <Version>1.1.0-pre.5</Version>
+    <Version>1.1.0-pre.6</Version>
     <Authors>Dominic Bolin</Authors>
     <Description>A high performance contract-less binary serializer</Description>
     <PackageProjectUrl>https://github.com/dbolin/Apex.Serialization</PackageProjectUrl>
@@ -30,6 +30,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Apex.Analyzers.Immutable.Attributes" Version="1.0.0" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0-beta2-19367-01" PrivateAssets="All" />
   </ItemGroup>
  
