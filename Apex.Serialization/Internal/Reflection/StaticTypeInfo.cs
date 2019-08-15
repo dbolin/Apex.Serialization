@@ -50,7 +50,7 @@ namespace Apex.Serialization.Internal.Reflection
             });
         }
 
-        private static HashSet<Assembly> _allAssemblies;
+        private static HashSet<Assembly>? _allAssemblies;
         private static object _allAssembliesLock = new object();
 
         private static IEnumerable<Assembly> AllAssemblies()
