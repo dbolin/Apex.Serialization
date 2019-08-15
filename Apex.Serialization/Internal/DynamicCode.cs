@@ -98,7 +98,7 @@ namespace Apex.Serialization.Internal
                                       && !typeof(Type).IsAssignableFrom(type))
                 {
                     writeStatements.Add(Expression.IfThen(
-                        Expression.Call(output, SerializerMethods.WriteObjectRefMethod, source),
+                        Expression.Call(output, WriteObjectRefMethod, source),
                         Expression.Return(returnTarget)));
                 }
                 else if (shouldWriteTypeInfo)
@@ -115,7 +115,7 @@ namespace Apex.Serialization.Internal
                 {
                     writeStatements.Add(
                         Expression.IfThen(
-                            Expression.Call(output, SerializerMethods.WriteTypeRefMethod, Expression.Constant(type)),
+                            Expression.Call(output, WriteTypeRefMethod, Expression.Constant(type)),
                             Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
                                 Expression.Constant(maxSizeNeeded))
                         )
@@ -123,7 +123,7 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    writeStatements.Add(Expression.Call(output, SerializerMethods.WriteTypeRefMethod, Expression.Constant(type)));
+                    writeStatements.Add(Expression.Call(output, WriteTypeRefMethod, Expression.Constant(type)));
                 }
             }
 
@@ -158,7 +158,7 @@ namespace Apex.Serialization.Internal
                 wrapperStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
                         Expression.Constant(maxSizeNeeded + metaBytes)));
                 wrapperStatements.Add(Expression.IfThenElse(
-                        Expression.Call(null, ObjectReferenceEquals, actualSource, Expression.Constant(null)),
+                        Expression.ReferenceEqual(actualSource, Expression.Constant(null)),
                         Expression.Block(
                             Expression.Call(stream, BinaryStreamMethods<BufferedStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)0)),
                             Expression.Continue(afterWriteLabel)
@@ -189,7 +189,7 @@ namespace Apex.Serialization.Internal
 
             if (typeof(Type).IsAssignableFrom(type))
             {
-                return Expression.Call(output, SerializerMethods.WriteTypeRefMethod, actualSource);
+                return Expression.Call(output, WriteTypeRefMethod, actualSource);
             }
 
             if (typeof(Delegate).IsAssignableFrom(type))
@@ -199,7 +199,7 @@ namespace Apex.Serialization.Internal
                     throw new NotSupportedException("Function serialization is not supported unless the 'AllowFunctionSerialization' setting is true");
                 }
 
-                return Expression.Call(output, SerializerMethods.WriteFunctionMethod, Expression.Convert(source, typeof(Delegate)));
+                return Expression.Call(output, WriteFunctionMethod, Expression.Convert(source, typeof(Delegate)));
             }
 
             var custom = HandleCustomWrite(output, type, actualSource, settings);
@@ -236,7 +236,7 @@ namespace Apex.Serialization.Internal
                 statements.AddRange(lengths.Select(x =>
                     Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
 
-                if (StaticTypeInfo.IsBlittable(elementType))
+                if (StaticTypeInfo.IsBlittable(elementType) && dimensions < 3)
                 {
                     statements.Add(WriteArrayOfBlittableValues(output, actualSource, stream, dimensions, elementType, elementSize));
                 }
@@ -253,12 +253,17 @@ namespace Apex.Serialization.Internal
         private static Expression WriteArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
             ParameterExpression stream, int dimensions, Type elementType, int elementSize)
         {
-            return Expression.Call(output, SerializerMethods.WriteArrayOfValuesMethod,
-                Expression.Convert(actualSource, typeof(object)), Expression.Property(actualSource, "Length"),
-                Expression.Constant(elementSize));
+            return dimensions switch
+            {
+                1 => Expression.Call(output, WriteArrayOfValuesMethod1.MakeGenericMethod(elementType),
+                       actualSource,
+                       Expression.Constant(elementSize)),
+                2 => Expression.Call(output, WriteArrayOfValuesMethod2.MakeGenericMethod(elementType),
+                       actualSource,
+                       Expression.Constant(elementSize)),
+                _ => throw new InvalidOperationException($"Blitting multidimensional array with {dimensions} dimensions is not supported"),
+            };
         }
-
-        private static readonly MethodInfo ObjectReferenceEquals = typeof(object).GetMethod("ReferenceEquals", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
 
         private static Expression WriteArrayGeneral(ParameterExpression output, Expression actualSource,
             ParameterExpression stream, int dimensions, List<ParameterExpression> lengths, Type elementType, int elementSize,
@@ -446,13 +451,13 @@ namespace Apex.Serialization.Internal
                     var customContextType = entry.Value.CustomContextType;
                     if (customContextType != null)
                     {
-                        var customContext = Expression.Call(output, SerializerMethods.CustomContextGetter.MakeGenericMethod(customContextType));
+                        var customContext = Expression.Call(output, CustomContextGetter.MakeGenericMethod(customContextType));
                         statements.Add(Expression.Call(
                             Expression.Convert(
                                 Expression.Constant(entry.Value.Action),
                                 typeof(Action<,,>).MakeGenericType(declaredType, typeof(IBinaryWriter), customContextType)),
                             entry.Value.InvokeMethodInfo, valueAccessExpression,
-                            Expression.Call(output, SerializerMethods.BinaryWriterGetter),
+                            Expression.Call(output, BinaryWriterGetter),
                             customContext));
                     }
                     else
@@ -462,7 +467,7 @@ namespace Apex.Serialization.Internal
                                 Expression.Constant(entry.Value.Action),
                                 typeof(Action<,>).MakeGenericType(declaredType, typeof(IBinaryWriter))),
                             entry.Value.InvokeMethodInfo, valueAccessExpression,
-                            Expression.Call(output, SerializerMethods.BinaryWriterGetter)));
+                            Expression.Call(output, BinaryWriterGetter)));
                     }
                 }
             }
@@ -496,7 +501,7 @@ namespace Apex.Serialization.Internal
                 return null;
             }
 
-            return Expression.IfThen(Expression.Not(Expression.Call(output, SerializerMethods.WriteNullableByteMethod.MakeGenericMethod(declaredType.GenericTypeArguments), valueAccessExpression)),
+            return Expression.IfThen(Expression.Not(Expression.Call(output, WriteNullableByteMethod.MakeGenericMethod(declaredType.GenericTypeArguments), valueAccessExpression)),
                 Expression.Call(output, "WriteValueInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
         }
 
@@ -596,9 +601,9 @@ namespace Apex.Serialization.Internal
                         if (settings.SerializationMode == Mode.Graph && !type.IsValueType)
                         {
                             constructorLocalVariables.Add(currentSavedReferencesIndexVariable);
-                            constructorLocalStatements.Add(Expression.Assign(currentSavedReferencesIndexVariable, Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter), SerializerMethods.SavedReferencesListCountGetter)));
-                            constructorLocalStatements.Add(Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
-                            SerializerMethods.SavedReferencesListAdd, Expression.Constant(null)));
+                            constructorLocalStatements.Add(Expression.Assign(currentSavedReferencesIndexVariable, Expression.Call(Expression.Call(output, SavedReferencesGetter), SavedReferencesListCountGetter)));
+                            constructorLocalStatements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                            SavedReferencesListAdd, Expression.Constant(null)));
                         }
 
                         foreach (var field in fields)
@@ -622,8 +627,8 @@ namespace Apex.Serialization.Internal
                         {
                             constructorLocalStatements.Add(
                                 Expression.Assign(
-                                    Expression.Property(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
-                                        SerializerMethods.SavedReferencesListIndexer, currentSavedReferencesIndexVariable),
+                                    Expression.Property(Expression.Call(output, SavedReferencesGetter),
+                                        SavedReferencesListIndexer, currentSavedReferencesIndexVariable),
                                 result)
                             );
                         }
@@ -645,8 +650,8 @@ namespace Apex.Serialization.Internal
             {
                 if (!type.IsValueType && settings.SerializationMode == Mode.Graph)
                 {
-                    readStatements.Add(Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
-                        SerializerMethods.SavedReferencesListAdd, result));
+                    readStatements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                        SavedReferencesListAdd, result));
                 }
             }
 
@@ -729,7 +734,7 @@ namespace Apex.Serialization.Internal
                         )
                         , $"AfterDeserialize_{type.FullName}", new[] {objectParameter, contextParameter}).Compile();
 
-                    readStatements.Add(Expression.Call(output, SerializerMethods.QueueAfterDeserializationHook,
+                    readStatements.Add(Expression.Call(output, QueueAfterDeserializationHook,
                         Expression.Constant(action), result));
                 }
             }
@@ -783,8 +788,8 @@ namespace Apex.Serialization.Internal
                 {
                     return Expression.Block(
                         Expression.Assign(result, primitive),
-                        Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
-                            SerializerMethods.SavedReferencesListAdd, result)
+                        Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                            SavedReferencesListAdd, result)
                     );
                 }
 
@@ -794,7 +799,7 @@ namespace Apex.Serialization.Internal
             if (typeof(Type).IsAssignableFrom(type))
             {
                 created = true;
-                return Expression.Assign(result, Expression.Convert(Expression.Call(output, SerializerMethods.ReadTypeRefMethod), type));
+                return Expression.Assign(result, Expression.Convert(Expression.Call(output, ReadTypeRefMethod), type));
             }
 
             if (typeof(Delegate).IsAssignableFrom(type))
@@ -805,7 +810,7 @@ namespace Apex.Serialization.Internal
                 }
 
                 created = true;
-                return Expression.Assign(result, Expression.Convert(Expression.Call(output, SerializerMethods.ReadFunctionMethod), type));
+                return Expression.Assign(result, Expression.Convert(Expression.Call(output, ReadFunctionMethod), type));
             }
 
             var custom = HandleCustomRead(type, output, result, settings);
@@ -847,11 +852,11 @@ namespace Apex.Serialization.Internal
 
                 if (settings.SerializationMode == Mode.Graph)
                 {
-                    statements.Add(Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
-                        SerializerMethods.SavedReferencesListAdd, result));
+                    statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                        SavedReferencesListAdd, result));
                 }
 
-                if (StaticTypeInfo.IsBlittable(elementType))
+                if (StaticTypeInfo.IsBlittable(elementType) && dimensions < 3)
                 {
                     statements.Add(ReadArrayOfBlittableValues(output, result, stream, dimensions, elementType, elementSize));
                 }
@@ -892,13 +897,13 @@ namespace Apex.Serialization.Internal
                     var customContextType = entry.Value.CustomContextType;
                     if(customContextType != null)
                     {
-                        var customContext = Expression.Call(output, SerializerMethods.CustomContextGetter.MakeGenericMethod(customContextType));
+                        var customContext = Expression.Call(output, CustomContextGetter.MakeGenericMethod(customContextType));
                         statements.Add(Expression.Call(
                             Expression.Convert(
                                 Expression.Constant(entry.Value.Action),
                                 typeof(Action<,,>).MakeGenericType(type, typeof(IBinaryReader), customContextType)),
                             entry.Value.InvokeMethodInfo, result,
-                            Expression.Call(output, SerializerMethods.BinaryReaderGetter),
+                            Expression.Call(output, BinaryReaderGetter),
                             customContext));
                     }
                     else
@@ -908,7 +913,7 @@ namespace Apex.Serialization.Internal
                                 Expression.Constant(entry.Value.Action),
                                 typeof(Action<,>).MakeGenericType(type, typeof(IBinaryReader))),
                             entry.Value.InvokeMethodInfo, result,
-                            Expression.Call(output, SerializerMethods.BinaryReaderGetter)));
+                            Expression.Call(output, BinaryReaderGetter)));
                     }
                 }
             }
@@ -919,8 +924,14 @@ namespace Apex.Serialization.Internal
         private static Expression ReadArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
             ParameterExpression stream, int dimensions, Type elementType, int elementSize)
         {
-            return Expression.Call(output, SerializerMethods.ReadArrayOfValuesMethod,
-                Expression.Convert(actualSource, typeof(object)), Expression.Constant(elementSize));
+            return dimensions switch
+            {
+                1 => Expression.Call(output, ReadArrayOfValuesMethod1.MakeGenericMethod(elementType),
+                       actualSource, Expression.Constant(elementSize)),
+                2 => Expression.Call(output, ReadArrayOfValuesMethod2.MakeGenericMethod(elementType),
+                       actualSource, Expression.Constant(elementSize)),
+                _ => throw new InvalidOperationException($"Blitting multidimensional array with {dimensions} dimensions is not supported"),
+            };
         }
 
         private static Expression ReadArrayGeneral(ParameterExpression output, Expression result,
@@ -948,8 +959,19 @@ namespace Apex.Serialization.Internal
                 && !typeof(Delegate).IsAssignableFrom(elementType))
             {
                 var fields = TypeFields.GetOrderedFields(elementType);
-                readValue = Expression.Block(GetReadStatementsForType(elementType, settings, stream, output,
-                    accessExpression, fields, localVariables));
+                if (fields.Count > 2)
+                {
+                    var tempVar = Expression.Variable(elementType, "tempElement");
+                    var elementReadStatements = GetReadStatementsForType(elementType, settings, stream, output,
+                        tempVar, fields, localVariables);
+                    elementReadStatements.Add(Expression.Assign(accessExpression, tempVar));
+                    readValue = Expression.Block(new[] { tempVar }, elementReadStatements);
+                }
+                else
+                {
+                    readValue = Expression.Block(GetReadStatementsForType(elementType, settings, stream, output,
+                        accessExpression, fields, localVariables));
+                }
 
                 if (!elementType.IsValueType)
                 {
@@ -969,8 +991,8 @@ namespace Apex.Serialization.Internal
                                             Expression.Assign(accessExpression, 
                                                 Expression.Convert(
                                                     Expression.Property(
-                                                        Expression.Call(output, SerializerMethods.SavedReferencesGetter), 
-                                                    SerializerMethods.SavedReferencesListIndexer, Expression.Decrement(refIndex)), 
+                                                        Expression.Call(output, SavedReferencesGetter), 
+                                                    SavedReferencesListIndexer, Expression.Decrement(refIndex)), 
                                                 elementType)
                                             ),
                                             Expression.Continue(continueLabels[continueLabels.Count - 1])
@@ -1165,9 +1187,61 @@ namespace Apex.Serialization.Internal
                 return null;
             }
 
-            return Expression.Condition(Expression.Not(Expression.Call(output, SerializerMethods.ReadNullByteMethod)),
+            return Expression.Condition(Expression.Not(Expression.Call(output, ReadNullByteMethod)),
                 Expression.Convert(Expression.Call(output, "ReadValueInternal", declaredType.GenericTypeArguments),
                     declaredType), Expression.Convert(Expression.Constant(null), declaredType));
         }
+
+        private static readonly BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
+        private static readonly MethodInfo SavedReferencesGetter =
+            typeof(TBinary).GetProperty("LoadedObjectRefs", InstanceFlags)!.GetMethod!;
+
+        private static readonly MethodInfo WriteObjectRefMethod =
+            typeof(TBinary).GetMethod("WriteObjectRef", InstanceFlags)!;
+
+        private static readonly MethodInfo WriteTypeRefMethod =
+            typeof(TBinary).GetMethod("WriteTypeRef", InstanceFlags)!;
+
+        private static readonly MethodInfo ReadTypeRefMethod =
+            typeof(TBinary).GetMethod("ReadTypeRef", InstanceFlags)!;
+
+        private static readonly MethodInfo SavedReferencesListAdd =
+            typeof(List<object>).GetMethod("Add")!;
+
+        private static readonly MethodInfo SavedReferencesListCountGetter =
+            typeof(List<object>).GetProperty("Count")!.GetMethod!;
+
+        private static readonly PropertyInfo SavedReferencesListIndexer =
+            typeof(List<object>).GetProperty("Item", new[] { typeof(int) })!;
+
+        private static readonly MethodInfo LoadedTypeReferencesGetter =
+            typeof(TBinary).GetProperty("LoadedTypeRefs", InstanceFlags)!.GetMethod!;
+
+        private static readonly PropertyInfo LoadedTypeListIndexer =
+            typeof(List<Type>).GetProperty("Item", new[] { typeof(int) })!;
+
+        private static readonly MethodInfo BinaryWriterGetter =
+            typeof(TBinary).GetProperty("BinaryWriter", InstanceFlags)!.GetMethod!;
+
+        private static readonly MethodInfo BinaryReaderGetter =
+            typeof(TBinary).GetProperty("BinaryReader", InstanceFlags)!.GetMethod!;
+
+        private static readonly MethodInfo CustomContextGetter =
+            typeof(TBinary).GetMethod("GetCustomContext", InstanceFlags)!;
+
+        private static readonly MethodInfo WriteNullableByteMethod = typeof(TBinary).GetMethod("WriteNullableByte", InstanceFlags)!;
+        private static readonly MethodInfo ReadNullByteMethod = typeof(TBinary).GetMethod("ReadNullByte", InstanceFlags)!;
+
+        private static readonly MethodInfo WriteFunctionMethod = typeof(TBinary).GetMethod("WriteFunction", InstanceFlags)!;
+        private static readonly MethodInfo ReadFunctionMethod = typeof(TBinary).GetMethod("ReadFunction", InstanceFlags)!;
+
+        private static readonly MethodInfo WriteArrayOfValuesMethod1 = typeof(TBinary).GetMethod("WriteValuesArray1", InstanceFlags)!;
+        private static readonly MethodInfo ReadArrayOfValuesMethod1 = typeof(TBinary).GetMethod("ReadIntoValuesArray1", InstanceFlags)!;
+        private static readonly MethodInfo WriteArrayOfValuesMethod2 = typeof(TBinary).GetMethod("WriteValuesArray2", InstanceFlags)!;
+        private static readonly MethodInfo ReadArrayOfValuesMethod2 = typeof(TBinary).GetMethod("ReadIntoValuesArray2", InstanceFlags)!;
+
+        private static readonly MethodInfo QueueAfterDeserializationHook =
+            typeof(TBinary).GetMethod("QueueAfterDeserializationHook", InstanceFlags)!;
     }
 }

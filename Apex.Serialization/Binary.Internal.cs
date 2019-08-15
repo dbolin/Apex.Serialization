@@ -62,7 +62,7 @@ namespace Apex.Serialization
                 return result;
             }
 
-            var type = ReadTypeRefInternal();
+            var type = ReadTypeRef();
 
             if (_lastReadType == type)
             {
@@ -82,12 +82,7 @@ namespace Apex.Serialization
             return method(ref _stream, this);
         }
 
-        Type ISerializer.ReadTypeRef()
-        {
-            return ReadTypeRefInternal();
-        }
-
-        private unsafe Type ReadTypeRefInternal()
+        private unsafe Type ReadTypeRef()
         {
             _stream.ReserveSize(4);
             var knownTypeIndex = _stream.Read<int>();
@@ -168,18 +163,13 @@ namespace Apex.Serialization
             return false;
         }
 
-        internal bool ReadNullByteInternal()
+        internal bool ReadNullByte()
         {
             _stream.ReserveSize(1);
             return _stream.Read<byte>() == 0;
         }
 
-        bool ISerializer.ReadNullByte()
-        {
-            return ReadNullByteInternal();
-        }
-
-        bool ISerializer.WriteObjectRef(object value)
+        internal bool WriteObjectRef(object value)
         {
             ref var index = ref _savedObjectLookup!.GetOrAddValueRef(value);
             if (index == 0)
@@ -195,12 +185,7 @@ namespace Apex.Serialization
             }
         }
 
-        bool ISerializer.WriteTypeRef(Type value)
-        {
-            return WriteTypeRefInternal(value);
-        }
-
-        internal bool WriteTypeRefInternal(Type value)
+        internal bool WriteTypeRef(Type value)
         {
             if(_lastRefType == value)
             {
@@ -269,12 +254,13 @@ namespace Apex.Serialization
             return false;
         }
 
-        bool ISerializer.WriteNullByte(object value)
+        internal bool WriteNullByte(object value)
         {
             return WriteNullByteInternal(value);
         }
 
-        bool ISerializer.WriteNullableByte<T>(T? value)
+        internal bool WriteNullableByte<T>(T? value)
+            where T : struct
         {
             _stream.ReserveSize(1);
             if (value.HasValue)
@@ -317,18 +303,13 @@ namespace Apex.Serialization
             return genericTypes;
         }
 
-        void ISerializer.WriteFunction(Delegate value)
-        {
-            WriteFunctionInternal(value);
-        }
-
-        internal void WriteFunctionInternal(Delegate value)
+        internal void WriteFunction(Delegate value)
         {
             var delegateType = value.GetType();
             _stream.ReserveSize(4);
-            WriteTypeRefInternal(delegateType);
+            WriteTypeRef(delegateType);
             _stream.ReserveSize(4);
-            WriteTypeRefInternal(value.Method.DeclaringType!);
+            WriteTypeRef(value.Method.DeclaringType!);
             _stream.Write(value.Method.Name);
             _stream.ReserveSize(2);
             var parameters = GetMethodParameterTypes(value.Method);
@@ -338,12 +319,12 @@ namespace Apex.Serialization
             for (int i = 0; i < parameters.Length; ++i)
             {
                 _stream.ReserveSize(4);
-                WriteTypeRefInternal(parameters[i]);
+                WriteTypeRef(parameters[i]);
             }
             for (int i = 0; i < generics.Length; ++i)
             {
                 _stream.ReserveSize(4);
-                WriteTypeRefInternal(generics[i]);
+                WriteTypeRef(generics[i]);
             }
             _stream.ReserveSize(1);
             if (value.Target == null)
@@ -385,13 +366,8 @@ namespace Apex.Serialization
 
             for (int i = 0; i < (int)invocationCount; ++i)
             {
-                WriteFunctionInternal((Delegate)invocationList[i]);
+                WriteFunction((Delegate)invocationList[i]);
             }
-        }
-
-        Delegate ISerializer.ReadFunction()
-        {
-            return ReadFunctionInternal();
         }
 
         internal struct DelegateID : IEquatable<DelegateID>
@@ -460,17 +436,17 @@ namespace Apex.Serialization
             ).Compile();
         }
 
-        internal Delegate ReadFunctionInternal()
+        internal Delegate ReadFunction()
         {
-            var delegateType = ReadTypeRefInternal();
-            var declaringType = ReadTypeRefInternal();
+            var delegateType = ReadTypeRef();
+            var declaringType = ReadTypeRef();
             var methodName = _stream.Read();
             _stream.ReserveSize(2);
             var parameterCount = _stream.Read<byte>();
             var genericCount = _stream.Read<byte>();
             for (int i = 0; i < parameterCount; ++i)
             {
-                _parameterTypeBuffer[i] = ReadTypeRefInternal();
+                _parameterTypeBuffer[i] = ReadTypeRef();
             }
 
             var genericTypeBuffer = genericCount <= 4
@@ -479,7 +455,7 @@ namespace Apex.Serialization
 
             for (int i = 0; i < genericCount; ++i)
             {
-                genericTypeBuffer![i] = ReadTypeRefInternal();
+                genericTypeBuffer![i] = ReadTypeRef();
             }
 
             _stream.ReserveSize(1);
@@ -561,7 +537,7 @@ namespace Apex.Serialization
             var list = new Delegate[invocationCount];
             for (int i = 0; i < invocationCount; ++i)
             {
-                list[i] = ReadFunctionInternal();
+                list[i] = ReadFunction();
             }
 
             return Delegate.Combine(list)!;
@@ -615,47 +591,85 @@ namespace Apex.Serialization
             }
         }
 
-        void ISerializer.QueueAfterDeserializationHook(Action<object, object> method, object instance)
+        internal void QueueAfterDeserializationHook(Action<object, object> method, object instance)
         {
             _deserializationHooks.Add((method, instance));
         }
 
-        unsafe void ISerializer.WriteValuesArray(object array, int length, int elementSize)
+        unsafe internal void WriteValuesArray1<T>(T[] array, int elementSize)
+            where T : unmanaged
         {
-            var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
-            try
+            _stream.ReserveSize(4);
+            var length = array.Length;
+            _stream.Write(length);
+            if (length == 0)
             {
-                var ptr = handle.AddrOfPinnedObject().ToPointer();
-                _stream.ReserveSize(4);
-                _stream.Write(length);
-                _stream.WriteBytes(ptr, (uint)(length * elementSize));
+                return;
             }
-            finally
+
+            fixed (void* ptr = array)
             {
-                handle.Free();
+                _stream.WriteBytes(ptr, (uint)(length * elementSize));
             }
         }
 
-        unsafe void ISerializer.ReadIntoValuesArray(object array, int elementSize)
+        unsafe internal void ReadIntoValuesArray1<T>(T[] array, int elementSize)
+            where T : unmanaged
         {
             _stream.ReserveSize(4);
             var length = _stream.Read<int>();
-            var handle = GCHandle.Alloc(array, GCHandleType.Pinned);
-            try
+            if(length == 0)
             {
-                var ptr = handle.AddrOfPinnedObject().ToPointer();
-                _stream.ReadBytes(ptr, (uint)(length * elementSize));
+                return;
             }
-            finally
+
+            fixed(void* ptr = array)
             {
-                handle.Free();
+                _stream.ReadBytes(ptr, (uint)(length * elementSize));
             }
         }
 
-        IBinaryWriter ISerializer.BinaryWriter => _binaryWriter;
-        IBinaryReader ISerializer.BinaryReader => _binaryReader;
+        unsafe internal void WriteValuesArray2<T>(T[,] array, int elementSize)
+            where T : unmanaged
+        {
+            _stream.ReserveSize(8);
+            var length1 = array.GetLength(0);
+            var length2 = array.GetLength(1);
+            _stream.Write(length1);
+            _stream.Write(length2);
+            if (length1 == 0 && length2 == 0)
+            {
+                return;
+            }
 
-        T ISerializer.GetCustomContext<T>()
+            fixed (void* ptr = array)
+            {
+                _stream.WriteBytes(ptr, (uint)(length1 * length2 * elementSize));
+            }
+        }
+
+        unsafe internal void ReadIntoValuesArray2<T>(T[,] array, int elementSize)
+            where T : unmanaged
+        {
+            _stream.ReserveSize(8);
+            var length1 = _stream.Read<int>();
+            var length2 = _stream.Read<int>();
+            if (length1 == 0 && length2 == 0)
+            {
+                return;
+            }
+
+            fixed (void* ptr = array)
+            {
+                _stream.ReadBytes(ptr, (uint)(length1 * length2 * elementSize));
+            }
+        }
+
+        internal IBinaryWriter BinaryWriter => _binaryWriter;
+        internal IBinaryReader BinaryReader => _binaryReader;
+
+        internal T GetCustomContext<T>()
+            where T : class
         {
             return (_customContext as T)!;
         }

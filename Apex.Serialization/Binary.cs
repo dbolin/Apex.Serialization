@@ -33,14 +33,14 @@ namespace Apex.Serialization
         private readonly int _settingsIndex;
         internal TStream _stream;
 
-        List<object> ISerializer.LoadedObjectRefs => _loadedObjectRefs;
+        internal List<object> LoadedObjectRefs => _loadedObjectRefs;
 
         private readonly DictionarySlim<object, int> _savedObjectLookup;
         private readonly List<object> _loadedObjectRefs;
 
         private readonly List<object> _internedObjects = new List<object>();
 
-        List<Type> ISerializer.LoadedTypeRefs => _loadedTypeRefs;
+        internal List<Type> LoadedTypeRefs => _loadedTypeRefs;
 
         private readonly DictionarySlim<Type, int> _savedTypeLookup = new DictionarySlim<Type, int>();
         private readonly List<Type> _loadedTypeRefs = new List<Type>();

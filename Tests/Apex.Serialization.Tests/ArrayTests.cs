@@ -152,6 +152,14 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
+        public void MultiDimensionalArrayInt3()
+        {
+            var x = new int[,,] { { { 1 }, { 2 }, { 3 } }, { { 4 }, { 5 }, { 6 } }, { { 7 }, { 8 }, { 9 } } };
+
+            RoundTrip(x);
+        }
+
+        [Fact]
         public void MultiDimensionalArrayStruct()
         {
             var v = new Vector3(1, 2, 3);

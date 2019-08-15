@@ -153,8 +153,8 @@ namespace Apex.Serialization.Internal
 
             if (settings.SerializationMode == Mode.Graph)
             {
-                blockStatements.Add(Expression.Call(Expression.Call(output, SerializerMethods.SavedReferencesGetter),
-                    SerializerMethods.SavedReferencesListAdd, result));
+                blockStatements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                    SavedReferencesListAdd, result));
             }
 
             var (maxSize, isRef) = TypeFields.GetSizeForType(valueType);
