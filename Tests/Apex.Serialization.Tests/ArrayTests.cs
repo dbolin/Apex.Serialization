@@ -239,5 +239,36 @@ namespace Apex.Serialization.Tests
 
             RoundTrip(x);
         }
+
+        public class OuterWrapper
+        {
+            public OuterWrapper[]? ArrayOuter;
+            public OuterWrapper? Self;
+
+            public InnerWrapper[]? ArrayInner;
+        }
+
+        public class InnerWrapper
+        {
+            public OuterWrapper? Ref;
+            public OuterWrapper[]? Array;
+        }
+
+        [Fact]
+        public void InliningSelfReferences()
+        {
+            var x = new OuterWrapper();
+            x.Self = x;
+            x.ArrayOuter = new[] { x };
+            x.ArrayInner = new[] { new InnerWrapper { Ref = x, Array = new[] { x } } };
+
+            RoundTripGraphOnly(x, (x,y) =>
+            {
+                y.Self.Should().Be(y);
+                y.ArrayOuter[0].Should().Be(y);
+                y.ArrayInner[0].Ref.Should().Be(y);
+                y.ArrayInner[0].Array[0].Should().Be(y);
+            });
+        }
     }
 }
