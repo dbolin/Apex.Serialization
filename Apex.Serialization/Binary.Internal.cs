@@ -212,7 +212,7 @@ namespace Apex.Serialization
 
         internal void WriteInternal(object? value)
         {
-            if (WriteNullByteInternal(value))
+            if (WriteNullByte(value))
             {
                 return;
             }
@@ -238,7 +238,7 @@ namespace Apex.Serialization
             method(value, ref _stream, this);
         }
 
-        internal bool WriteNullByteInternal(object? value)
+        internal bool WriteNullByte(object? value)
         {
             _stream.ReserveSize(1);
             if (ReferenceEquals(value, null))
@@ -252,11 +252,6 @@ namespace Apex.Serialization
             }
 
             return false;
-        }
-
-        internal bool WriteNullByte(object value)
-        {
-            return WriteNullByteInternal(value);
         }
 
         internal bool WriteNullableByte<T>(T? value)
