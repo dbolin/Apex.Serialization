@@ -562,7 +562,9 @@ namespace Apex.Serialization.Internal
                 readStatements.Add(Expression.Assign(result, Expression.Default(type)));
             }
 
-            readStatements.AddRange(GetReadStatementsForType(type, settings, stream, output, result, fields, localVariables));
+            var visitedTypes = new HashSet<Type>();
+
+            readStatements.AddRange(GetReadStatementsForType(type, settings, stream, output, result, fields, localVariables, visitedTypes));
 
             if (isBoxed)
             {
@@ -580,18 +582,66 @@ namespace Apex.Serialization.Internal
 
         private static List<Expression> GetReadStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
             ParameterExpression output, Expression result, List<FieldInfo> fields, List<ParameterExpression> localVariables,
-            bool readSize = true)
+            HashSet<Type> visitedTypes, bool readMetadata = false,
+            bool reserveNeededSize = true)
         {
-            var maxSizeNeeded = readSize ? fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) : 0;
             var readStatements = new List<Expression>();
+
+            var skipReadLabel = readMetadata ? Expression.Label() : null;
+            var maxSizeNeeded = reserveNeededSize ? fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) : 0;
+            if (readMetadata)
+            {
+                maxSizeNeeded++;
+
+                if(settings.SerializationMode == Mode.Graph && !type.IsValueType)
+                {
+                    maxSizeNeeded += 4;
+                }
+            }
+
             if (maxSizeNeeded > 0)
             {
                 readStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
                     Expression.Constant(maxSizeNeeded)));
             }
 
+            if (readMetadata)
+            {
+                readStatements.Add(
+                    Expression.IfThen(
+                            Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
+                            Expression.Goto(skipReadLabel)
+                        )
+                    );
+
+                if (settings.SerializationMode == Mode.Graph && !type.IsValueType)
+                {
+                    var refIndex = Expression.Variable(typeof(int), "refIndex");
+
+                    readStatements.Add(
+                        Expression.Block(
+                            new[] { refIndex },
+                            Expression.Assign(refIndex, Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)),
+                                Expression.IfThen(
+                                    Expression.NotEqual(refIndex, Expression.Constant(-1)),
+                                    Expression.Block(
+                                        Expression.Assign(result,
+                                            Expression.Convert(
+                                                Expression.Property(
+                                                    Expression.Call(output, SavedReferencesGetter),
+                                                SavedReferencesListIndexer, Expression.Decrement(refIndex)),
+                                            type)
+                                        ),
+                                        Expression.Goto(skipReadLabel)
+                                    )
+                                )
+                            )
+                        );
+                }
+            }
+
             // write fields for normal types, some things are special like collections
-            var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings, localVariables, out var created);
+            var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings, localVariables, visitedTypes, out var created);
 
             if(specialExpression == null)
             {
@@ -640,7 +690,7 @@ namespace Apex.Serialization.Internal
                             var variableExpression = Expression.Variable(field.FieldType, field.Name);
                             constructorLocalVariables.Add(variableExpression);
                             constructorLocalFieldVariables.Add(variableExpression);
-                            var readValueExpression = ReadValue(stream, output, settings, field.FieldType, localVariables, out _);
+                            var readValueExpression = ReadValue(stream, output, settings, field.FieldType, localVariables, visitedTypes, out _);
                             constructorLocalStatements.Add(Expression.Assign(variableExpression, readValueExpression));
                         }
 
@@ -721,11 +771,11 @@ namespace Apex.Serialization.Internal
 
                         if (fieldIsBoxed)
                         {
-                            readStatements.Add(GetReadFieldExpression(field, boxedResult, stream, output, settings, localVariables));
+                            readStatements.Add(GetReadFieldExpression(field, boxedResult, stream, output, settings, localVariables, visitedTypes));
                         }
                         else
                         {
-                            readStatements.Add(GetReadFieldExpression(field, result, stream, output, settings, localVariables));
+                            readStatements.Add(GetReadFieldExpression(field, result, stream, output, settings, localVariables, visitedTypes));
                         }
                     }
 
@@ -736,7 +786,7 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    readStatements.AddRange(fields.Select(x => GetReadFieldExpression(x, result, stream, output, settings, localVariables)));
+                    readStatements.AddRange(fields.Select(x => GetReadFieldExpression(x, result, stream, output, settings, localVariables, visitedTypes)));
                 }
             }
 
@@ -756,6 +806,11 @@ namespace Apex.Serialization.Internal
                     readStatements.Add(Expression.Call(output, QueueAfterDeserializationHook,
                         Expression.Constant(action), result));
                 }
+            }
+
+            if(skipReadLabel != null)
+            {
+                readStatements.Add(Expression.Label(skipReadLabel));
             }
 
             return readStatements;
@@ -797,6 +852,7 @@ namespace Apex.Serialization.Internal
 
         internal static Expression? HandleSpecialRead(Type type, ParameterExpression output, Expression result, ParameterExpression stream,
             List<FieldInfo> fields, ImmutableSettings settings, List<ParameterExpression> localVariables,
+            HashSet<Type> visitedTypes,
             out bool created)
         {
             var primitive = HandlePrimitiveRead(stream, output, type);
@@ -881,13 +937,13 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    statements.Add(ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths, settings));
+                    statements.Add(ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths, settings, visitedTypes));
                 }
 
                 return Expression.Block(lengths, statements);
             }
 
-            var collection = ReadCollection(type, output, result, stream, settings, localVariables);
+            var collection = ReadCollection(type, output, result, stream, settings, localVariables, visitedTypes);
             if (collection != null)
             {
                 created = true;
@@ -955,7 +1011,7 @@ namespace Apex.Serialization.Internal
 
         private static Expression ReadArrayGeneral(ParameterExpression output, Expression result,
             ParameterExpression stream, int dimensions, Type elementType, int elementSize,
-            List<ParameterExpression> lengths, ImmutableSettings settings)
+            List<ParameterExpression> lengths, ImmutableSettings settings, HashSet<Type> visitedTypes)
         {
             var indices = new List<ParameterExpression>();
             var continueLabels = new List<LabelTarget>();
@@ -971,7 +1027,7 @@ namespace Apex.Serialization.Internal
                 ? (Expression) Expression.ArrayAccess(result, indices)
                 : Expression.ArrayAccess(result, indices[0]);
 
-            var readValue = ReadValue(stream, output, settings, elementType, localVariables, out var isSimpleRead);
+            var readValue = ReadValue(stream, output, settings, elementType, localVariables, visitedTypes, out var isSimpleRead);
 
             if (!isSimpleRead && StaticTypeInfo.IsSealedOrHasNoDescendents(elementType)
                 && !typeof(Type).IsAssignableFrom(elementType)
@@ -982,14 +1038,14 @@ namespace Apex.Serialization.Internal
                 {
                     var tempVar = Expression.Variable(elementType, "tempElement");
                     var elementReadStatements = GetReadStatementsForType(elementType, settings, stream, output,
-                        tempVar, fields, localVariables);
+                        tempVar, fields, localVariables, visitedTypes);
                     elementReadStatements.Add(Expression.Assign(accessExpression, tempVar));
                     readValue = Expression.Block(new[] { tempVar }, elementReadStatements);
                 }
                 else
                 {
                     readValue = Expression.Block(GetReadStatementsForType(elementType, settings, stream, output,
-                        accessExpression, fields, localVariables));
+                        accessExpression, fields, localVariables, visitedTypes));
                 }
 
                 if (!elementType.IsValueType)
@@ -1094,19 +1150,27 @@ namespace Apex.Serialization.Internal
         }
 
         internal static Expression? ReadCollection(Type type, ParameterExpression output, Expression result,
-            ParameterExpression stream, ImmutableSettings settings, List<ParameterExpression> localVariables)
+            ParameterExpression stream, ImmutableSettings settings, List<ParameterExpression> localVariables,
+            HashSet<Type> visitedTypes)
         {
-            return ReadDictionary(type, output, result, stream, settings, localVariables)
-                ?? ReadList(type, output, result, stream, settings, localVariables);
+            return ReadDictionary(type, output, result, stream, settings, localVariables, visitedTypes)
+                ?? ReadList(type, output, result, stream, settings, localVariables, visitedTypes);
         }
 
         private static MethodInfo fieldInfoSetValueMethod = typeof(FieldInfo).GetMethod("SetValue", new[] { typeof(object), typeof(object) })!;
 
         internal static Expression GetReadFieldExpression(FieldInfo fieldInfo, Expression result,
             ParameterExpression stream, ParameterExpression output,
-            ImmutableSettings settings, List<ParameterExpression> localVariables)
+            ImmutableSettings settings, List<ParameterExpression> localVariables,
+            HashSet<Type> visitedTypes)
         {
             var declaredType = fieldInfo.FieldType;
+            var tempValueResult = Expression.Variable(declaredType);
+            var statements = new List<Expression>
+            {
+                Expression.Assign(tempValueResult, ReadValue(stream, output, settings, declaredType, localVariables, visitedTypes, out _))
+            };
+
 
             if (fieldInfo.Attributes.HasFlag(FieldAttributes.InitOnly))
             {
@@ -1116,16 +1180,24 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    return Expression.Call(Expression.Constant(fieldInfo), fieldInfoSetValueMethod, Expression.Convert(result, typeof(object)), Expression.Convert(ReadValue(stream, output, settings, declaredType, localVariables, out _), typeof(object)));
+                    statements.Add(
+                        Expression.Call(
+                            Expression.Constant(fieldInfo), fieldInfoSetValueMethod, Expression.Convert(result, typeof(object)), Expression.Convert(tempValueResult, typeof(object))
+                            )
+                        );
+                    return Expression.Block(new[] { tempValueResult }, statements);
                 }
             }
 
             var valueAccessExpression = Expression.MakeMemberAccess(result, fieldInfo);
+            statements.Add(Expression.Assign(valueAccessExpression, tempValueResult));
 
-            return Expression.Assign(valueAccessExpression, ReadValue(stream, output, settings, declaredType, localVariables, out _));
+            return Expression.Block(new[] { tempValueResult }, statements);
         }
 
-        private static Expression ReadValue(ParameterExpression stream, ParameterExpression output, ImmutableSettings settings, Type declaredType, List<ParameterExpression> localVariables, out bool isInlineRead)
+        private static Expression ReadValue(ParameterExpression stream, ParameterExpression output, ImmutableSettings settings, Type declaredType, List<ParameterExpression> localVariables,
+            HashSet<Type> visitedTypes,
+            out bool isInlineRead)
         {
             var primitiveExpression = HandlePrimitiveRead(stream, output, declaredType);
             if (primitiveExpression != null)
@@ -1168,7 +1240,7 @@ namespace Apex.Serialization.Internal
                         Expression.Assign(result, Expression.Default(declaredType))
                     };
                     readStatements.AddRange(GetReadStatementsForType(declaredType, settings, stream, output,
-                        result, TypeFields.GetOrderedFields(declaredType), localVariables, readSize: false));
+                        result, TypeFields.GetOrderedFields(declaredType), localVariables, visitedTypes, reserveNeededSize: false));
                     readStatements.Add(result);
                     return Expression.Block(readStatements);
                 }
@@ -1178,8 +1250,22 @@ namespace Apex.Serialization.Internal
             }
             else
             {
-                isInlineRead = false;
-                return Expression.Call(output, "ReadSealedInternal", new[] { declaredType });
+                if(!visitedTypes.Add(declaredType))
+                {
+                    isInlineRead = false;
+                    return Expression.Call(output, "ReadSealedInternal", new[] { declaredType });
+                }
+
+                isInlineRead = true;
+                var result = Expression.Variable(declaredType);
+                localVariables.Add(result);
+                var readStatements = new List<Expression> {
+                        Expression.Assign(result, Expression.Default(declaredType))
+                    };
+                readStatements.AddRange(GetReadStatementsForType(declaredType, settings, stream, output,
+                        result, TypeFields.GetOrderedFields(declaredType), localVariables, visitedTypes, readMetadata: true));
+                readStatements.Add(result);
+                return Expression.Block(readStatements);
             }
         }
 
