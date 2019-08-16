@@ -9,11 +9,13 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NoWarn>NU1701;CS8002</NoWarn>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.11.5" />
     <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.11.5" />
+    <PackageReference Include="Ceras" Version="4.1.6" />
     <PackageReference Include="Hyperion" Version="0.9.8" />
     <PackageReference Include="MessagePack" Version="1.7.3.7" />
     <PackageReference Include="NetSerializer" Version="4.1.0" />

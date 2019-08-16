@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -55,7 +56,9 @@ namespace Apex.Serialization.Internal
 
             var actualSource = castedSourceType ?? source;
 
-            writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, returnTarget, shouldWriteTypeInfo, actualSource, fields));
+            var visitedTypes = new HashSet<Type>();
+
+            writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, returnTarget, shouldWriteTypeInfo, actualSource, fields, visitedTypes));
 
             writeStatements.Add(Expression.Label(returnTarget));
 
@@ -66,6 +69,7 @@ namespace Apex.Serialization.Internal
         private static IEnumerable<Expression> GetWriteStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
             ParameterExpression output, Expression source, LabelTarget returnTarget,
             bool shouldWriteTypeInfo, Expression actualSource, List<FieldInfo> fields,
+            HashSet<Type> visitedTypes,
             bool writeNullByte = false, bool writeSize = true)
         {
             var maxSizeNeeded = writeSize ? fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) : 0;
@@ -128,7 +132,7 @@ namespace Apex.Serialization.Internal
             }
 
             // write fields for normal types, some things are special like collections
-            var specialExpression = HandleSpecialWrite(type, output, actualSource, stream, source, fields, settings);
+            var specialExpression = HandleSpecialWrite(type, output, actualSource, stream, source, fields, settings, visitedTypes);
 
             if (specialExpression != null)
             {
@@ -136,18 +140,10 @@ namespace Apex.Serialization.Internal
             }
             else
             {
-                if (type.IsPointer || fields.Any(x => x.FieldType.IsPointer))
-                {
-                    throw new NotSupportedException("Pointers or types containing pointers are not supported");
-                }
-
-                if (typeof(SafeHandle).IsAssignableFrom(type))
-                {
-                    throw new NotSupportedException("Objects containing handles are not supported");
-                }
+                CheckTypeSupported(type, fields);
 
                 writeStatements.AddRange(fields.Select(x =>
-                    GetWriteFieldExpression(x, actualSource, stream, output, settings)));
+                    GetWriteFieldExpression(x, actualSource, stream, output, settings, visitedTypes)));
             }
 
 
@@ -179,7 +175,22 @@ namespace Apex.Serialization.Internal
             return writeStatements;
         }
 
-        internal static Expression? HandleSpecialWrite(Type type, ParameterExpression output, Expression actualSource, ParameterExpression stream, Expression source, List<FieldInfo> fields, ImmutableSettings settings)
+        private static void CheckTypeSupported(Type type, List<FieldInfo> fields)
+        {
+            if (type.IsPointer || fields.Any(x => x.FieldType.IsPointer))
+            {
+                throw new NotSupportedException("Pointers or types containing pointers are not supported");
+            }
+
+            if (typeof(SafeHandle).IsAssignableFrom(type))
+            {
+                throw new NotSupportedException("Objects containing handles are not supported");
+            }
+        }
+
+        internal static Expression? HandleSpecialWrite(Type type, ParameterExpression output,
+            Expression actualSource, ParameterExpression stream, Expression source, List<FieldInfo> fields,
+            ImmutableSettings settings, HashSet<Type> visitedTypes)
         {
             var primitive = HandlePrimitiveWrite(stream, output, type, actualSource);
             if(primitive != null)
@@ -242,12 +253,12 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    statements.Add(WriteArrayGeneral(output, actualSource, stream, dimensions, lengths, elementType, elementSize, settings));
+                    statements.Add(WriteArrayGeneral(output, actualSource, stream, dimensions, lengths, elementType, elementSize, settings, visitedTypes));
                 }
                 return Expression.Block(lengths, statements);
             }
 
-            return WriteCollection(type, output, actualSource, stream, source, settings);
+            return WriteCollection(type, output, actualSource, stream, source, settings, visitedTypes);
         }
 
         private static Expression WriteArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
@@ -267,7 +278,7 @@ namespace Apex.Serialization.Internal
 
         private static Expression WriteArrayGeneral(ParameterExpression output, Expression actualSource,
             ParameterExpression stream, int dimensions, List<ParameterExpression> lengths, Type elementType, int elementSize,
-            ImmutableSettings settings)
+            ImmutableSettings settings, HashSet<Type> visitedTypes)
         {
             var indices = new List<ParameterExpression>();
             var breakLabels = new List<LabelTarget>();
@@ -284,7 +295,7 @@ namespace Apex.Serialization.Internal
                 ? (Expression) Expression.ArrayIndex(actualSource, indices)
                 : Expression.ArrayIndex(actualSource, indices[0]);
 
-            var writeValue = WriteValue(stream, output, elementType, accessExpression, settings, out var isSimpleWrite);
+            var writeValue = WriteValue(stream, output, elementType, accessExpression, settings, visitedTypes, out var isSimpleWrite);
 
             var shouldWriteTypeInfo = typeof(Delegate).IsAssignableFrom(elementType) || typeof(Type).IsAssignableFrom(elementType);
 
@@ -293,7 +304,7 @@ namespace Apex.Serialization.Internal
                 var fields = TypeFields.GetOrderedFields(elementType);
                 writeValue = Expression.Block(GetWriteStatementsForType(elementType, settings, stream, output,
                     accessExpression, continueLabels[continueLabels.Count - 1], shouldWriteTypeInfo, accessExpression,
-                    fields, true));
+                    fields, visitedTypes, true));
             }
             else
             {
@@ -355,49 +366,49 @@ namespace Apex.Serialization.Internal
 
         internal static Expression? WriteCollection(Type type, ParameterExpression output,
             Expression actualSource, ParameterExpression stream, Expression source, ImmutableSettings
-                settings)
+                settings, HashSet<Type> visitedTypes)
         {
-            return WriteDictionary(type, output, actualSource, stream, source, settings)
-                ?? WriteList(type, output, actualSource, stream, source, settings);
+            return WriteDictionary(type, output, actualSource, stream, source, settings, visitedTypes)
+                ?? WriteList(type, output, actualSource, stream, source, settings, visitedTypes);
         }
 
         internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo, Expression source,
-            ParameterExpression stream, ParameterExpression output, ImmutableSettings settings)
+            ParameterExpression stream, ParameterExpression output, ImmutableSettings settings, HashSet<Type> visitedTypes)
         {
             var declaredType = fieldInfo.FieldType;
             var valueAccessExpression = Expression.MakeMemberAccess(source, fieldInfo);
 
-            return WriteValue(stream, output, declaredType, valueAccessExpression, settings, out _);
+            return WriteValue(stream, output, declaredType, valueAccessExpression, settings, visitedTypes, out _);
         }
 
         private static Expression WriteValue(ParameterExpression stream, ParameterExpression output, Type declaredType,
-            Expression valueAccessExpression, ImmutableSettings settings, out bool simpleType)
+            Expression valueAccessExpression, ImmutableSettings settings, HashSet<Type> visitedTypes, out bool inlineWrite)
         {
             var primitiveExpression = HandlePrimitiveWrite(stream, output, declaredType, valueAccessExpression);
             if(primitiveExpression != null)
             {
-                simpleType = true;
+                inlineWrite = true;
                 return primitiveExpression;
             }
 
             var nullableExpression = HandleNullableWrite(stream, output, declaredType, valueAccessExpression);
             if (nullableExpression != null)
             {
-                simpleType = true;
+                inlineWrite = true;
                 return nullableExpression;
             }
 
             var customExpression = HandleCustomWrite(output, declaredType, valueAccessExpression, settings);
             if (customExpression != null)
             {
-                simpleType = true;
+                inlineWrite = true;
                 return customExpression;
             }
 
             var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, TypeFields.GetOrderedFields(declaredType));
             if (writeStruct != null)
             {
-                simpleType = true;
+                inlineWrite = true;
                 return writeStruct;
             }
 
@@ -406,31 +417,44 @@ namespace Apex.Serialization.Internal
 
             if (shouldWriteTypeInfo)
             {
-                simpleType = false;
+                inlineWrite = false;
                 return Expression.Call(output, "WriteInternal", null, valueAccessExpression);
             }
 
             if (declaredType.IsValueType)
             {
-                if(TypeFields.IsPrimitive(declaredType))
-                {
-                    simpleType = true;
-                    var returnTarget = Expression.Label();
-                    var writeStatements = GetWriteStatementsForType(declaredType, settings, stream, output,
-                        valueAccessExpression, returnTarget, false, valueAccessExpression, TypeFields.GetOrderedFields(declaredType), writeSize: false);
-                    return Expression.Block(
-                        Expression.Block(writeStatements),
-                        Expression.Label(returnTarget)
-                        );
-                }
-
-                simpleType = false;
-                return Expression.Call(output, "WriteValueInternal", new[] { declaredType }, valueAccessExpression);
+                inlineWrite = true;
+                var returnTarget = Expression.Label();
+                var writeStatements = GetWriteStatementsForType(declaredType, settings, stream, output,
+                    valueAccessExpression, returnTarget, false, valueAccessExpression, TypeFields.GetOrderedFields(declaredType),
+                    visitedTypes, writeSize: !TypeFields.IsPrimitive(declaredType));
+                return Expression.Block(
+                    Expression.Block(writeStatements),
+                    Expression.Label(returnTarget)
+                    );
             }
             else
             {
-                simpleType = false;
-                return Expression.Call(output, "WriteSealedInternal", new[] { declaredType }, valueAccessExpression);
+                if (!visitedTypes.Add(declaredType))
+                {
+                    inlineWrite = false;
+                    return Expression.Call(output, "WriteSealedInternal", new[] { declaredType }, valueAccessExpression);
+                }
+
+                inlineWrite = true;
+                var afterWriteLabel = Expression.Label();
+                var temporaryVar = Expression.Variable(declaredType);
+                var writeStatements = new List<Expression>
+                {
+                    Expression.Assign(temporaryVar, valueAccessExpression)
+                };
+                writeStatements.AddRange(GetWriteStatementsForType(declaredType, settings, stream, output,
+                    temporaryVar, afterWriteLabel, false, temporaryVar,
+                    TypeFields.GetOrderedFields(declaredType), visitedTypes, writeNullByte: true));
+                writeStatements.Add(Expression.Label(afterWriteLabel));
+                return Expression.Block(new[] { temporaryVar },
+                    writeStatements
+                    );
             }
         }
 
@@ -569,6 +593,11 @@ namespace Apex.Serialization.Internal
             // write fields for normal types, some things are special like collections
             var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings, localVariables, out var created);
 
+            if(specialExpression == null)
+            {
+                CheckTypeSupported(type, fields);
+            }
+
             if (specialExpression != null && created)
             {
                 readStatements.Add(specialExpression);
@@ -661,16 +690,6 @@ namespace Apex.Serialization.Internal
             }
             else if (specialExpression == null && !specificConstructorDeserialization)
             {
-                if (type.IsPointer || fields.Any(x => x.FieldType.IsPointer))
-                {
-                    throw new NotSupportedException("Pointers or types containing pointers are not supported");
-                }
-
-                if (typeof(SafeHandle).IsAssignableFrom(type))
-                {
-                    throw new NotSupportedException("Objects containing handles are not supported");
-                }
-
                 if (type.IsValueType && FieldInfoModifier.MustUseReflectionToSetReadonly)
                 {
                     var boxedResult = Expression.Variable(typeof(object), "boxedResult");
@@ -1106,26 +1125,26 @@ namespace Apex.Serialization.Internal
             return Expression.Assign(valueAccessExpression, ReadValue(stream, output, settings, declaredType, localVariables, out _));
         }
 
-        private static Expression ReadValue(ParameterExpression stream, ParameterExpression output, ImmutableSettings settings, Type declaredType, List<ParameterExpression> localVariables, out bool isSimpleRead)
+        private static Expression ReadValue(ParameterExpression stream, ParameterExpression output, ImmutableSettings settings, Type declaredType, List<ParameterExpression> localVariables, out bool isInlineRead)
         {
             var primitiveExpression = HandlePrimitiveRead(stream, output, declaredType);
             if (primitiveExpression != null)
             {
-                isSimpleRead = true;
+                isInlineRead = true;
                 return primitiveExpression;
             }
 
             var nullableExpression = HandleNullableRead(stream, output, declaredType);
             if (nullableExpression != null)
             {
-                isSimpleRead = true;
+                isInlineRead = true;
                 return nullableExpression;
             }
 
             var readStructExpression = ReadStructExpression(declaredType, stream, TypeFields.GetOrderedFields(declaredType));
             if (readStructExpression != null)
             {
-                isSimpleRead = true;
+                isInlineRead = true;
                 return readStructExpression;
             }
 
@@ -1134,7 +1153,7 @@ namespace Apex.Serialization.Internal
 
             if (shouldReadTypeInfo)
             {
-                isSimpleRead = false;
+                isInlineRead = false;
                 return Expression.Convert(Expression.Call(output, "ReadInternal", null), declaredType);
             }
 
@@ -1142,7 +1161,7 @@ namespace Apex.Serialization.Internal
             {
                 if (TypeFields.IsPrimitive(declaredType))
                 {
-                    isSimpleRead = true;
+                    isInlineRead = true;
                     var result = Expression.Variable(declaredType);
                     localVariables.Add(result);
                     var readStatements = new List<Expression> {
@@ -1154,12 +1173,12 @@ namespace Apex.Serialization.Internal
                     return Expression.Block(readStatements);
                 }
 
-                isSimpleRead = false;
+                isInlineRead = false;
                 return Expression.Call(output, "ReadValueInternal", new[] { declaredType });
             }
             else
             {
-                isSimpleRead = false;
+                isInlineRead = false;
                 return Expression.Call(output, "ReadSealedInternal", new[] { declaredType });
             }
         }

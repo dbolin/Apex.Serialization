@@ -91,7 +91,7 @@ namespace Apex.Serialization.Internal.Reflection
                 }
             }
 
-            return (5, true);
+            return (0, true);
         }
 
         private static bool TryGetSizeForStruct(Type type, out int sizeForField)
