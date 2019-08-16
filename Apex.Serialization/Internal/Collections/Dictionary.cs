@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq.Expressions;
 using System.Reflection;
 using Apex.Serialization.Internal.Reflection;
@@ -13,7 +14,7 @@ namespace Apex.Serialization.Internal
         where TBinary : ISerializer
     {
         internal static Expression? WriteDictionary(Type type, ParameterExpression output, Expression actualSource,
-            ParameterExpression stream, Expression source, ImmutableSettings settings, HashSet<Type> visitedTypes)
+            ParameterExpression stream, Expression source, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
             var collectionType = type;
@@ -82,7 +83,7 @@ namespace Apex.Serialization.Internal
 
         internal static Expression? ReadDictionary(Type type, ParameterExpression output, Expression result,
             ParameterExpression stream, ImmutableSettings settings,
-            List<ParameterExpression> localVariables, HashSet<Type> visitedTypes)
+            List<ParameterExpression> localVariables, ImmutableHashSet<Type> visitedTypes)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
             var collectionType = type;
