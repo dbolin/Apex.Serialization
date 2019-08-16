@@ -613,20 +613,24 @@ namespace Apex.Serialization
             }
         }
 
-        unsafe internal void ReadIntoValuesArray1<T>(T[] array, int elementSize)
+        unsafe internal T[] ReadValuesArray1<T>(int elementSize)
             where T : unmanaged
         {
             _stream.ReserveSize(4);
             var length = _stream.Read<int>();
             if(length == 0)
             {
-                return;
+                return Array.Empty<T>();
             }
+
+            var array = new T[length];
 
             fixed(void* ptr = array)
             {
                 _stream.ReadBytes(ptr, (uint)(length * elementSize));
             }
+
+            return array;
         }
 
         unsafe internal void WriteValuesArray2<T>(T[,] array, int elementSize)
@@ -648,21 +652,26 @@ namespace Apex.Serialization
             }
         }
 
-        unsafe internal void ReadIntoValuesArray2<T>(T[,] array, int elementSize)
+        unsafe internal T[,] ReadValuesArray2<T>(int elementSize)
             where T : unmanaged
         {
             _stream.ReserveSize(8);
             var length1 = _stream.Read<int>();
             var length2 = _stream.Read<int>();
+
+            var array = new T[length1, length2];
+
             if (length1 == 0 && length2 == 0)
             {
-                return;
+                return array;
             }
 
             fixed (void* ptr = array)
             {
                 _stream.ReadBytes(ptr, (uint)(length1 * length2 * elementSize));
             }
+
+            return array;
         }
 
         internal IBinaryWriter BinaryWriter => _binaryWriter;

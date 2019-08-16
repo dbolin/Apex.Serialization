@@ -923,7 +923,12 @@ namespace Apex.Serialization.Internal
                 statements.AddRange(lengths.Select((x, i) => Expression.Assign(x,
                     Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
 
-                statements.Add(Expression.Assign(result, Expression.NewArrayBounds(elementType, lengths)));
+                var isBlittable = StaticTypeInfo.IsBlittable(elementType) && dimensions < 3;
+
+                if (!isBlittable)
+                {
+                    statements.Add(Expression.Assign(result, Expression.NewArrayBounds(elementType, lengths)));
+                }
 
                 if (settings.SerializationMode == Mode.Graph)
                 {
@@ -931,7 +936,7 @@ namespace Apex.Serialization.Internal
                         SavedReferencesListAdd, result));
                 }
 
-                if (StaticTypeInfo.IsBlittable(elementType) && dimensions < 3)
+                if (isBlittable)
                 {
                     statements.Add(ReadArrayOfBlittableValues(output, result, stream, dimensions, elementType, elementSize));
                 }
@@ -996,15 +1001,15 @@ namespace Apex.Serialization.Internal
             return statements.Count > 0 ? Expression.Block(statements) : null;
         }
 
-        private static Expression ReadArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
+        private static Expression ReadArrayOfBlittableValues(ParameterExpression output, Expression result,
             ParameterExpression stream, int dimensions, Type elementType, int elementSize)
         {
             return dimensions switch
             {
-                1 => Expression.Call(output, ReadArrayOfValuesMethod1.MakeGenericMethod(elementType),
-                       actualSource, Expression.Constant(elementSize)),
-                2 => Expression.Call(output, ReadArrayOfValuesMethod2.MakeGenericMethod(elementType),
-                       actualSource, Expression.Constant(elementSize)),
+                1 => Expression.Assign(result, Expression.Call(output, ReadArrayOfValuesMethod1.MakeGenericMethod(elementType),
+                       Expression.Constant(elementSize))),
+                2 => Expression.Assign(result, Expression.Call(output, ReadArrayOfValuesMethod2.MakeGenericMethod(elementType),
+                        Expression.Constant(elementSize))),
                 _ => throw new InvalidOperationException($"Blitting multidimensional array with {dimensions} dimensions is not supported"),
             };
         }
@@ -1342,9 +1347,9 @@ namespace Apex.Serialization.Internal
         private static readonly MethodInfo ReadFunctionMethod = typeof(TBinary).GetMethod("ReadFunction", InstanceFlags)!;
 
         private static readonly MethodInfo WriteArrayOfValuesMethod1 = typeof(TBinary).GetMethod("WriteValuesArray1", InstanceFlags)!;
-        private static readonly MethodInfo ReadArrayOfValuesMethod1 = typeof(TBinary).GetMethod("ReadIntoValuesArray1", InstanceFlags)!;
+        private static readonly MethodInfo ReadArrayOfValuesMethod1 = typeof(TBinary).GetMethod("ReadValuesArray1", InstanceFlags)!;
         private static readonly MethodInfo WriteArrayOfValuesMethod2 = typeof(TBinary).GetMethod("WriteValuesArray2", InstanceFlags)!;
-        private static readonly MethodInfo ReadArrayOfValuesMethod2 = typeof(TBinary).GetMethod("ReadIntoValuesArray2", InstanceFlags)!;
+        private static readonly MethodInfo ReadArrayOfValuesMethod2 = typeof(TBinary).GetMethod("ReadValuesArray2", InstanceFlags)!;
 
         private static readonly MethodInfo QueueAfterDeserializationHook =
             typeof(TBinary).GetMethod("QueueAfterDeserializationHook", InstanceFlags)!;
