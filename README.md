@@ -32,7 +32,7 @@ Requires code generation capabilities
 
 Serialization
 ```csharp
-var obj = ClassToSerializer();
+var obj = ClassToSerialize();
 var binarySerializer = Binary.Create();
 binarySerializer.Write(obj, outputStream);
 ```
