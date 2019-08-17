@@ -236,13 +236,13 @@ namespace Apex.Serialization.Internal.Reflection
                     if (arg0Loaded && paramLoaded)
                     {
                         // check for property set
-                        var methodDef = instruction.Operand as MethodDefinition;
-                        if (methodDef == null)
+                        var propertyMethodDef = instruction.Operand as MethodDefinition;
+                        if (propertyMethodDef == null)
                         {
                             return null;
                         }
 
-                        var instructions = methodDef.Body?.Instructions;
+                        var instructions = propertyMethodDef.Body?.Instructions;
                         if (instructions == null)
                         {
                             return null;
@@ -287,6 +287,13 @@ namespace Apex.Serialization.Internal.Reflection
                     }
 
                     if (!arg0Loaded || paramLoaded || baseConstructorCalled)
+                    {
+                        return null;
+                    }
+
+                    var methodRef = instruction.Operand as MethodReference;
+                    var methodDef = methodRef != null ? methodRef.Resolve() : (MethodDefinition)instruction.Operand;
+                    if(!IsEmptyConstructor(methodDef))
                     {
                         return null;
                     }

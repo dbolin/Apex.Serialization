@@ -267,5 +267,32 @@ namespace Apex.Serialization.Tests
 
             RoundTrip(x, (x, y) => { ConstructorSettingStaticFieldIndirect.B.Should().Be(0); y.A.Should().Be(3); });
         }
+
+        public class ConstructorBaseClassWithSideEffects
+        {
+            public int A;
+
+            public ConstructorBaseClassWithSideEffects()
+            {
+                throw new Exception();
+            }
+        }
+
+        public class DerivedClassWithBaseConstructor : ConstructorBaseClassWithSideEffects
+        {
+            public DerivedClassWithBaseConstructor(int a) : base()
+            {
+                A = a;
+            }
+        }
+
+        [Fact]
+        public void TestDerivedClassWithBaseConstructorSideEffects()
+        {
+            var x = (DerivedClassWithBaseConstructor)FormatterServices.GetUninitializedObject(typeof(DerivedClassWithBaseConstructor));
+            x.A = 3;
+
+            RoundTrip(x);
+        }
     }
 }
