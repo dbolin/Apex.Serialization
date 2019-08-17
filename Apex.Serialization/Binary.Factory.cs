@@ -1,5 +1,6 @@
 ﻿using Apex.Serialization.Extensions;
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Reflection;
 using BufferedStream = Apex.Serialization.Internal.BufferedStream;
@@ -26,7 +27,6 @@ namespace Apex.Serialization
         internal static Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>();
         internal static Dictionary<Type, CustomSerializerDelegate> CustomActionDeserializers = new Dictionary<Type, CustomSerializerDelegate>();
 
-
         public static IBinary Create()
         {
             Instantiated = true;
@@ -48,7 +48,7 @@ namespace Apex.Serialization
         /// <param name="writeMethod">Method to be called when a type matching T is to be serialized.</param>
         public static void RegisterCustomSerializer<T>(Action<T, IBinaryWriter> writeMethod, Action<T, IBinaryReader> readMethod)
         {
-            Check();
+            CheckInstantiantedCustomSerializer();
             CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
                 writeMethod,
                 typeof(Action<T, IBinaryWriter>).GetMethod("Invoke")!,
@@ -71,7 +71,7 @@ namespace Apex.Serialization
         public static void RegisterCustomSerializer<T, TContext>(Action<T, IBinaryWriter, TContext> writeMethod, Action<T, IBinaryReader, TContext> readMethod)
             where TContext : class
         {
-            Check();
+            CheckInstantiantedCustomSerializer();
             CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
                 writeMethod,
                 typeof(Action<T, IBinaryWriter, TContext>).GetMethod("Invoke")!,
@@ -84,11 +84,27 @@ namespace Apex.Serialization
                 ));
         }
 
-        private static void Check()
+        internal static ArrayPool<byte> ByteArrayPool = ArrayPool<byte>.Shared;
+
+        public static void SetByteArrayPool(ArrayPool<byte> arrayPool)
+        {
+            CheckInstantiantedArrayPool();
+            ByteArrayPool = arrayPool;
+        }
+
+        private static void CheckInstantiantedCustomSerializer()
         {
             if (Instantiated)
             {
                 throw new InvalidOperationException("Cannot register custom serializers after an instance of a Binary serializer has been created");
+            }
+        }
+
+        private static void CheckInstantiantedArrayPool()
+        {
+            if (Instantiated)
+            {
+                throw new InvalidOperationException("Cannot set array pool after an instance of a Binary serializer has been created");
             }
         }
     }

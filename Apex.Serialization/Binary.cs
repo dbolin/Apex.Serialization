@@ -65,8 +65,8 @@ namespace Apex.Serialization
         private DictionarySlim<MethodInfo, Type[]> _methodGenericsCache = new DictionarySlim<MethodInfo, Type[]>();
 
         private readonly DictionarySlim<DelegateID, Delegate> _delegateCache = new DictionarySlim<DelegateID, Delegate>();
-        private readonly Func<object, object> _clone = CreateCloneFunc();
-        private readonly Action<Delegate, object> _setTarget = CreateSetTargetAction();
+        private static readonly Func<object, object> _clone = CreateCloneFunc();
+        private static readonly Action<Delegate, object> _setTarget = CreateSetTargetAction();
 
         private Type[] _parameterTypeBuffer = new Type[256];
         private Type[][] _genericTypeBuffers = new Type[][] { new Type[1], new Type[2], new Type[3], new Type[4] };

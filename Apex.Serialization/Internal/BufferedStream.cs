@@ -22,6 +22,7 @@ namespace Apex.Serialization.Internal
 
         private byte[] _buffer;
         private byte[] _typeIdBuffer;
+        private List<byte[]> _previousTypeIdBuffers;
         private int _typeIdLengthRemaining;
 
         private GCHandle _bufferGCHandle;
@@ -43,9 +44,10 @@ namespace Apex.Serialization.Internal
         {
             var stream = new BufferedStream();
             stream._size = (int)MaxSize;
+            stream._previousTypeIdBuffers = new List<byte[]>();
             stream._typeIdBufferGCHandles = new List<GCHandle>();
             stream._typeIdCache = new DictionarySlim<Type, TypeIdCacheEntry>();
-            stream._buffer = new byte[MaxSize];
+            stream._buffer = Binary.ByteArrayPool.Rent((int)MaxSize);
             stream._bufferGCHandle = GCHandle.Alloc(stream._buffer, GCHandleType.Pinned);
             stream._bufferPtr = stream._bufferGCHandle.AddrOfPinnedObject().ToPointer();
             stream.CreateNewTypeIdBuffer();
@@ -54,7 +56,12 @@ namespace Apex.Serialization.Internal
 
         private void CreateNewTypeIdBuffer()
         {
-            _typeIdBuffer = new byte[MaxSize];
+            if(_typeIdBuffer != null)
+            {
+                _previousTypeIdBuffers.Add(_typeIdBuffer);
+            }
+
+            _typeIdBuffer = Binary.ByteArrayPool.Rent((int)MaxSize);
             _typeIdLengthRemaining = (int)MaxSize;
             var typeIdBufferGCHandle = GCHandle.Alloc(_typeIdBuffer, GCHandleType.Pinned);
             _typeIdBufferPtr = (byte*)typeIdBufferGCHandle.AddrOfPinnedObject().ToPointer();
@@ -369,6 +376,14 @@ namespace Apex.Serialization.Internal
                 {
                     handle.Free();
                 }
+
+                foreach(var buf in _previousTypeIdBuffers)
+                {
+                    Binary.ByteArrayPool.Return(buf);
+                }
+
+                Binary.ByteArrayPool.Return(_typeIdBuffer);
+                Binary.ByteArrayPool.Return(_buffer);
             }
         }
 
