@@ -91,10 +91,9 @@ namespace Apex.Serialization.Internal
             }
 
             var writeStatements = new List<Expression>();
-            if (maxSizeNeeded + metaBytes > 0 && (!writeNullByte || type.IsValueType))
+            if (!writeNullByte || type.IsValueType)
             {
-                writeStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
-                    Expression.Constant(maxSizeNeeded + metaBytes)));
+                writeStatements.Add(ReserveConstantSize(stream, maxSizeNeeded + metaBytes));
             }
 
             if (settings.SerializationMode == Mode.Graph)
@@ -121,8 +120,7 @@ namespace Apex.Serialization.Internal
                     writeStatements.Add(
                         Expression.IfThen(
                             Expression.Call(output, WriteTypeRefMethod, Expression.Constant(type)),
-                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
-                                Expression.Constant(maxSizeNeeded))
+                            ReserveConstantSize(stream, maxSizeNeeded)
                         )
                     );
                 }
@@ -152,8 +150,7 @@ namespace Apex.Serialization.Internal
             {
                 var afterWriteLabel = Expression.Label("afterWrite");
                 var wrapperStatements = new List<Expression>();
-                wrapperStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
-                        Expression.Constant(maxSizeNeeded + metaBytes)));
+                wrapperStatements.Add(ReserveConstantSize(stream, maxSizeNeeded + metaBytes));
                 wrapperStatements.Add(Expression.IfThenElse(
                         Expression.ReferenceEqual(actualSource, Expression.Constant(null)),
                         Expression.Block(
@@ -174,6 +171,17 @@ namespace Apex.Serialization.Internal
             }
 
             return writeStatements;
+        }
+
+        private static Expression ReserveConstantSize(ParameterExpression stream, int size)
+        {
+            if(size <= 0)
+            {
+                return Expression.Empty();
+            }
+
+            return Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
+                                Expression.Constant(size));
         }
 
         private static void CheckTypeSupported(Type type, List<FieldInfo> fields)
@@ -241,8 +249,7 @@ namespace Apex.Serialization.Internal
 
                 var statements = new List<Expression>();
 
-                statements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
-                    Expression.Constant(4 * dimensions)));
+                statements.Add(ReserveConstantSize(stream, 4 * dimensions));
                 statements.AddRange(lengths.Select((x, i) =>
                     Expression.Assign(x, Expression.Call(actualSource, "GetLength", Array.Empty<Type>(), Expression.Constant(i)))));
                 statements.AddRange(lengths.Select(x =>
@@ -310,7 +317,7 @@ namespace Apex.Serialization.Internal
             else
             {
                 writeValue = Expression.Block(
-                    Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
+                    ReserveConstantSize(stream, elementSize),
                     writeValue);
             }
 
@@ -602,11 +609,7 @@ namespace Apex.Serialization.Internal
                 }
             }
 
-            if (maxSizeNeeded > 0)
-            {
-                readStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
-                    Expression.Constant(maxSizeNeeded)));
-            }
+            readStatements.Add(ReserveConstantSize(stream, maxSizeNeeded));
 
             if (readMetadata)
             {
@@ -921,8 +924,7 @@ namespace Apex.Serialization.Internal
                 }
 
                 var statements = new List<Expression>();
-                statements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
-                    Expression.Constant(4 * dimensions)));
+                statements.Add(ReserveConstantSize(stream, 4 * dimensions));
                 statements.AddRange(lengths.Select((x, i) => Expression.Assign(x,
                     Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
 
@@ -1062,7 +1064,7 @@ namespace Apex.Serialization.Internal
                     {
                         var refIndex = Expression.Variable(typeof(int), "refIndex");
                         readValue = Expression.Block(
-                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(5)),
+                            ReserveConstantSize(stream, 5),
                             Expression.IfThenElse(
                                 Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
                                 Expression.Continue(continueLabels[continueLabels.Count - 1]),
@@ -1089,7 +1091,7 @@ namespace Apex.Serialization.Internal
                     else
                     {
                         readValue = Expression.Block(
-                            Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(1)),
+                            ReserveConstantSize(stream, 1),
                             Expression.IfThen(
                                 Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
                                 Expression.Continue(continueLabels[continueLabels.Count - 1])
@@ -1102,7 +1104,7 @@ namespace Apex.Serialization.Internal
             else
             {
                 readValue = Expression.Block(
-                    Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(elementSize)),
+                    ReserveConstantSize(stream, elementSize),
                     Expression.Assign(accessExpression, readValue));
             }
 

@@ -92,17 +92,17 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static List<int>? ConstructorMatchesFields(TypeReference typeRef, MethodDefinition method, List<FieldInfo> fields)
         {
-            if(method.Parameters.Count != fields.Count)
+            if (method.Parameters.Count != fields.Count)
             {
                 return null;
             }
 
             var fieldsToMatch = new HashSet<FieldInfo>(fields);
 
-            foreach(var methodParam in method.Parameters)
+            foreach (var methodParam in method.Parameters)
             {
                 bool found = false;
-                foreach(var field in fieldsToMatch)
+                foreach (var field in fieldsToMatch)
                 {
                     var t1 = GetResolvedParameter(typeRef, methodParam.ParameterType);
                     var t2 = field.FieldType;
@@ -124,18 +124,19 @@ namespace Apex.Serialization.Internal.Reflection
             var il = method.Body.Instructions;
 
             var index = 0;
+            bool baseConstructorCalled = false;
             bool arg0Loaded = false;
             bool paramLoaded = false;
             int paramLoadedIndex = 0;
             var result = new List<(int paramIndex, FieldDefinition fieldDef)>();
             var usedFields = new HashSet<FieldInfo>();
-            while(index < il.Count)
+            while (index < il.Count)
             {
                 var instruction = il[index++];
 
-                if(instruction.OpCode.Code == Code.Ret)
+                if (instruction.OpCode.Code == Code.Ret)
                 {
-                    if(result.Count != fields.Count || usedFields.Count != fields.Count)
+                    if (result.Count != fields.Count || usedFields.Count != fields.Count)
                     {
                         return null;
                     }
@@ -143,14 +144,14 @@ namespace Apex.Serialization.Internal.Reflection
                     return result.OrderBy(x => x.paramIndex).Select(x => fields.FindIndex(f => f.Name == x.fieldDef.Name)).ToList();
                 }
 
-                if(instruction.OpCode.Code == Code.Nop)
+                if (instruction.OpCode.Code == Code.Nop)
                 {
                     continue;
                 }
 
-                if(instruction.OpCode.Code == Code.Ldarg_0)
+                if (instruction.OpCode.Code == Code.Ldarg_0)
                 {
-                    if(arg0Loaded)
+                    if (arg0Loaded || paramLoaded)
                     {
                         return null;
                     }
@@ -159,9 +160,9 @@ namespace Apex.Serialization.Internal.Reflection
                     continue;
                 }
 
-                if(instruction.OpCode.Code == Code.Ldarg_1)
+                if (instruction.OpCode.Code == Code.Ldarg_1)
                 {
-                    if(paramLoaded)
+                    if (paramLoaded || !arg0Loaded)
                     {
                         return null;
                     }
@@ -173,7 +174,7 @@ namespace Apex.Serialization.Internal.Reflection
 
                 if (instruction.OpCode.Code == Code.Ldarg_2)
                 {
-                    if (paramLoaded)
+                    if (paramLoaded || !arg0Loaded)
                     {
                         return null;
                     }
@@ -185,7 +186,7 @@ namespace Apex.Serialization.Internal.Reflection
 
                 if (instruction.OpCode.Code == Code.Ldarg_3)
                 {
-                    if (paramLoaded)
+                    if (paramLoaded || !arg0Loaded)
                     {
                         return null;
                     }
@@ -197,7 +198,7 @@ namespace Apex.Serialization.Internal.Reflection
 
                 if (instruction.OpCode.Code == Code.Ldarg_S)
                 {
-                    if (paramLoaded)
+                    if (paramLoaded || !arg0Loaded)
                     {
                         return null;
                     }
@@ -209,7 +210,7 @@ namespace Apex.Serialization.Internal.Reflection
 
                 if (instruction.OpCode.Code == Code.Stfld)
                 {
-                    if(!arg0Loaded || !paramLoaded)
+                    if (!arg0Loaded || !paramLoaded)
                     {
                         return null;
                     }
@@ -219,20 +220,79 @@ namespace Apex.Serialization.Internal.Reflection
 
                     var fieldRef = instruction.Operand as FieldReference;
                     var fieldDef = fieldRef != null ? fieldRef.Resolve() : (FieldDefinition)instruction.Operand;
-                    var field = fields.Single(x => x.Name == fieldDef.Name);
+                    var field = fields.SingleOrDefault(x => x.Name == fieldDef.Name);
+                    if (field == null)
+                    {
+                        return null;
+                    }
+
                     result.Add((paramLoadedIndex, fieldDef));
                     usedFields.Add(field);
                     continue;
                 }
 
-                if(instruction.OpCode.Code == Code.Call)
+                if (instruction.OpCode.Code == Code.Call)
                 {
-                    if(!arg0Loaded || paramLoaded)
+                    if (arg0Loaded && paramLoaded)
+                    {
+                        // check for property set
+                        var methodDef = instruction.Operand as MethodDefinition;
+                        if (methodDef == null)
+                        {
+                            return null;
+                        }
+
+                        var instructions = methodDef.Body?.Instructions;
+                        if (instructions == null)
+                        {
+                            return null;
+                        }
+
+                        var filteredInstructions = instructions.Where(x => x.OpCode.Code != Code.Nop && x.OpCode.Code != Code.Ret).ToList();
+                        if (filteredInstructions.Count != 3)
+                        {
+                            return null;
+                        }
+
+                        if (filteredInstructions[0].OpCode.Code != Code.Ldarg_0)
+                        {
+                            return null;
+                        }
+
+                        if (filteredInstructions[1].OpCode.Code != Code.Ldarg_1)
+                        {
+                            return null;
+                        }
+
+                        if (filteredInstructions[2].OpCode.Code != Code.Stfld)
+                        {
+                            return null;
+                        }
+
+                        arg0Loaded = false;
+                        paramLoaded = false;
+                        var stFld = filteredInstructions[2];
+
+                        var fieldRef = stFld.Operand as FieldReference;
+                        var fieldDef = fieldRef != null ? fieldRef.Resolve() : (FieldDefinition)stFld.Operand;
+                        var field = fields.SingleOrDefault(x => x.Name == fieldDef.Name);
+                        if (field == null)
+                        {
+                            return null;
+                        }
+
+                        result.Add((paramLoadedIndex, fieldDef));
+                        usedFields.Add(field);
+                        continue;
+                    }
+
+                    if (!arg0Loaded || paramLoaded || baseConstructorCalled)
                     {
                         return null;
                     }
 
                     arg0Loaded = false;
+                    baseConstructorCalled = true;
                     continue;
                 }
 

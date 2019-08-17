@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Runtime.Serialization;
 using System.Text;
 using FluentAssertions;
 using Xunit;
@@ -195,6 +196,76 @@ namespace Apex.Serialization.Tests
             var y = new { a1 = x, a2 = x };
 
             RoundTripGraphOnly(y);
+        }
+
+        public class ThrowsOnConstruct
+        {
+            public ThrowsOnConstruct(int a)
+            {
+                Throw();
+                A = a;
+            }
+
+            public void Throw()
+            {
+                throw new Exception("!");
+            }
+
+            public int A { get; set; }
+        }
+
+        [Fact]
+        public void ConstructorThatThrows()
+        {
+            var x = (ThrowsOnConstruct) FormatterServices.GetUninitializedObject(typeof(ThrowsOnConstruct));
+            x.A = 3;
+
+            RoundTrip(x);
+        }
+
+        public class ConstructorSettingStaticField
+        {
+            public ConstructorSettingStaticField(int a)
+            {
+                B = a;
+            }
+
+            public int A { get; set; }
+            public static int B;
+        }
+
+        [Fact]
+        public void ConstructorThatSetsStaticField()
+        {
+            var x = (ConstructorSettingStaticField)FormatterServices.GetUninitializedObject(typeof(ConstructorSettingStaticField));
+            x.A = 3;
+
+            RoundTrip(x, (x, y) => { ConstructorSettingStaticField.B.Should().Be(0); y.A.Should().Be(3); });
+        }
+
+        public class ConstructorSettingStaticFieldIndirect
+        {
+            public ConstructorSettingStaticFieldIndirect(int a)
+            {
+                Set(a);
+            }
+
+            private void Set(int a)
+            {
+                B = a;
+            }
+
+            public int A { get; set; }
+            public static int B;
+        }
+
+        [Fact]
+        public void ConstructorThatSetsStaticFieldIndirect()
+        {
+            var x = (ConstructorSettingStaticFieldIndirect)FormatterServices.GetUninitializedObject(typeof(ConstructorSettingStaticFieldIndirect));
+            x.A = 3;
+
+            RoundTrip(x, (x, y) => { ConstructorSettingStaticFieldIndirect.B.Should().Be(0); y.A.Should().Be(3); });
         }
     }
 }
