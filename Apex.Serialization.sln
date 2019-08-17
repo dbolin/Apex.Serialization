@@ -19,6 +19,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "BenchmarkCases", "Benchmark
 	ProjectSection(SolutionItems) = preProject
 		BenchmarkCases\Functions.md = BenchmarkCases\Functions.md
 		BenchmarkCases\IntArray.md = BenchmarkCases\IntArray.md
+		PerformanceSuite.md = PerformanceSuite.md
 		BenchmarkCases\Poco.md = BenchmarkCases\Poco.md
 	EndProjectSection
 EndProject
