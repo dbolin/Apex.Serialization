@@ -26,17 +26,17 @@ namespace Benchmark
 
         public PerformanceSuite_NestedListEmpty()
         {
-            S_NestedList();
+            S_NestedListEmpty();
         }
 
         [Benchmark]
-        public void S_NestedList()
+        public void S_NestedListEmpty()
         {
             Serialize(_nestedList);
         }
 
         [Benchmark]
-        public object D_NestedList()
+        public object D_NestedListEmpty()
         {
             return Deserialize<List<Level1>>();
         }

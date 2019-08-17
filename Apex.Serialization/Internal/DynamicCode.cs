@@ -320,11 +320,11 @@ namespace Apex.Serialization.Internal
             {
                 loop =
                     Expression.Block(
-                        Expression.Assign(indices[i], Expression.Constant(0)),
+                        Expression.Assign(indices[i], Expression.Subtract(lengths[i], Expression.Constant(1))),
                         Expression.Loop(Expression.IfThenElse(
-                            Expression.GreaterThanOrEqual(indices[i], lengths[i]),
+                            Expression.LessThan(indices[i], Expression.Constant(0)),
                             Expression.Break(breakLabels[i]),
-                            Expression.Block(loop, Expression.Label(continueLabels[i]), Expression.Assign(indices[i], Expression.Increment(indices[i])))
+                            Expression.Block(loop, Expression.Label(continueLabels[i]), Expression.Assign(indices[i], Expression.Decrement(indices[i])))
                         ), breakLabels[i])
                     );
             }
@@ -1112,11 +1112,11 @@ namespace Apex.Serialization.Internal
             {
                 var breakLabel = Expression.Label();
                 loop = Expression.Block(
-                    Expression.Assign(indices[i], Expression.Constant(0)),
+                    Expression.Assign(indices[i], Expression.Subtract(lengths[i], Expression.Constant(1))),
                     Expression.Loop(Expression.IfThenElse(
-                        Expression.GreaterThanOrEqual(indices[i], lengths[i]),
+                        Expression.LessThan(indices[i], Expression.Constant(0)),
                         Expression.Break(breakLabel),
-                        Expression.Block(loop, Expression.Label(continueLabels[i]), Expression.Assign(indices[i], Expression.Increment(indices[i])))
+                        Expression.Block(loop, Expression.Label(continueLabels[i]), Expression.Assign(indices[i], Expression.Decrement(indices[i])))
                     ), breakLabel)
                 );
             }
