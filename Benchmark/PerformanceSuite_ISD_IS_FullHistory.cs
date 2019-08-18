@@ -19,19 +19,32 @@ namespace Benchmark
                 _isd_is_list.Add(x);
             }
 
-            S_ISD_IS_FullHistory();
+            STree_ISD_IS_FullHistory();
+            SGraph_ISD_IS_FullHistory();
         }
 
         [Benchmark]
-        public void S_ISD_IS_FullHistory()
+        public void STree_ISD_IS_FullHistory()
         {
             Serialize(_isd_is_list);
         }
 
         [Benchmark]
-        public object D_ISD_IS_FullHistory()
+        public object DTree_ISD_IS_FullHistory()
         {
             return Deserialize<List<ImmutableSortedDictionary<int, string>>>();
+        }
+
+        [Benchmark]
+        public void SGraph_ISD_IS_FullHistory()
+        {
+            SerializeGraph(_isd_is_list);
+        }
+
+        [Benchmark]
+        public object DGraph_ISD_IS_FullHistory()
+        {
+            return DeserializeGraph<List<ImmutableSortedDictionary<int, string>>>();
         }
     }
 }

@@ -10,39 +10,40 @@ namespace Benchmark
     {
         private readonly IBinary binary = Binary.Create(new Settings { UseConstructors = true });
         private readonly IBinary binaryGraph = Binary.Create(new Settings { SerializationMode = Mode.Graph, UseConstructors = true });
-        private readonly MemoryStream m = new MemoryStream();
+        private readonly MemoryStream m1 = new MemoryStream();
+        private readonly MemoryStream m2 = new MemoryStream();
 
         private readonly CerasSerializer ceras = new CerasSerializer(new SerializerConfig { DefaultTargets = TargetMember.AllFields, PreserveReferences = false });
         private byte[] b = new byte[16];
 
         protected void Serialize<T>(T obj)
         {
-            m.Position = 0;
-            binary.Write(obj, m);
+            m1.Position = 0;
+            binary.Write(obj, m1);
 
             //ceras.Serialize(obj, ref b);
         }
 
         protected T Deserialize<T>()
         {
-            m.Position = 0;
-            return binary.Read<T>(m);
+            m1.Position = 0;
+            return binary.Read<T>(m1);
 
             //return ceras.Deserialize<T>(b);
         }
 
         protected void SerializeGraph<T>(T obj)
         {
-            m.Position = 0;
-            binaryGraph.Write(obj, m);
+            m2.Position = 0;
+            binaryGraph.Write(obj, m2);
 
             //ceras.Serialize(obj, ref b);
         }
 
         protected T DeserializeGraph<T>()
         {
-            m.Position = 0;
-            return binaryGraph.Read<T>(m);
+            m2.Position = 0;
+            return binaryGraph.Read<T>(m2);
 
             //return ceras.Deserialize<T>(b);
         }

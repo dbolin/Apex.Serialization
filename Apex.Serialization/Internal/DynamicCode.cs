@@ -443,7 +443,7 @@ namespace Apex.Serialization.Internal
             }
             else
             {
-                if (visitedTypes.Contains(declaredType))
+                if (visitedTypes.Contains(declaredType) || !settings.EnableInlining)
                 {
                     inlineWrite = false;
                     return Expression.Call(output, "WriteSealedInternal", new[] { declaredType }, valueAccessExpression);
@@ -1241,26 +1241,20 @@ namespace Apex.Serialization.Internal
 
             if (declaredType.IsValueType)
             {
-                if (TypeFields.IsPrimitive(declaredType))
-                {
-                    isInlineRead = true;
-                    var result = Expression.Variable(declaredType);
-                    localVariables.Add(result);
-                    var readStatements = new List<Expression> {
-                        Expression.Assign(result, Expression.Default(declaredType))
-                    };
-                    readStatements.AddRange(GetReadStatementsForType(declaredType, settings, stream, output,
-                        result, TypeFields.GetOrderedFields(declaredType), localVariables, visitedTypes, reserveNeededSize: false));
-                    readStatements.Add(result);
-                    return Expression.Block(readStatements);
-                }
-
-                isInlineRead = false;
-                return Expression.Call(output, "ReadValueInternal", new[] { declaredType });
+                isInlineRead = true;
+                var result = Expression.Variable(declaredType);
+                localVariables.Add(result);
+                var readStatements = new List<Expression> {
+                    Expression.Assign(result, Expression.Default(declaredType))
+                };
+                readStatements.AddRange(GetReadStatementsForType(declaredType, settings, stream, output,
+                    result, TypeFields.GetOrderedFields(declaredType), localVariables, visitedTypes, reserveNeededSize: !TypeFields.IsPrimitive(declaredType)));
+                readStatements.Add(result);
+                return Expression.Block(readStatements);
             }
             else
             {
-                if(visitedTypes.Contains(declaredType))
+                if(visitedTypes.Contains(declaredType) || !settings.EnableInlining)
                 {
                     isInlineRead = false;
                     return Expression.Call(output, "ReadSealedInternal", new[] { declaredType });
