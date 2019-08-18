@@ -23,7 +23,7 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
         }
 
         [Fact]
-        public void RandomHashcodes()
+        public void RandomHashcodesNotSupported()
         {
             var element = new RandomHashcode {Value = 10};
             var x = new ConcurrentDictionary<RandomHashcode, int>();
@@ -35,8 +35,8 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
 
             y.First().Key.GetHashCode().Should().Be(element.GetHashCode());
 
-            y.ContainsKey(element).Should().Be(true);
-            y[element].Should().Be(1);
+            y.ContainsKey(element).Should().Be(false);
+            //y[element].Should().Be(1);
         }
     }
 }

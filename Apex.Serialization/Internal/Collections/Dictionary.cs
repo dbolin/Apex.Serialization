@@ -41,6 +41,11 @@ namespace Apex.Serialization.Internal
             var keyType = collectionType.GetGenericArguments()[0];
             var valueType = collectionType.GetGenericArguments()[1];
 
+            if(keyType.IsValueType)
+            {
+                return null;
+            }
+
             var elementType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
             var enumeratorType = collectionType.GetMethod("GetEnumerator",
                 BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public)!.ReturnType;
@@ -111,6 +116,11 @@ namespace Apex.Serialization.Internal
 
             var keyType = collectionType.GetGenericArguments()[0];
             var valueType = collectionType.GetGenericArguments()[1];
+
+            if (keyType.IsValueType)
+            {
+                return null;
+            }
 
             var blockStatements = new List<Expression>();
             var countVar = Expression.Variable(typeof(int));

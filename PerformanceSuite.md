@@ -27,3 +27,19 @@ Internal benchmarks
 |  DTree_ISD_IS_FullHistory | 923.33 us | 3.8773 us | 3.4371 us | 11.7188 | 2.9297 |     - |  654240 B |
 | SGraph_ISD_IS_FullHistory |  46.63 us | 0.4250 us | 0.3976 us |       - |      - |     - |         - |
 | DGraph_ISD_IS_FullHistory |  93.33 us | 0.4612 us | 0.3851 us |  5.6152 | 0.8545 |     - |   59368 B |
+
+|               Method |     Mean |    Error |    StdDev |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
+|--------------------- |---------:|---------:|----------:|-------:|-------:|------:|----------:|
+| S_DictionaryOfValues | 225.3 ns | 8.765 ns | 10.434 ns |      - |      - |     - |         - |
+| D_DictionaryOfValues | 750.8 ns | 9.825 ns |  7.671 ns | 0.3881 | 0.0038 |     - |    4064 B |
+
+|                   Method |     Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
+|------------------------- |---------:|----------:|----------:|-------:|------:|------:|----------:|
+| S_DictionaryOfReferences | 3.232 us | 0.0087 us | 0.0077 us |      - |     - |     - |         - |
+| D_DictionaryOfReferences | 8.015 us | 0.1418 us | 0.1893 us | 0.7477 |     - |     - |    7920 B |
+
+|                     Method |     Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
+|--------------------------- |---------:|----------:|----------:|-------:|------:|------:|----------:|
+| S_SortedDictionaryOfValues | 1.351 us | 0.0048 us | 0.0045 us |      - |     - |     - |         - |
+| D_SortedDictionaryOfValues | 9.416 us | 0.1115 us | 0.0989 us | 0.4425 |     - |     - |    4936 B |
+

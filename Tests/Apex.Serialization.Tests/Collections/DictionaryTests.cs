@@ -93,7 +93,7 @@ namespace Apex.Serialization.Tests.Collections
         }
 
         [Fact]
-        public void RandomHashcodes()
+        public void RandomHashcodesNotSupported()
         {
             var element = new RandomHashcode {Value = 10};
             var x = new Dictionary<RandomHashcode, int> {{element, 1}};
@@ -104,8 +104,8 @@ namespace Apex.Serialization.Tests.Collections
 
             y.First().Key.GetHashCode().Should().Be(element.GetHashCode());
 
-            y.ContainsKey(element).Should().Be(true);
-            y[element].Should().Be(1);
+            y.ContainsKey(element).Should().Be(false);
+            //y[element].Should().Be(1);
         }
 
         [Fact]
