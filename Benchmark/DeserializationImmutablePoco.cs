@@ -38,7 +38,7 @@ namespace Benchmark
             public DateTime DateProp { get; }      //DateTime.Now
         }
 
-        private IBinary _binary = Binary.Create(new Settings { UseConstructors = true });
+        private IBinary _binary = Binary.Create(new Settings());
         //private Serializer _hyperion = new Serializer();
         private NetSerializer.Serializer _netSerializer = new NetSerializer.Serializer(new[] { typeof(List<ImmutablePoco>) });
 

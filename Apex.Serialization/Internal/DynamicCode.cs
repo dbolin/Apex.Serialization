@@ -41,8 +41,6 @@ namespace Apex.Serialization.Internal
             var stream = Expression.Parameter(typeof(TStream).MakeByRefType(), "stream");
             var output = Expression.Parameter(typeof(TBinary), "io");
 
-            var returnTarget = Expression.Label();
-
             var writeStatements = new List<Expression>();
             var localVariables = new List<ParameterExpression>();
 
@@ -59,16 +57,14 @@ namespace Apex.Serialization.Internal
 
             var visitedTypes = ImmutableHashSet<Type>.Empty;
 
-            writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, returnTarget, shouldWriteTypeInfo, actualSource, fields, visitedTypes));
-
-            writeStatements.Add(Expression.Label(returnTarget));
+            writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, fields, visitedTypes));
 
             var lambda = Expression.Lambda<T>(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new [] {source, stream, output}).Compile();
             return lambda;
         }
 
         private static IEnumerable<Expression> GetWriteStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
-            ParameterExpression output, Expression source, LabelTarget returnTarget,
+            ParameterExpression output, Expression source,
             bool shouldWriteTypeInfo, Expression actualSource, List<FieldInfo> fields,
             ImmutableHashSet<Type> visitedTypes,
             bool writeNullByte = false, bool writeSize = true)
@@ -90,6 +86,8 @@ namespace Apex.Serialization.Internal
                 metaBytes += 4;
             }
 
+            var finishTarget = Expression.Label("finishWrite");
+
             var writeStatements = new List<Expression>();
             if (!writeNullByte || type.IsValueType)
             {
@@ -103,7 +101,7 @@ namespace Apex.Serialization.Internal
                 {
                     writeStatements.Add(Expression.IfThen(
                         Expression.Call(output, WriteObjectRefMethod, source),
-                        Expression.Return(returnTarget)));
+                        Expression.Goto(finishTarget)));
                 }
                 else if (shouldWriteTypeInfo)
                 {
@@ -169,6 +167,8 @@ namespace Apex.Serialization.Internal
                 var wrappedWrite = Expression.Block(wrapperStatements);
                 writeStatements = new List<Expression> { wrappedWrite };
             }
+
+            writeStatements.Add(Expression.Label(finishTarget));
 
             return writeStatements;
         }
@@ -311,7 +311,7 @@ namespace Apex.Serialization.Internal
             {
                 var fields = TypeFields.GetOrderedFields(elementType);
                 writeValue = Expression.Block(GetWriteStatementsForType(elementType, settings, stream, output,
-                    accessExpression, continueLabels[continueLabels.Count - 1], shouldWriteTypeInfo, accessExpression,
+                    accessExpression, shouldWriteTypeInfo, accessExpression,
                     fields, visitedTypes, true));
             }
             else
@@ -432,14 +432,10 @@ namespace Apex.Serialization.Internal
             if (declaredType.IsValueType)
             {
                 inlineWrite = true;
-                var returnTarget = Expression.Label();
                 var writeStatements = GetWriteStatementsForType(declaredType, settings, stream, output,
-                    valueAccessExpression, returnTarget, false, valueAccessExpression, TypeFields.GetOrderedFields(declaredType),
+                    valueAccessExpression, false, valueAccessExpression, TypeFields.GetOrderedFields(declaredType),
                     visitedTypes, writeSize: !TypeFields.IsPrimitive(declaredType));
-                return Expression.Block(
-                    Expression.Block(writeStatements),
-                    Expression.Label(returnTarget)
-                    );
+                return Expression.Block(writeStatements);
             }
             else
             {
@@ -452,16 +448,14 @@ namespace Apex.Serialization.Internal
                 visitedTypes = visitedTypes.Add(declaredType);
 
                 inlineWrite = true;
-                var afterWriteLabel = Expression.Label();
                 var temporaryVar = Expression.Variable(declaredType);
                 var writeStatements = new List<Expression>
                 {
                     Expression.Assign(temporaryVar, valueAccessExpression)
                 };
                 writeStatements.AddRange(GetWriteStatementsForType(declaredType, settings, stream, output,
-                    temporaryVar, afterWriteLabel, false, temporaryVar,
+                    temporaryVar, false, temporaryVar,
                     TypeFields.GetOrderedFields(declaredType), visitedTypes, writeNullByte: true));
-                writeStatements.Add(Expression.Label(afterWriteLabel));
                 return Expression.Block(new[] { temporaryVar },
                     writeStatements
                     );
