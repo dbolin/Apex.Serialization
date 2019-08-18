@@ -49,18 +49,18 @@ namespace Apex.Serialization.Internal
             var elementType = typeof(KeyValuePair<,>).MakeGenericType(keyType, valueType);
             var enumeratorType = collectionType.GetMethod("GetEnumerator",
                 BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public)!.ReturnType;
-            var enumeratorVar = Expression.Variable(enumeratorType);
+            var enumeratorVar = Expression.Variable(enumeratorType, "enumerator");
             var getEnumeratorCall = Expression.Convert(Expression.Call(actualSource, collectionType.GetMethod("GetEnumerator")), enumeratorType);
             var enumeratorAssign = Expression.Assign(enumeratorVar, getEnumeratorCall);
             var moveNextCall = Expression.Call(enumeratorVar, enumeratorType.GetMethod("MoveNext") ?? typeof(IEnumerator).GetMethod("MoveNext"));
 
-            var loopVar = Expression.Variable(elementType);
-            var countVar = Expression.Variable(typeof(int));
+            var loopVar = Expression.Variable(elementType, "loopVar");
+            var countVar = Expression.Variable(typeof(int), "countVar");
 
             var (keySize, keyIsRef) = TypeFields.GetSizeForType(keyType);
             var (valueSize, valueIsRef) = TypeFields.GetSizeForType(valueType);
 
-            var breakLabel = Expression.Label();
+            var breakLabel = Expression.Label("finishDictionary");
 
             var loop = Expression.Block(new[] { enumeratorVar, countVar },
                 Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)),
@@ -123,7 +123,7 @@ namespace Apex.Serialization.Internal
             }
 
             var blockStatements = new List<Expression>();
-            var countVar = Expression.Variable(typeof(int));
+            var countVar = Expression.Variable(typeof(int), "countVar");
             blockStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)));
             blockStatements.Add(Expression.Assign(countVar, Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)));
 
@@ -162,10 +162,10 @@ namespace Apex.Serialization.Internal
             var (keySize,keyIsRef) = TypeFields.GetSizeForType(keyType);
             var (valueSize,valueIsRef) = TypeFields.GetSizeForType(valueType);
 
-            var keyVar = Expression.Variable(keyType);
-            var valueVar = Expression.Variable(valueType);
+            var keyVar = Expression.Variable(keyType, "keyVar");
+            var valueVar = Expression.Variable(valueType, "valueVar");
 
-            var breakLabel = Expression.Label();
+            var breakLabel = Expression.Label("finishDictionary");
 
             blockStatements.Add(
                 Expression.Loop(

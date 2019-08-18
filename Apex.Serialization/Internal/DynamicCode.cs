@@ -45,7 +45,7 @@ namespace Apex.Serialization.Internal
 
             if (shouldWriteTypeInfo)
             {
-                castedSourceType = Expression.Variable(type);
+                castedSourceType = Expression.Variable(type, "castedSource");
                 localVariables.Add(castedSourceType);
                 writeStatements.Add(Expression.Assign(castedSourceType, Expression.Convert(source, type)));
             }
@@ -56,7 +56,7 @@ namespace Apex.Serialization.Internal
 
             writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, fields, visitedTypes));
 
-            var lambda = Expression.Lambda<T>(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new [] {source, stream, output}).Compile();
+            var lambda = Expression.Lambda<T>(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
             return lambda;
         }
 
@@ -325,7 +325,7 @@ namespace Apex.Serialization.Internal
                 visitedTypes = visitedTypes.Add(declaredType);
 
                 inlineWrite = true;
-                var temporaryVar = Expression.Variable(declaredType);
+                var temporaryVar = Expression.Variable(declaredType, "tempResult");
                 var writeStatements = new List<Expression>
                 {
                     Expression.Assign(temporaryVar, valueAccessExpression)
@@ -465,7 +465,7 @@ namespace Apex.Serialization.Internal
         {
             var readStatements = new List<Expression>();
 
-            var skipReadLabel = readMetadata ? Expression.Label() : null;
+            var skipReadLabel = readMetadata ? Expression.Label("skipRead") : null;
             var maxSizeNeeded = reserveNeededSize ? fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) : 0;
             if (readMetadata)
             {
@@ -883,7 +883,7 @@ namespace Apex.Serialization.Internal
             ImmutableHashSet<Type> visitedTypes)
         {
             var declaredType = fieldInfo.FieldType;
-            var tempValueResult = Expression.Variable(declaredType);
+            var tempValueResult = Expression.Variable(declaredType, "tempResult");
             var statements = new List<Expression>
             {
                 Expression.Assign(tempValueResult, ReadValue(stream, output, settings, declaredType, localVariables, visitedTypes, out _))
@@ -950,7 +950,7 @@ namespace Apex.Serialization.Internal
             if (declaredType.IsValueType)
             {
                 isInlineRead = true;
-                var result = Expression.Variable(declaredType);
+                var result = Expression.Variable(declaredType, "tempResult");
                 localVariables.Add(result);
                 var readStatements = new List<Expression> {
                     Expression.Assign(result, Expression.Default(declaredType))
@@ -971,7 +971,7 @@ namespace Apex.Serialization.Internal
                 visitedTypes = visitedTypes.Add(declaredType);
 
                 isInlineRead = true;
-                var result = Expression.Variable(declaredType);
+                var result = Expression.Variable(declaredType, "tempResult");
                 localVariables.Add(result);
                 var readStatements = new List<Expression> {
                         Expression.Assign(result, Expression.Default(declaredType))

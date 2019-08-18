@@ -23,7 +23,7 @@ namespace Apex.Serialization.Internal
                 var lengths = new List<ParameterExpression>();
                 for (int i = 0; i < dimensions; ++i)
                 {
-                    lengths.Add(Expression.Variable(typeof(int)));
+                    lengths.Add(Expression.Variable(typeof(int), $"length{i}"));
                 }
 
                 var statements = new List<Expression>();
@@ -73,9 +73,9 @@ namespace Apex.Serialization.Internal
 
             for (int i = 0; i < dimensions; ++i)
             {
-                indices.Add(Expression.Variable(typeof(int)));
-                breakLabels.Add(Expression.Label());
-                continueLabels.Add(Expression.Label());
+                indices.Add(Expression.Variable(typeof(int), $"i{i}"));
+                breakLabels.Add(Expression.Label($"break{i}"));
+                continueLabels.Add(Expression.Label($"continue{i}"));
             }
 
             var accessExpression = dimensions > 1
@@ -177,7 +177,7 @@ namespace Apex.Serialization.Internal
             for (int i = 0; i < dimensions; ++i)
             {
                 indices.Add(Expression.Variable(typeof(int), $"index{i}"));
-                continueLabels.Add(Expression.Label());
+                continueLabels.Add(Expression.Label($"continue{i}"));
             }
 
             var accessExpression = dimensions > 1

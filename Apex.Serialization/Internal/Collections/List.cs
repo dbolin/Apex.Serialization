@@ -47,16 +47,16 @@ namespace Apex.Serialization.Internal
 
             var enumeratorType = collectionType.GetMethod("GetEnumerator",
                 BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Public)!.ReturnType;
-            var enumeratorVar = Expression.Variable(enumeratorType);
+            var enumeratorVar = Expression.Variable(enumeratorType, "enumerator");
             var getEnumeratorCall = Expression.Convert(Expression.Call(actualSource, collectionType.GetMethod("GetEnumerator")), enumeratorType);
             var enumeratorAssign = Expression.Assign(enumeratorVar, getEnumeratorCall);
             var moveNextCall = Expression.Call(enumeratorVar, enumeratorType.GetMethod("MoveNext") ?? typeof(IEnumerator).GetMethod("MoveNext"));
 
-            var loopVar = Expression.Variable(valueType);
+            var loopVar = Expression.Variable(valueType, "loopVar");
 
             var (maxSize, isRef) = TypeFields.GetSizeForType(valueType);
 
-            var breakLabel = Expression.Label();
+            var breakLabel = Expression.Label("finishList");
 
             var loop = Expression.Block(new[] { enumeratorVar },
                 Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)),
@@ -125,7 +125,7 @@ namespace Apex.Serialization.Internal
             var valueType = collectionType.GetGenericArguments()[0];
 
             var blockStatements = new List<Expression>();
-            var countVar = Expression.Variable(typeof(int));
+            var countVar = Expression.Variable(typeof(int), "countVar");
             blockStatements.Add(Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(4)));
             blockStatements.Add(Expression.Assign(countVar, Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)));
 
@@ -161,7 +161,7 @@ namespace Apex.Serialization.Internal
 
             var (maxSize, isRef) = TypeFields.GetSizeForType(valueType);
 
-            var breakLabel = Expression.Label();
+            var breakLabel = Expression.Label("finishList");
 
             blockStatements.Add(
                 Expression.Loop(
