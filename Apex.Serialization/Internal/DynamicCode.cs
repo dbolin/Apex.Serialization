@@ -2,12 +2,9 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.IO;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Runtime.Serialization;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal.Reflection;
 
@@ -173,30 +170,6 @@ namespace Apex.Serialization.Internal
             return writeStatements;
         }
 
-        private static Expression ReserveConstantSize(ParameterExpression stream, int size)
-        {
-            if(size <= 0)
-            {
-                return Expression.Empty();
-            }
-
-            return Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo,
-                                Expression.Constant(size));
-        }
-
-        private static void CheckTypeSupported(Type type, List<FieldInfo> fields)
-        {
-            if (type.IsPointer || fields.Any(x => x.FieldType.IsPointer))
-            {
-                throw new NotSupportedException("Pointers or types containing pointers are not supported");
-            }
-
-            if (typeof(SafeHandle).IsAssignableFrom(type))
-            {
-                throw new NotSupportedException("Objects containing handles are not supported");
-            }
-        }
-
         internal static Expression? HandleSpecialWrite(Type type, ParameterExpression output,
             Expression actualSource, ParameterExpression stream, Expression source, List<FieldInfo> fields,
             ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
@@ -234,109 +207,13 @@ namespace Apex.Serialization.Internal
                 return writeStruct;
             }
 
-            if(type.IsArray)
+            var writeArray = WriteArray(type, stream, output, actualSource, settings, visitedTypes);
+            if(writeArray != null)
             {
-                var elementType = type.GetElementType()!;
-                var dimensions = type.GetArrayRank();
-
-                var (elementSize, isRef) = TypeFields.GetSizeForType(elementType);
-
-                var lengths = new List<ParameterExpression>();
-                for (int i = 0; i < dimensions; ++i)
-                {
-                    lengths.Add(Expression.Variable(typeof(int)));
-                }
-
-                var statements = new List<Expression>();
-
-                statements.Add(ReserveConstantSize(stream, 4 * dimensions));
-                statements.AddRange(lengths.Select((x, i) =>
-                    Expression.Assign(x, Expression.Call(actualSource, "GetLength", Array.Empty<Type>(), Expression.Constant(i)))));
-                statements.AddRange(lengths.Select(x =>
-                    Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
-
-                if (StaticTypeInfo.IsBlittable(elementType) && dimensions < 3)
-                {
-                    statements.Add(WriteArrayOfBlittableValues(output, actualSource, stream, dimensions, elementType, elementSize));
-                }
-                else
-                {
-                    statements.Add(WriteArrayGeneral(output, actualSource, stream, dimensions, lengths, elementType, elementSize, settings, visitedTypes));
-                }
-                return Expression.Block(lengths, statements);
+                return writeArray;
             }
 
             return WriteCollection(type, output, actualSource, stream, source, settings, visitedTypes);
-        }
-
-        private static Expression WriteArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
-            ParameterExpression stream, int dimensions, Type elementType, int elementSize)
-        {
-            return dimensions switch
-            {
-                1 => Expression.Call(output, WriteArrayOfValuesMethod1.MakeGenericMethod(elementType),
-                       actualSource,
-                       Expression.Constant(elementSize)),
-                2 => Expression.Call(output, WriteArrayOfValuesMethod2.MakeGenericMethod(elementType),
-                       actualSource,
-                       Expression.Constant(elementSize)),
-                _ => throw new InvalidOperationException($"Blitting multidimensional array with {dimensions} dimensions is not supported"),
-            };
-        }
-
-        private static Expression WriteArrayGeneral(ParameterExpression output, Expression actualSource,
-            ParameterExpression stream, int dimensions, List<ParameterExpression> lengths, Type elementType, int elementSize,
-            ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
-        {
-            var indices = new List<ParameterExpression>();
-            var breakLabels = new List<LabelTarget>();
-            var continueLabels = new List<LabelTarget>();
-
-            for (int i = 0; i < dimensions; ++i)
-            {
-                indices.Add(Expression.Variable(typeof(int)));
-                breakLabels.Add(Expression.Label());
-                continueLabels.Add(Expression.Label());
-            }
-
-            var accessExpression = dimensions > 1
-                ? (Expression) Expression.ArrayIndex(actualSource, indices)
-                : Expression.ArrayIndex(actualSource, indices[0]);
-
-            var writeValue = WriteValue(stream, output, elementType, accessExpression, settings, visitedTypes, out var isSimpleWrite);
-
-            var shouldWriteTypeInfo = typeof(Delegate).IsAssignableFrom(elementType) || typeof(Type).IsAssignableFrom(elementType);
-
-            if (!isSimpleWrite && StaticTypeInfo.IsSealedOrHasNoDescendents(elementType))
-            {
-                var fields = TypeFields.GetOrderedFields(elementType);
-                writeValue = Expression.Block(GetWriteStatementsForType(elementType, settings, stream, output,
-                    accessExpression, shouldWriteTypeInfo, accessExpression,
-                    fields, visitedTypes, true));
-            }
-            else
-            {
-                writeValue = Expression.Block(
-                    ReserveConstantSize(stream, elementSize),
-                    writeValue);
-            }
-
-            var loop = writeValue;
-
-            for (int i = 0; i < dimensions; ++i)
-            {
-                loop =
-                    Expression.Block(
-                        Expression.Assign(indices[i], Expression.Subtract(lengths[i], Expression.Constant(1))),
-                        Expression.Loop(Expression.IfThenElse(
-                            Expression.LessThan(indices[i], Expression.Constant(0)),
-                            Expression.Break(breakLabels[i]),
-                            Expression.Block(loop, Expression.Label(continueLabels[i]), Expression.Assign(indices[i], Expression.Decrement(indices[i])))
-                        ), breakLabels[i])
-                    );
-            }
-
-            return Expression.Block(indices, loop);
         }
 
         private static Expression? WriteStructExpression(Type type, Expression source, ParameterExpression stream,
@@ -532,9 +409,6 @@ namespace Apex.Serialization.Internal
             return Expression.IfThen(Expression.Not(Expression.Call(output, WriteNullableByteMethod.MakeGenericMethod(declaredType.GenericTypeArguments), valueAccessExpression)),
                 Expression.Call(output, "WriteValueInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
         }
-
-        internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject")!;
-        private static Type[] emptyTypes = new Type[0];
 
         internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed)
             where T : Delegate
@@ -902,49 +776,11 @@ namespace Apex.Serialization.Internal
                 return Expression.Assign(result, readStructExpression);
             }
 
-            if (type.IsArray)
+            var array = ReadArray(type, stream, output, result, settings, visitedTypes);
+            if (array != null)
             {
                 created = true;
-
-                var elementType = type.GetElementType()!;
-                var dimensions = type.GetArrayRank();
-
-                var (elementSize, isRef) = TypeFields.GetSizeForType(elementType);
-
-                var lengths = new List<ParameterExpression>();
-                for (int i = 0; i < dimensions; ++i)
-                {
-                    lengths.Add(Expression.Variable(typeof(int), $"length{i}"));
-                }
-
-                var statements = new List<Expression>();
-                statements.Add(ReserveConstantSize(stream, 4 * dimensions));
-                statements.AddRange(lengths.Select((x, i) => Expression.Assign(x,
-                    Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
-
-                var isBlittable = StaticTypeInfo.IsBlittable(elementType) && dimensions < 3;
-
-                if (!isBlittable)
-                {
-                    statements.Add(Expression.Assign(result, Expression.NewArrayBounds(elementType, lengths)));
-                }
-
-                if (settings.SerializationMode == Mode.Graph)
-                {
-                    statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                        SavedReferencesListAdd, result));
-                }
-
-                if (isBlittable)
-                {
-                    statements.Add(ReadArrayOfBlittableValues(output, result, stream, dimensions, elementType, elementSize));
-                }
-                else
-                {
-                    statements.Add(ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths, settings, visitedTypes));
-                }
-
-                return Expression.Block(lengths, statements);
+                return array;
             }
 
             var collection = ReadCollection(type, output, result, stream, settings, localVariables, visitedTypes);
@@ -1000,126 +836,6 @@ namespace Apex.Serialization.Internal
             return statements.Count > 0 ? Expression.Block(statements) : null;
         }
 
-        private static Expression ReadArrayOfBlittableValues(ParameterExpression output, Expression result,
-            ParameterExpression stream, int dimensions, Type elementType, int elementSize)
-        {
-            return dimensions switch
-            {
-                1 => Expression.Assign(result, Expression.Call(output, ReadArrayOfValuesMethod1.MakeGenericMethod(elementType),
-                       Expression.Constant(elementSize))),
-                2 => Expression.Assign(result, Expression.Call(output, ReadArrayOfValuesMethod2.MakeGenericMethod(elementType),
-                        Expression.Constant(elementSize))),
-                _ => throw new InvalidOperationException($"Blitting multidimensional array with {dimensions} dimensions is not supported"),
-            };
-        }
-
-        private static Expression ReadArrayGeneral(ParameterExpression output, Expression result,
-            ParameterExpression stream, int dimensions, Type elementType, int elementSize,
-            List<ParameterExpression> lengths, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
-        {
-            var indices = new List<ParameterExpression>();
-            var continueLabels = new List<LabelTarget>();
-            var localVariables = new List<ParameterExpression>();
-
-            for (int i = 0; i < dimensions; ++i)
-            {
-                indices.Add(Expression.Variable(typeof(int), $"index{i}"));
-                continueLabels.Add(Expression.Label());
-            }
-
-            var accessExpression = dimensions > 1
-                ? (Expression) Expression.ArrayAccess(result, indices)
-                : Expression.ArrayAccess(result, indices[0]);
-
-            var readValue = ReadValue(stream, output, settings, elementType, localVariables, visitedTypes, out var isSimpleRead);
-
-            if (!isSimpleRead && StaticTypeInfo.IsSealedOrHasNoDescendents(elementType)
-                && !typeof(Type).IsAssignableFrom(elementType)
-                && !typeof(Delegate).IsAssignableFrom(elementType))
-            {
-                var fields = TypeFields.GetOrderedFields(elementType);
-                if (fields.Count > 2)
-                {
-                    var tempVar = Expression.Variable(elementType, "tempElement");
-                    var elementReadStatements = GetReadStatementsForType(elementType, settings, stream, output,
-                        tempVar, fields, localVariables, visitedTypes);
-                    elementReadStatements.Add(Expression.Assign(accessExpression, tempVar));
-                    readValue = Expression.Block(new[] { tempVar }, elementReadStatements);
-                }
-                else
-                {
-                    readValue = Expression.Block(GetReadStatementsForType(elementType, settings, stream, output,
-                        accessExpression, fields, localVariables, visitedTypes));
-                }
-
-                if (!elementType.IsValueType)
-                {
-                    if (settings.SerializationMode == Mode.Graph)
-                    {
-                        var refIndex = Expression.Variable(typeof(int), "refIndex");
-                        readValue = Expression.Block(
-                            ReserveConstantSize(stream, 5),
-                            Expression.IfThenElse(
-                                Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
-                                Expression.Continue(continueLabels[continueLabels.Count - 1]),
-                                Expression.Block(new[] { refIndex },
-                                    Expression.Assign(refIndex, Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)),
-                                    Expression.IfThen(
-                                        Expression.NotEqual(refIndex, Expression.Constant(-1)),
-                                        Expression.Block(
-                                            Expression.Assign(accessExpression, 
-                                                Expression.Convert(
-                                                    Expression.Property(
-                                                        Expression.Call(output, SavedReferencesGetter), 
-                                                    SavedReferencesListIndexer, Expression.Decrement(refIndex)), 
-                                                elementType)
-                                            ),
-                                            Expression.Continue(continueLabels[continueLabels.Count - 1])
-                                        )
-                                    )
-                                )
-                            ),
-                            readValue
-                        );
-                    }
-                    else
-                    {
-                        readValue = Expression.Block(
-                            ReserveConstantSize(stream, 1),
-                            Expression.IfThen(
-                                Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
-                                Expression.Continue(continueLabels[continueLabels.Count - 1])
-                            ),
-                            readValue
-                        );
-                    }
-                }
-            }
-            else
-            {
-                readValue = Expression.Block(
-                    ReserveConstantSize(stream, elementSize),
-                    Expression.Assign(accessExpression, readValue));
-            }
-
-            var loop = readValue;
-
-            for (int i = 0; i < dimensions; ++i)
-            {
-                var breakLabel = Expression.Label();
-                loop = Expression.Block(
-                    Expression.Assign(indices[i], Expression.Subtract(lengths[i], Expression.Constant(1))),
-                    Expression.Loop(Expression.IfThenElse(
-                        Expression.LessThan(indices[i], Expression.Constant(0)),
-                        Expression.Break(breakLabel),
-                        Expression.Block(loop, Expression.Label(continueLabels[i]), Expression.Assign(indices[i], Expression.Decrement(indices[i])))
-                    ), breakLabel)
-                );
-            }
-
-            return Expression.Block(indices.Concat(localVariables), loop);
-        }
-
         private static Expression? ReadStructExpression(Type type, ParameterExpression stream,
             List<FieldInfo> fields)
         {
@@ -1160,8 +876,6 @@ namespace Apex.Serialization.Internal
             return ReadDictionary(type, output, result, stream, settings, localVariables, visitedTypes)
                 ?? ReadList(type, output, result, stream, settings, localVariables, visitedTypes);
         }
-
-        private static MethodInfo fieldInfoSetValueMethod = typeof(FieldInfo).GetMethod("SetValue", new[] { typeof(object), typeof(object) })!;
 
         internal static Expression GetReadFieldExpression(FieldInfo fieldInfo, Expression result,
             ParameterExpression stream, ParameterExpression output,
@@ -1296,57 +1010,5 @@ namespace Apex.Serialization.Internal
                 Expression.Convert(Expression.Call(output, "ReadValueInternal", declaredType.GenericTypeArguments),
                     declaredType), Expression.Convert(Expression.Constant(null), declaredType));
         }
-
-        private static readonly BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
-
-        private static readonly MethodInfo SavedReferencesGetter =
-            typeof(TBinary).GetProperty("LoadedObjectRefs", InstanceFlags)!.GetMethod!;
-
-        private static readonly MethodInfo WriteObjectRefMethod =
-            typeof(TBinary).GetMethod("WriteObjectRef", InstanceFlags)!;
-
-        private static readonly MethodInfo WriteTypeRefMethod =
-            typeof(TBinary).GetMethod("WriteTypeRef", InstanceFlags)!;
-
-        private static readonly MethodInfo ReadTypeRefMethod =
-            typeof(TBinary).GetMethod("ReadTypeRef", InstanceFlags)!;
-
-        private static readonly MethodInfo SavedReferencesListAdd =
-            typeof(List<object>).GetMethod("Add")!;
-
-        private static readonly MethodInfo SavedReferencesListCountGetter =
-            typeof(List<object>).GetProperty("Count")!.GetMethod!;
-
-        private static readonly PropertyInfo SavedReferencesListIndexer =
-            typeof(List<object>).GetProperty("Item", new[] { typeof(int) })!;
-
-        private static readonly MethodInfo LoadedTypeReferencesGetter =
-            typeof(TBinary).GetProperty("LoadedTypeRefs", InstanceFlags)!.GetMethod!;
-
-        private static readonly PropertyInfo LoadedTypeListIndexer =
-            typeof(List<Type>).GetProperty("Item", new[] { typeof(int) })!;
-
-        private static readonly MethodInfo BinaryWriterGetter =
-            typeof(TBinary).GetProperty("BinaryWriter", InstanceFlags)!.GetMethod!;
-
-        private static readonly MethodInfo BinaryReaderGetter =
-            typeof(TBinary).GetProperty("BinaryReader", InstanceFlags)!.GetMethod!;
-
-        private static readonly MethodInfo CustomContextGetter =
-            typeof(TBinary).GetMethod("GetCustomContext", InstanceFlags)!;
-
-        private static readonly MethodInfo WriteNullableByteMethod = typeof(TBinary).GetMethod("WriteNullableByte", InstanceFlags)!;
-        private static readonly MethodInfo ReadNullByteMethod = typeof(TBinary).GetMethod("ReadNullByte", InstanceFlags)!;
-
-        private static readonly MethodInfo WriteFunctionMethod = typeof(TBinary).GetMethod("WriteFunction", InstanceFlags)!;
-        private static readonly MethodInfo ReadFunctionMethod = typeof(TBinary).GetMethod("ReadFunction", InstanceFlags)!;
-
-        private static readonly MethodInfo WriteArrayOfValuesMethod1 = typeof(TBinary).GetMethod("WriteValuesArray1", InstanceFlags)!;
-        private static readonly MethodInfo ReadArrayOfValuesMethod1 = typeof(TBinary).GetMethod("ReadValuesArray1", InstanceFlags)!;
-        private static readonly MethodInfo WriteArrayOfValuesMethod2 = typeof(TBinary).GetMethod("WriteValuesArray2", InstanceFlags)!;
-        private static readonly MethodInfo ReadArrayOfValuesMethod2 = typeof(TBinary).GetMethod("ReadValuesArray2", InstanceFlags)!;
-
-        private static readonly MethodInfo QueueAfterDeserializationHook =
-            typeof(TBinary).GetMethod("QueueAfterDeserializationHook", InstanceFlags)!;
     }
 }
