@@ -23,10 +23,10 @@ Internal benchmarks
 
 |                    Method |      Mean |     Error |    StdDev |   Gen 0 |  Gen 1 | Gen 2 | Allocated |
 |-------------------------- |----------:|----------:|----------:|--------:|-------:|------:|----------:|
-|  STree_ISD_IS_FullHistory | 172.63 us | 0.6290 us | 0.5576 us |       - |      - |     - |         - |
-|  DTree_ISD_IS_FullHistory | 923.33 us | 3.8773 us | 3.4371 us | 11.7188 | 2.9297 |     - |  654240 B |
-| SGraph_ISD_IS_FullHistory |  46.63 us | 0.4250 us | 0.3976 us |       - |      - |     - |         - |
-| DGraph_ISD_IS_FullHistory |  93.33 us | 0.4612 us | 0.3851 us |  5.6152 | 0.8545 |     - |   59368 B |
+|  STree_ISD_IS_FullHistory | 173.75 us | 0.8236 us | 0.7704 us |       - |      - |     - |         - |
+|  DTree_ISD_IS_FullHistory | 885.52 us | 5.7649 us | 5.3925 us | 11.7188 | 2.9297 |     - |  654240 B |
+| SGraph_ISD_IS_FullHistory |  46.70 us | 0.4185 us | 0.3710 us |       - |      - |     - |         - |
+| DGraph_ISD_IS_FullHistory |  93.85 us | 1.2763 us | 1.1314 us |  5.3711 |      - |     - |   59368 B |
 
 |               Method |     Mean |    Error |    StdDev |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
 |--------------------- |---------:|---------:|----------:|-------:|-------:|------:|----------:|

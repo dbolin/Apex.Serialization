@@ -5,6 +5,7 @@ using System.Text;
 using Apex.Serialization;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Diagnosers;
+using Ceras;
 using MessagePack;
 using ProtoBuf;
 using Serializer = Hyperion.Serializer;
@@ -28,21 +29,23 @@ namespace Benchmark
             }
             [Key(0)]
             [ProtoMember(1)]
-            public string StringProp { get; }      //using the text "hello"
+            public readonly string StringProp;      //using the text "hello"
             [Key(1)]
             [ProtoMember(2)]
-            public int IntProp { get; }            //123
+            public readonly int IntProp;            //123
             [Key(2)]
             [ProtoMember(3)]
-            public Guid GuidProp { get; }          //Guid.NewGuid()
+            public readonly Guid GuidProp;          //Guid.NewGuid()
             [Key(3)]
             [ProtoMember(4)]
-            public DateTime DateProp { get; }      //DateTime.Now
+            public readonly DateTime DateProp;      //DateTime.Now
         }
 
         private IBinary _binary = Binary.Create();
         //private Serializer _hyperion = new Serializer();
         private NetSerializer.Serializer _netSerializer = new NetSerializer.Serializer(new[] { typeof(List<ImmutablePoco>) });
+        private readonly CerasSerializer ceras;
+        private byte[] b = new byte[16];
 
         private MemoryStream _m1 = new MemoryStream();
         private MemoryStream _m2 = new MemoryStream();
@@ -54,6 +57,11 @@ namespace Benchmark
 
         public SerializationImmutablePoco()
         {
+            var config = new SerializerConfig { DefaultTargets = TargetMember.AllFields, PreserveReferences = false };
+            config.Advanced.ReadonlyFieldHandling = ReadonlyFieldHandling.ForcedOverwrite;
+            config.ConfigType<ImmutablePoco>().ConstructByUninitialized();
+            ceras = new CerasSerializer(config);
+
             for (int i = 0; i < 1000; ++i)
             {
                 _t1.Add(new ImmutablePoco("hello", 123, Guid.NewGuid(), DateTime.Now));
@@ -85,6 +93,12 @@ namespace Benchmark
         {
             _m4.Seek(0, SeekOrigin.Begin);
             MessagePackSerializer.Serialize(_m4, _t1);
+        }
+
+        [Benchmark]
+        public void Ceras()
+        {
+            ceras.Serialize(_t1, ref b);
         }
 
         /*

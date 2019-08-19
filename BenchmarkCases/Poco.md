@@ -1,6 +1,6 @@
 ## Pocos
 
-Protobuf-net 3.0.0-alpha.43 / MessagePack 1.7.3.7 / NetSerializer 4.1.0 / Apex
+Protobuf-net 3.0.0-alpha.43 / MessagePack 1.7.3.7 / NetSerializer 4.1.0 / Ceras 4.1.6 / Apex
 
 Serializing/deserializing a list of 1000 small pocos defined as follows
 
@@ -14,10 +14,10 @@ Serializing/deserializing a list of 1000 small pocos defined as follows
                 GuidProp = g;
                 DateProp = d;
             }
-            public string StringProp { get; }      //using the text "hello"
-            public int IntProp { get; }            //123
-            public Guid GuidProp { get; }          //Guid.NewGuid()
-            public DateTime DateProp { get; }      //DateTime.Now
+            public readonly string StringProp;      //using the text "hello"
+            public readonly int IntProp;            //123
+            public readonly Guid GuidProp;          //Guid.NewGuid()
+            public readonly DateTime DateProp;      //DateTime.Now
         }
 
         public class Poco
@@ -41,35 +41,39 @@ Frequency=3417962 Hz, Resolution=292.5720 ns, Timer=TSC
 
 |        Method |      Mean |     Error |    StdDev | Ratio | RatioSD | Gen 0 | Gen 1 | Gen 2 | Allocated |
 |-------------- |----------:|----------:|----------:|------:|--------:|------:|------:|------:|----------:|
-|      Protobuf | 499.45 us | 1.1651 us | 1.0898 us | 36.42 |    0.09 |     - |     - |     - |     315 B |
-| NetSerializer | 454.63 us | 1.3409 us | 1.1197 us | 33.17 |    0.09 |     - |     - |     - |         - |
-|   MessagePack | 397.93 us | 2.8081 us | 2.6267 us | 29.02 |    0.21 |     - |     - |     - |         - |
-|          Apex |  13.71 us | 0.0285 us | 0.0267 us |  1.00 |    0.00 |     - |     - |     - |         - |
+|      Protobuf | 474.56 us | 3.9231 us | 3.6696 us | 35.30 |    0.24 |     - |     - |     - |     314 B |
+| NetSerializer | 456.23 us | 1.1548 us | 1.0802 us | 33.92 |    0.11 |     - |     - |     - |         - |
+|   MessagePack | 392.81 us | 0.8932 us | 0.8355 us | 29.19 |    0.08 |     - |     - |     - |         - |
+|         Ceras | 297.80 us | 0.9457 us | 0.7897 us | 22.14 |    0.09 |     - |     - |     - |      40 B |
+|          Apex |  13.45 us | 0.0369 us | 0.0327 us |  1.00 |    0.00 |     - |     - |     - |         - |
 
 #### Mutable Poco Deserialization
 
 |        Method |      Mean |     Error |    StdDev | Ratio | RatioSD |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
 |-------------- |----------:|----------:|----------:|------:|--------:|-------:|-------:|------:|----------:|
-|      Protobuf | 613.62 us | 3.6265 us | 3.2148 us | 20.46 |    0.43 | 8.7891 | 0.9766 |     - | 105.45 KB |
-| NetSerializer | 476.83 us | 2.7650 us | 2.4511 us | 15.90 |    0.34 | 7.8125 | 0.9766 |     - |  93.99 KB |
-|   MessagePack | 328.10 us | 0.7863 us | 0.6970 us | 10.94 |    0.22 | 9.2773 | 0.9766 |     - |   93.8 KB |
-|          Apex |  29.95 us | 0.6339 us | 0.6225 us |  1.00 |    0.00 | 8.0261 | 1.1292 |     - |  93.99 KB |
+|      Protobuf | 694.31 us | 3.4614 us | 3.0684 us | 23.41 |    0.70 | 8.7891 | 0.9766 |     - | 105.45 KB |
+| NetSerializer | 483.23 us | 3.2446 us | 3.0350 us | 16.26 |    0.51 | 7.8125 | 0.9766 |     - |  93.99 KB |
+|   MessagePack | 329.37 us | 1.1982 us | 1.1208 us | 11.08 |    0.37 | 9.2773 | 0.9766 |     - |   93.8 KB |
+|         Ceras | 339.23 us | 3.0692 us | 2.8709 us | 11.42 |    0.39 | 8.7891 | 0.9766 |     - |   93.8 KB |
+|          Apex |  29.63 us | 0.7641 us | 0.8799 us |  1.00 |    0.00 | 7.9956 | 1.1292 |     - |  93.99 KB |
 
 #### Immutable Poco Serialization
 
 |        Method |      Mean |     Error |    StdDev | Ratio | RatioSD | Gen 0 | Gen 1 | Gen 2 | Allocated |
 |-------------- |----------:|----------:|----------:|------:|--------:|------:|------:|------:|----------:|
-|      Protobuf | 464.65 us | 3.1857 us | 2.9799 us | 33.89 |    0.20 |     - |     - |     - |     314 B |
-| NetSerializer | 453.09 us | 2.5367 us | 2.2488 us | 33.03 |    0.17 |     - |     - |     - |         - |
-|   MessagePack | 396.31 us | 1.7824 us | 1.6672 us | 28.91 |    0.15 |     - |     - |     - |         - |
-|          Apex |  13.72 us | 0.0282 us | 0.0250 us |  1.00 |    0.00 |     - |     - |     - |         - |
+|      Protobuf | 512.50 us | 9.0402 us | 8.4562 us | 37.73 |    0.66 |     - |     - |     - |     315 B |
+| NetSerializer | 457.78 us | 0.4459 us | 0.4171 us | 33.70 |    0.08 |     - |     - |     - |         - |
+|   MessagePack | 399.55 us | 1.6691 us | 1.4796 us | 29.43 |    0.15 |     - |     - |     - |         - |
+|         Ceras | 284.10 us | 1.0728 us | 1.0035 us | 20.92 |    0.10 |     - |     - |     - |      40 B |
+|          Apex |  13.58 us | 0.0374 us | 0.0350 us |  1.00 |    0.00 |     - |     - |     - |         - |
 
 #### Immutable Poco Deserialization
 
-|        Method |      Mean |     Error |    StdDev | Ratio | RatioSD |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
-|-------------- |----------:|----------:|----------:|------:|--------:|-------:|-------:|------:|----------:|
-|      Protobuf | 610.15 us | 8.2600 us | 7.7264 us | 20.58 |    0.36 | 8.7891 | 0.9766 |     - | 105.45 KB |
-| NetSerializer | 469.99 us | 1.2918 us | 1.2083 us | 15.86 |    0.39 | 7.8125 | 0.9766 |     - |  93.99 KB |
-|   MessagePack | 326.40 us | 1.4267 us | 1.2648 us | 11.01 |    0.30 | 9.2773 | 0.9766 |     - |   93.8 KB |
-|          Apex |  29.65 us | 0.8216 us | 0.7686 us |  1.00 |    0.00 | 8.0261 | 1.0681 |     - |  93.99 KB |
+|        Method |      Mean |     Error |    StdDev | Ratio | RatioSD |   Gen 0 |  Gen 1 | Gen 2 | Allocated |
+|-------------- |----------:|----------:|----------:|------:|--------:|--------:|-------:|------:|----------:|
+|      Protobuf | 605.59 us | 1.3097 us | 1.2251 us | 20.28 |    0.41 |  8.7891 | 0.9766 |     - | 105.45 KB |
+| NetSerializer | 484.85 us | 3.2039 us | 2.8402 us | 16.23 |    0.35 |  7.8125 | 0.4883 |     - |  93.99 KB |
+|   MessagePack | 331.94 us | 0.9729 us | 0.9100 us | 11.12 |    0.23 |  8.7891 | 0.9766 |     - |   93.8 KB |
+|         Ceras | 617.96 us | 0.7456 us | 0.6226 us | 20.68 |    0.42 | 16.6016 | 1.9531 |     - | 171.93 KB |
+|          Apex |  29.88 us | 0.6949 us | 0.6160 us |  1.00 |    0.00 |  8.0261 | 1.0986 |     - |  93.99 KB |
 

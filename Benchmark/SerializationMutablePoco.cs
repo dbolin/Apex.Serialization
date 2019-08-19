@@ -5,6 +5,7 @@ using System.Text;
 using Apex.Serialization;
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Diagnosers;
+using Ceras;
 using MessagePack;
 using ProtoBuf;
 using Serializer = Hyperion.Serializer;
@@ -36,6 +37,8 @@ namespace Benchmark
         private IBinary _binary = Binary.Create();
         //private Serializer _hyperion = new Serializer();
         private NetSerializer.Serializer _netSerializer = new NetSerializer.Serializer(new[] { typeof(List<Poco>) });
+        private readonly CerasSerializer ceras = new CerasSerializer(new SerializerConfig { DefaultTargets = TargetMember.AllProperties, PreserveReferences = false });
+        private byte[] b = new byte[16];
 
         private MemoryStream _m1 = new MemoryStream();
         private MemoryStream _m2 = new MemoryStream();
@@ -57,6 +60,7 @@ namespace Benchmark
             ProtoBuf.Serializer.Serialize(_m3, _t1);
             MessagePackSerializer.Serialize(_m4, _t1);
             _netSerializer.Serialize(_m5, _t1);
+            ceras.Serialize(_t1, ref b);
         }
 
         [Benchmark]
@@ -78,6 +82,12 @@ namespace Benchmark
         {
             _m4.Seek(0, SeekOrigin.Begin);
             MessagePackSerializer.Serialize(_m4, _t1);
+        }
+
+        [Benchmark]
+        public void Ceras()
+        {
+            ceras.Serialize(_t1, ref b);
         }
 
         /*
