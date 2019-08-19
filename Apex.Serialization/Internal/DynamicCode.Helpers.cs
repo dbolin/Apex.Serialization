@@ -77,9 +77,6 @@ namespace Apex.Serialization.Internal
         private static readonly MethodInfo CustomContextGetter =
             typeof(TBinary).GetMethod("GetCustomContext", InstanceFlags)!;
 
-        private static readonly MethodInfo WriteNullableByteMethod = typeof(TBinary).GetMethod("WriteNullableByte", InstanceFlags)!;
-        private static readonly MethodInfo ReadNullByteMethod = typeof(TBinary).GetMethod("ReadNullByte", InstanceFlags)!;
-
         private static readonly MethodInfo WriteFunctionMethod = typeof(TBinary).GetMethod("WriteFunction", InstanceFlags)!;
         private static readonly MethodInfo ReadFunctionMethod = typeof(TBinary).GetMethod("ReadFunction", InstanceFlags)!;
 

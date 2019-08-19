@@ -107,8 +107,15 @@ namespace Apex.Serialization.Internal.Reflection
 
             if (type.IsValueType && fields.All(f => IsPrimitive(f.FieldType)))
             {
-                size = (int) typeof(Unsafe).GetMethod("SizeOf")!.MakeGenericMethod(type)!
-                    .Invoke(null, Array.Empty<Type>())!;
+                if (fields.Count == 1)
+                {
+                    size = (int)typeof(Unsafe).GetMethod("SizeOf")!.MakeGenericMethod(type)!
+                        .Invoke(null, Array.Empty<Type>())!;
+                }
+                else
+                {
+                    size = fields.Sum(x => GetSizeForType(x.FieldType).size);
+                }
 
                 sizeForField = size;
                 return true;

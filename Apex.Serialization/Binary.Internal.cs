@@ -163,12 +163,6 @@ namespace Apex.Serialization
             return false;
         }
 
-        internal bool ReadNullByte()
-        {
-            _stream.ReserveSize(1);
-            return _stream.Read<byte>() == 0;
-        }
-
         internal bool WriteObjectRef(object value)
         {
             ref var index = ref _savedObjectLookup!.GetOrAddValueRef(value);
@@ -249,23 +243,6 @@ namespace Apex.Serialization
             else
             {
                 _stream.Write((byte)1);
-            }
-
-            return false;
-        }
-
-        internal bool WriteNullableByte<T>(T? value)
-            where T : struct
-        {
-            _stream.ReserveSize(1);
-            if (value.HasValue)
-            {
-                _stream.Write((byte)1);
-            }
-            else
-            {
-                _stream.Write((byte)0);
-                return true;
             }
 
             return false;

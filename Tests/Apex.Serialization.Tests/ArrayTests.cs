@@ -88,6 +88,15 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
+        public void ManyIntArray()
+        {
+            var a = new int[0];
+            var x = new[] { new[] { 1,2,3,4,5,6,7 }, a, a, a, null, new[] { 4 } };
+
+            RoundTrip(x);
+        }
+
+        [Fact]
         public void BlittableArrays()
         {
             RoundTrip(new byte[] { 0, 1 });

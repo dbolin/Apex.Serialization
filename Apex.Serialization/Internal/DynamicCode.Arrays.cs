@@ -140,23 +140,23 @@ namespace Apex.Serialization.Internal
 
                 var isBlittable = StaticTypeInfo.IsBlittable(elementType) && dimensions < 3;
 
-                if (!isBlittable)
-                {
-                    statements.Add(Expression.Assign(result, Expression.NewArrayBounds(elementType, lengths)));
-                }
-
-                if (settings.SerializationMode == Mode.Graph)
-                {
-                    statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                        SavedReferencesListAdd, result));
-                }
-
                 if (isBlittable)
                 {
-                    statements.Add(ReadArrayOfBlittableValues(output, result, stream, dimensions, elementType, elementSize));
+                    statements.Add(ReadArrayOfBlittableValues(output, result, stream, dimensions, elementType, elementSize, lengths));
+                    if (settings.SerializationMode == Mode.Graph)
+                    {
+                        statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                            SavedReferencesListAdd, result));
+                    }
                 }
                 else
                 {
+                    statements.Add(Expression.Assign(result, Expression.NewArrayBounds(elementType, lengths)));
+                    if (settings.SerializationMode == Mode.Graph)
+                    {
+                        statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                            SavedReferencesListAdd, result));
+                    }
                     statements.Add(ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths, settings, visitedTypes));
                 }
 
@@ -274,7 +274,7 @@ namespace Apex.Serialization.Internal
         }
 
         private static Expression ReadArrayOfBlittableValues(ParameterExpression output, Expression result,
-            ParameterExpression stream, int dimensions, Type elementType, int elementSize)
+            ParameterExpression stream, int dimensions, Type elementType, int elementSize, List<ParameterExpression> lengths)
         {
             return dimensions switch
             {

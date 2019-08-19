@@ -18,5 +18,33 @@ namespace Apex.Serialization.Tests.Collections.Immutable
 
             RoundTrip(x);
         }
+
+        public class Container
+        {
+            public string A { get; }
+            public ImmutableArray<Guid> B { get; }
+            public string C { get; }
+
+            public Container(string a, ImmutableArray<Guid> b, string c)
+            {
+                A = a;
+                B = b;
+                C = c;
+            }
+        }
+
+        [Fact]
+        public void ObjectContainingImmutableArray()
+        {
+            var c = new Container("A", ImmutableArray<Guid>.Empty, "C");
+            var x = new List<Container>
+            {
+                c,
+                c,
+                c
+            };
+
+            RoundTrip(x);
+        }
     }
 }

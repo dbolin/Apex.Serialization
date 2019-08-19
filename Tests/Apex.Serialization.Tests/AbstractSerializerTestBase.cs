@@ -35,6 +35,15 @@ namespace Apex.Serialization.Tests
 
             loaded.Should().BeEquivalentTo(obj);
 
+            var obj2 = new[] { obj, obj };
+            _stream.Seek(0, SeekOrigin.Begin);
+            _serializerGraph.Write(obj2, _stream);
+
+            _stream.Seek(0, SeekOrigin.Begin);
+            var loaded2 = _serializerGraph.Read<T[]>(_stream);
+
+            loaded2.Should().BeEquivalentTo(obj2);
+
             return loaded;
         }
 
@@ -54,7 +63,16 @@ namespace Apex.Serialization.Tests
             _stream.Seek(0, SeekOrigin.Begin);
             loaded = _serializerGraph.Read<T>(_stream);
 
-            check(obj, loaded).Should().Be(true);
+            check(obj, loaded).Should().BeTrue();
+
+            var obj2 = new[] { obj, obj };
+            _stream.Seek(0, SeekOrigin.Begin);
+            _serializerGraph.Write(obj2, _stream);
+
+            _stream.Seek(0, SeekOrigin.Begin);
+            var loaded2 = _serializerGraph.Read<T[]>(_stream);
+
+            check(obj2[1], loaded2[1]).Should().BeTrue();
 
             return loaded;
         }
@@ -77,6 +95,15 @@ namespace Apex.Serialization.Tests
 
             check(obj, loaded);
 
+            var obj2 = new[] { obj, obj };
+            _stream.Seek(0, SeekOrigin.Begin);
+            _serializerGraph.Write(obj2, _stream);
+
+            _stream.Seek(0, SeekOrigin.Begin);
+            var loaded2 = _serializerGraph.Read<T[]>(_stream);
+
+            check(obj2[1], loaded2[1]);
+
             return loaded;
         }
 
@@ -90,6 +117,15 @@ namespace Apex.Serialization.Tests
 
             loaded.Should().BeEquivalentTo(obj);
 
+            var obj2 = new[] { obj, obj };
+            _stream.Seek(0, SeekOrigin.Begin);
+            _serializerGraph.Write(obj2, _stream);
+
+            _stream.Seek(0, SeekOrigin.Begin);
+            var loaded2 = _serializerGraph.Read<T[]>(_stream);
+
+            loaded2.Should().BeEquivalentTo(obj2);
+
             return loaded;
         }
 
@@ -101,7 +137,16 @@ namespace Apex.Serialization.Tests
             _stream.Seek(0, SeekOrigin.Begin);
             var loaded = _serializerGraph.Read<T>(_stream);
 
-            check(obj, loaded).Should().Be(true);
+            check(obj, loaded).Should().BeTrue();
+
+            var obj2 = new[] { obj, obj };
+            _stream.Seek(0, SeekOrigin.Begin);
+            _serializerGraph.Write(obj2, _stream);
+
+            _stream.Seek(0, SeekOrigin.Begin);
+            var loaded2 = _serializerGraph.Read<T[]>(_stream);
+
+            check(obj2[1], loaded2[1]).Should().BeTrue();
 
             return loaded;
         }
@@ -115,6 +160,15 @@ namespace Apex.Serialization.Tests
             var loaded = _serializerGraph.Read<T>(_stream);
 
             check(obj, loaded);
+
+            var obj2 = new[] { obj, obj };
+            _stream.Seek(0, SeekOrigin.Begin);
+            _serializerGraph.Write(obj2, _stream);
+
+            _stream.Seek(0, SeekOrigin.Begin);
+            var loaded2 = _serializerGraph.Read<T[]>(_stream);
+
+            check(obj2[1], loaded2[1]);
 
             return loaded;
         }

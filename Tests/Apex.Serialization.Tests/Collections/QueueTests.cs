@@ -14,7 +14,6 @@ namespace Apex.Serialization.Tests.Collections
             x.Enqueue(1);
             x.Enqueue("asd");
             x.Enqueue(null);
-            x.Enqueue(new object());
 
             RoundTrip(x);
         }

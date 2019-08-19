@@ -56,6 +56,11 @@ namespace Apex.Serialization.Internal
 
             writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, fields, visitedTypes));
 
+            if(type.Name.Contains("Properties") || type.Name.Contains("Guid[]"))
+            {
+                ;
+            }
+
             var lambda = Expression.Lambda<T>(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
             return lambda;
         }
@@ -276,13 +281,6 @@ namespace Apex.Serialization.Internal
                 return primitiveExpression;
             }
 
-            var nullableExpression = HandleNullableWrite(stream, output, declaredType, valueAccessExpression);
-            if (nullableExpression != null)
-            {
-                inlineWrite = true;
-                return nullableExpression;
-            }
-
             var customExpression = HandleCustomWrite(output, declaredType, valueAccessExpression, settings);
             if (customExpression != null)
             {
@@ -397,19 +395,6 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
-        private static Expression? HandleNullableWrite(ParameterExpression stream, ParameterExpression output,
-            Type declaredType,
-            Expression valueAccessExpression)
-        {
-            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
-            {
-                return null;
-            }
-
-            return Expression.IfThen(Expression.Not(Expression.Call(output, WriteNullableByteMethod.MakeGenericMethod(declaredType.GenericTypeArguments), valueAccessExpression)),
-                Expression.Call(output, "WriteValueInternal", declaredType.GenericTypeArguments,Expression.Convert(valueAccessExpression, declaredType.GenericTypeArguments[0])));
-        }
-
         internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed)
             where T : Delegate
         {
@@ -451,6 +436,11 @@ namespace Apex.Serialization.Internal
             else
             {
                 readStatements.Add(result);
+            }
+
+            if (type.Name.Contains("Properties") || type.Name.Contains("Guid[]"))
+            {
+                ;
             }
 
             var lambda = Expression.Lambda<T>(Expression.Block(localVariables, readStatements), $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
@@ -924,13 +914,6 @@ namespace Apex.Serialization.Internal
                 return primitiveExpression;
             }
 
-            var nullableExpression = HandleNullableRead(stream, output, declaredType);
-            if (nullableExpression != null)
-            {
-                isInlineRead = true;
-                return nullableExpression;
-            }
-
             var readStructExpression = ReadStructExpression(declaredType, stream, TypeFields.GetOrderedFields(declaredType));
             if (readStructExpression != null)
             {
@@ -997,18 +980,6 @@ namespace Apex.Serialization.Internal
             }
 
             return null;
-        }
-
-        private static Expression? HandleNullableRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
-        {
-            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
-            {
-                return null;
-            }
-
-            return Expression.Condition(Expression.Not(Expression.Call(output, ReadNullByteMethod)),
-                Expression.Convert(Expression.Call(output, "ReadValueInternal", declaredType.GenericTypeArguments),
-                    declaredType), Expression.Convert(Expression.Constant(null), declaredType));
         }
     }
 }

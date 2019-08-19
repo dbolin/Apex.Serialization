@@ -15,11 +15,8 @@ namespace Apex.Serialization.Tests.Collections
             x.Push(1);
             x.Push("12");
             x.Push(null);
-            x.Push(new object());
 
             x = RoundTrip(x);
-
-            x.Peek().GetType().Should().Be(typeof(object));
         }
     }
 }
