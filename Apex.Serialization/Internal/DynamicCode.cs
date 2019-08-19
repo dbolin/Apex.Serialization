@@ -56,11 +56,6 @@ namespace Apex.Serialization.Internal
 
             writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, fields, visitedTypes));
 
-            if(type.Name.Contains("Properties") || type.Name.Contains("Guid[]"))
-            {
-                ;
-            }
-
             var lambda = Expression.Lambda<T>(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
             return lambda;
         }
@@ -436,11 +431,6 @@ namespace Apex.Serialization.Internal
             else
             {
                 readStatements.Add(result);
-            }
-
-            if (type.Name.Contains("Properties") || type.Name.Contains("Guid[]"))
-            {
-                ;
             }
 
             var lambda = Expression.Lambda<T>(Expression.Block(localVariables, readStatements), $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
