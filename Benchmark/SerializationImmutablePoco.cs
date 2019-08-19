@@ -67,11 +67,11 @@ namespace Benchmark
                 _t1.Add(new ImmutablePoco("hello", 123, Guid.NewGuid(), DateTime.Now));
             }
 
-            _binary.Write(_t1, _m1);
             //_hyperion.Serialize(_t1, _m2);
             ProtoBuf.Serializer.Serialize(_m3, _t1);
             MessagePackSerializer.Serialize(_m4, _t1);
             _netSerializer.Serialize(_m5, _t1);
+            _binary.Write(_t1, _m1);
         }
 
         [Benchmark]
