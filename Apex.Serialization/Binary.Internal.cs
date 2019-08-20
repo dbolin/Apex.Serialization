@@ -569,25 +569,15 @@ namespace Apex.Serialization
         unsafe internal void WriteValuesArray1<T>(T[] array, int elementSize)
             where T : unmanaged
         {
-            _stream.ReserveSize(4);
-            var length = array.Length;
-            _stream.Write(length);
-            if (length == 0)
-            {
-                return;
-            }
-
             fixed (void* ptr = array)
             {
-                _stream.WriteBytes(ptr, (uint)(length * elementSize));
+                _stream.WriteBytes(ptr, (uint)(array.Length * elementSize));
             }
         }
 
-        unsafe internal T[] ReadValuesArray1<T>(int elementSize)
+        unsafe internal T[] ReadValuesArray1<T>(int elementSize, int length)
             where T : unmanaged
         {
-            _stream.ReserveSize(4);
-            var length = _stream.Read<int>();
             if(length == 0)
             {
                 return Array.Empty<T>();
@@ -606,15 +596,8 @@ namespace Apex.Serialization
         unsafe internal void WriteValuesArray2<T>(T[,] array, int elementSize)
             where T : unmanaged
         {
-            _stream.ReserveSize(8);
             var length1 = array.GetLength(0);
             var length2 = array.GetLength(1);
-            _stream.Write(length1);
-            _stream.Write(length2);
-            if (length1 == 0 && length2 == 0)
-            {
-                return;
-            }
 
             fixed (void* ptr = array)
             {
@@ -622,13 +605,9 @@ namespace Apex.Serialization
             }
         }
 
-        unsafe internal T[,] ReadValuesArray2<T>(int elementSize)
+        unsafe internal T[,] ReadValuesArray2<T>(int elementSize, int length1, int length2)
             where T : unmanaged
         {
-            _stream.ReserveSize(8);
-            var length1 = _stream.Read<int>();
-            var length2 = _stream.Read<int>();
-
             var array = new T[length1, length2];
 
             if (length1 == 0 && length2 == 0)

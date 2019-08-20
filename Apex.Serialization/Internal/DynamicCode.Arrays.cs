@@ -34,6 +34,15 @@ namespace Apex.Serialization.Internal
                 statements.AddRange(lengths.Select(x =>
                     Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
 
+                // don't write anything else if lengths are zero
+                var skipLabel = Expression.Label("skipWrite");
+                statements.Add(
+                    Expression.IfThen(
+                        Expression.Equal(Expression.Constant(0), lengths.Aggregate((Expression)Expression.Empty(), (a,b) => a.NodeType == ExpressionType.Default ? (Expression)b : Expression.Or(a,b))),
+                        Expression.Goto(skipLabel)
+                        )
+                    );
+
                 if (IsBlittable(elementType) && dimensions < 3)
                 {
                     statements.Add(WriteArrayOfBlittableValues(output, actualSource, stream, dimensions, elementType, elementSize));
@@ -42,6 +51,9 @@ namespace Apex.Serialization.Internal
                 {
                     statements.Add(WriteArrayGeneral(output, actualSource, stream, dimensions, lengths, elementType, elementSize, settings, visitedTypes));
                 }
+
+                statements.Add(Expression.Label(skipLabel));
+
                 return Expression.Block(lengths, statements);
             }
 
@@ -278,9 +290,9 @@ namespace Apex.Serialization.Internal
             return dimensions switch
             {
                 1 => Expression.Assign(result, Expression.Call(output, ReadArrayOfValuesMethod1.MakeGenericMethod(elementType),
-                       Expression.Constant(elementSize))),
+                       Expression.Constant(elementSize), lengths[0])),
                 2 => Expression.Assign(result, Expression.Call(output, ReadArrayOfValuesMethod2.MakeGenericMethod(elementType),
-                        Expression.Constant(elementSize))),
+                        Expression.Constant(elementSize), lengths[0], lengths[1])),
                 _ => throw new InvalidOperationException($"Blitting multidimensional array with {dimensions} dimensions is not supported"),
             };
         }
