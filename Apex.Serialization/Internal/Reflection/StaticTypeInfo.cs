@@ -2,9 +2,7 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Reflection;
-using System.Runtime.InteropServices;
 
 namespace Apex.Serialization.Internal.Reflection
 {
@@ -29,35 +27,31 @@ namespace Apex.Serialization.Internal.Reflection
 
             return _isSealedOrHasNoDescendantsMap.GetOrAdd(t, k =>
             {
-                foreach (var assembly in AllAssemblies())
+                if(t == typeof(object))
                 {
-                    try
-                    {
-                        foreach (var type in assembly.DefinedTypes)
-                        {
-                            if (type.IsSubclassOf(t))
-                            {
-                                return false;
-                            }
-                        }
-                    }
-                    catch (ReflectionTypeLoadException)
-                    {
-                    }
+                    return false;
                 }
 
+                foreach (var type in AllTypes())
+                {
+                    if (type.IsSubclassOf(t))
+                    {
+                        return false;
+                    }
+                }
                 return true;
-            });
+            }
+            );
         }
 
-        private static HashSet<Assembly>? _allAssemblies;
+        private static HashSet<Type>? _allTypes;
         private static object _allAssembliesLock = new object();
 
-        private static IEnumerable<Assembly> AllAssemblies()
+        private static IEnumerable<Type> AllTypes()
         {
-            if (_allAssemblies != null)
+            if (_allTypes != null)
             {
-                return _allAssemblies;
+                return _allTypes;
             }
 
             lock (_allAssembliesLock)
@@ -71,9 +65,51 @@ namespace Apex.Serialization.Internal.Reflection
                     allAssemblies.Add(assembly);
                 }
 
-                _allAssemblies = allAssemblies;
-                return allAssemblies;
+                _allTypes = GetAllTypesFrom(allAssemblies);
+                return _allTypes;
             }
+        }
+
+        private static HashSet<Type> GetAllTypesFrom(HashSet<Assembly> allAssemblies)
+        {
+            var result = new HashSet<Type>();
+            foreach (var assembly in allAssemblies)
+            {
+                try
+                {
+                    foreach (var type in assembly.DefinedTypes)
+                    {
+                        if(type.BaseType == typeof(object))
+                        {
+                            continue;
+                        }
+
+                        result.Add(type);
+                    }
+                }
+                catch (ReflectionTypeLoadException e)
+                {
+                    if(e.Types != null)
+                    {
+                        foreach(var type in e.Types)
+                        {
+                            if(type == null)
+                            {
+                                continue;
+                            }
+
+                            if (type.BaseType == typeof(object))
+                            {
+                                continue;
+                            }
+
+                            result.Add(type);
+                        }
+                    }
+                }
+            }
+
+            return result;
         }
 
         private static void Add(HashSet<Assembly> allAssemblies, Assembly? initial)
