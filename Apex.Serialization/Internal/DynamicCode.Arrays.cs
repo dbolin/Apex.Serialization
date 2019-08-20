@@ -34,7 +34,7 @@ namespace Apex.Serialization.Internal
                 statements.AddRange(lengths.Select(x =>
                     Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.WriteValueMethodInfo, x)));
 
-                if (StaticTypeInfo.IsBlittable(elementType) && dimensions < 3)
+                if (IsBlittable(elementType) && dimensions < 3)
                 {
                     statements.Add(WriteArrayOfBlittableValues(output, actualSource, stream, dimensions, elementType, elementSize));
                 }
@@ -88,10 +88,9 @@ namespace Apex.Serialization.Internal
 
             if (!isSimpleWrite && StaticTypeInfo.IsSealedOrHasNoDescendents(elementType))
             {
-                var fields = TypeFields.GetOrderedFields(elementType);
                 writeValue = Expression.Block(GetWriteStatementsForType(elementType, settings, stream, output,
                     accessExpression, shouldWriteTypeInfo, accessExpression,
-                    fields, visitedTypes, true));
+                    visitedTypes, true));
             }
             else
             {
@@ -138,7 +137,7 @@ namespace Apex.Serialization.Internal
                 statements.AddRange(lengths.Select((x, i) => Expression.Assign(x,
                     Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
 
-                var isBlittable = StaticTypeInfo.IsBlittable(elementType) && dimensions < 3;
+                var isBlittable = IsBlittable(elementType) && dimensions < 3;
 
                 if (isBlittable)
                 {
@@ -195,14 +194,14 @@ namespace Apex.Serialization.Internal
                 {
                     var tempVar = Expression.Variable(elementType, "tempElement");
                     var elementReadStatements = GetReadStatementsForType(elementType, settings, stream, output,
-                        tempVar, fields, localVariables, visitedTypes);
+                        tempVar, localVariables, visitedTypes);
                     elementReadStatements.Add(Expression.Assign(accessExpression, tempVar));
                     readValue = Expression.Block(new[] { tempVar }, elementReadStatements);
                 }
                 else
                 {
                     readValue = Expression.Block(GetReadStatementsForType(elementType, settings, stream, output,
-                        accessExpression, fields, localVariables, visitedTypes));
+                        accessExpression, localVariables, visitedTypes));
                 }
 
                 if (!elementType.IsValueType)

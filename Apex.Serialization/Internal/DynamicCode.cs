@@ -32,8 +32,6 @@ namespace Apex.Serialization.Internal
         internal static T GenerateWriteMethodImpl<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
             where T : Delegate
         {
-            var fields = TypeFields.GetOrderedFields(type);
-
             var source = Expression.Parameter(shouldWriteTypeInfo ? typeof(object) : type, "source");
             var stream = Expression.Parameter(typeof(TStream).MakeByRefType(), "stream");
             var output = Expression.Parameter(typeof(TBinary), "io");
@@ -54,7 +52,7 @@ namespace Apex.Serialization.Internal
 
             var visitedTypes = ImmutableHashSet<Type>.Empty;
 
-            writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, fields, visitedTypes));
+            writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, visitedTypes));
 
             var lambda = Expression.Lambda<T>(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
             return lambda;
@@ -62,11 +60,12 @@ namespace Apex.Serialization.Internal
 
         private static IEnumerable<Expression> GetWriteStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
             ParameterExpression output, Expression source,
-            bool shouldWriteTypeInfo, Expression actualSource, List<FieldInfo> fields,
+            bool shouldWriteTypeInfo, Expression actualSource,
             ImmutableHashSet<Type> visitedTypes,
             bool writeNullByte = false, bool writeSize = true)
         {
-            var maxSizeNeeded = writeSize ? fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) : 0;
+            var fields = TypeFields.GetOrderedFields(type);
+            var maxSizeNeeded = writeSize ? (IsBlittable(type) ? TypeFields.GetSizeForType(type).size : fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size)) : 0;
             int metaBytes = 0;
 
             if(writeNullByte && !type.IsValueType)
@@ -303,7 +302,7 @@ namespace Apex.Serialization.Internal
             {
                 inlineWrite = true;
                 var writeStatements = GetWriteStatementsForType(declaredType, settings, stream, output,
-                    valueAccessExpression, false, valueAccessExpression, TypeFields.GetOrderedFields(declaredType),
+                    valueAccessExpression, false, valueAccessExpression,
                     visitedTypes, writeSize: !TypeFields.IsPrimitive(declaredType));
                 return Expression.Block(writeStatements);
             }
@@ -325,7 +324,7 @@ namespace Apex.Serialization.Internal
                 };
                 writeStatements.AddRange(GetWriteStatementsForType(declaredType, settings, stream, output,
                     temporaryVar, false, temporaryVar,
-                    TypeFields.GetOrderedFields(declaredType), visitedTypes, writeNullByte: true));
+                    visitedTypes, writeNullByte: true));
                 return Expression.Block(new[] { temporaryVar },
                     writeStatements
                     );
@@ -376,9 +375,9 @@ namespace Apex.Serialization.Internal
         private static Expression? HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
             Expression valueAccessExpression)
         {
-            if(BinaryStreamMethods<TStream>.primitiveWriteMethods.TryGetValue(declaredType, out var method))
+            if(IsBlittable(declaredType))
             {
-                return Expression.Call(stream, method, valueAccessExpression);
+                return Expression.Call(stream, BinaryStreamMethods<TStream>.GetWriteValueMethodInfo(declaredType), valueAccessExpression);
             }
 
             // TODO: string interning
@@ -405,7 +404,6 @@ namespace Apex.Serialization.Internal
         internal static T GenerateReadMethodImpl<T>(Type type, ImmutableSettings settings, bool isBoxed)
             where T : Delegate
         {
-            var fields = TypeFields.GetOrderedFields(type);
             var stream = Expression.Parameter(typeof(TStream).MakeByRefType(), "stream");
             var output = Expression.Parameter(typeof(TBinary), "io");
 
@@ -422,7 +420,7 @@ namespace Apex.Serialization.Internal
 
             var visitedTypes = ImmutableHashSet<Type>.Empty;
 
-            readStatements.AddRange(GetReadStatementsForType(type, settings, stream, output, result, fields, localVariables, visitedTypes));
+            readStatements.AddRange(GetReadStatementsForType(type, settings, stream, output, result, localVariables, visitedTypes));
 
             if (isBoxed)
             {
@@ -439,14 +437,15 @@ namespace Apex.Serialization.Internal
         }
 
         private static List<Expression> GetReadStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
-            ParameterExpression output, Expression result, List<FieldInfo> fields, List<ParameterExpression> localVariables,
+            ParameterExpression output, Expression result,List<ParameterExpression> localVariables,
             ImmutableHashSet<Type> visitedTypes, bool readMetadata = false,
             bool reserveNeededSize = true)
         {
+            var fields = TypeFields.GetOrderedFields(type);
             var readStatements = new List<Expression>();
 
             var skipReadLabel = readMetadata ? Expression.Label("skipRead") : null;
-            var maxSizeNeeded = reserveNeededSize ? fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size) : 0;
+            var maxSizeNeeded = reserveNeededSize ? (IsBlittable(type) ? TypeFields.GetSizeForType(type).size : fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size)) : 0;
             if (readMetadata)
             {
                 maxSizeNeeded++;
@@ -929,7 +928,7 @@ namespace Apex.Serialization.Internal
                     Expression.Assign(result, Expression.Default(declaredType))
                 };
                 readStatements.AddRange(GetReadStatementsForType(declaredType, settings, stream, output,
-                    result, TypeFields.GetOrderedFields(declaredType), localVariables, visitedTypes, reserveNeededSize: !TypeFields.IsPrimitive(declaredType)));
+                    result, localVariables, visitedTypes, reserveNeededSize: !TypeFields.IsPrimitive(declaredType)));
                 readStatements.Add(result);
                 return Expression.Block(readStatements);
             }
@@ -950,7 +949,7 @@ namespace Apex.Serialization.Internal
                         Expression.Assign(result, Expression.Default(declaredType))
                     };
                 readStatements.AddRange(GetReadStatementsForType(declaredType, settings, stream, output,
-                        result, TypeFields.GetOrderedFields(declaredType), localVariables, visitedTypes, readMetadata: true));
+                        result, localVariables, visitedTypes, readMetadata: true));
                 readStatements.Add(result);
                 return Expression.Block(readStatements);
             }
@@ -958,10 +957,11 @@ namespace Apex.Serialization.Internal
 
         private static Expression? HandlePrimitiveRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
         {
-            if (BinaryStreamMethods<TStream>.primitiveReadMethods.TryGetValue(declaredType, out var method))
+            if(IsBlittable(declaredType))
             {
-                return Expression.Call(stream, method);
+                return Expression.Call(stream, BinaryStreamMethods<TStream>.GetReadValueMethodInfo(declaredType));
             }
+            
 
             // TODO: string interning
             if (declaredType == typeof(string))

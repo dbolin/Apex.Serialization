@@ -74,8 +74,6 @@ namespace Apex.Serialization.Internal.Reflection
             {typeof(Guid), Unsafe.SizeOf<Guid>()},
         };
         
-        private static DictionarySlim<Type, int> structSizeDictionary = new DictionarySlim<Type, int>();
-
         internal static (int size, bool isRef) GetSizeForType(Type type)
         {
             lock (_cacheLock)
@@ -94,28 +92,26 @@ namespace Apex.Serialization.Internal.Reflection
             return (0, true);
         }
 
+        private static readonly MethodInfo UnsafeSizeOfMethodInfo = typeof(Unsafe).GetMethod("SizeOf")!;
+
         private static bool TryGetSizeForStruct(Type type, out int sizeForField)
         {
-            ref int size = ref structSizeDictionary.GetOrAddValueRef(type);
-            if (size != 0)
-            {
-                sizeForField = size;
-                return true;
-            }
-
             var fields = GetFields(type);
+            int size;
 
             if (type.IsValueType && fields.All(f => IsPrimitive(f.FieldType)))
             {
-                if (fields.Count == 1)
+                if(fields.Count == 0)
                 {
-                    size = (int)typeof(Unsafe).GetMethod("SizeOf")!.MakeGenericMethod(type)!
-                        .Invoke(null, Array.Empty<Type>())!;
+                    size = 1;
                 }
                 else
                 {
-                    size = fields.Sum(x => GetSizeForType(x.FieldType).size);
+                    size = (int)UnsafeSizeOfMethodInfo.MakeGenericMethod(type)!
+                        .Invoke(null, Array.Empty<Type>())!;
                 }
+
+                primitiveTypeSizeDictionary.Add(type, size);
 
                 sizeForField = size;
                 return true;

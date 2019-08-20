@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Apex.Serialization.Internal.Reflection;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -37,6 +39,34 @@ namespace Apex.Serialization.Internal
             {
                 throw new NotSupportedException("Objects containing handles are not supported");
             }
+        }
+
+        private static ConcurrentDictionary<Type, bool> _isBlittableCache = new ConcurrentDictionary<Type, bool>();
+
+        internal static bool IsBlittable(Type elementType)
+        {
+            return _isBlittableCache.GetOrAdd(elementType, _ =>
+            {
+                if (!elementType.IsValueType)
+                {
+                    return false;
+                }
+
+                if(!TypeFields.IsPrimitive(elementType))
+                {
+                    return false;
+                }
+
+                try
+                {
+                    WriteArrayOfValuesMethod1.MakeGenericMethod(elementType);
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
+            });
         }
 
         private static readonly BindingFlags InstanceFlags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
