@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 
 namespace Benchmark
 {
-    public class PerformanceSuite_Nullables : PerformanceSuiteBase
+    public class PerformanceSuite_NullableWrappedStruct : PerformanceSuiteBase
     {
         [StructLayout(LayoutKind.Explicit)]
         public struct Struct1
@@ -24,21 +24,22 @@ namespace Benchmark
             public Struct1? NullableField;
         }
 
-        private readonly List<Wrapper> _emptyListFull = new List<Wrapper>(Enumerable.Range(0, 1024).Select(x => new Wrapper()));
-        public PerformanceSuite_Nullables()
+        private readonly List<Wrapper> _listWrapper = new List<Wrapper>(Enumerable.Range(0, 1024).Select(x => new Wrapper()));
+
+        public PerformanceSuite_NullableWrappedStruct()
         {
-            _emptyListFull.Capacity = 1024;
-            S_Nullables();
+            _listWrapper.Capacity = 1024;
+            S_NullableWrapper();
         }
 
         [Benchmark]
-        public void S_Nullables()
+        public void S_NullableWrapper()
         {
-            Serialize(_emptyListFull);
+            Serialize(_listWrapper);
         }
 
         [Benchmark]
-        public object D_Nullables()
+        public object D_NullableWrapper()
         {
             return Deserialize<List<Wrapper>>();
         }

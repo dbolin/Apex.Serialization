@@ -275,6 +275,13 @@ namespace Apex.Serialization.Internal
                 return primitiveExpression;
             }
 
+            var nullableExpression = HandleNullableWrite(stream, output, declaredType, settings, visitedTypes, valueAccessExpression);
+            if (nullableExpression != null)
+            {
+                inlineWrite = true;
+                return nullableExpression;
+            }
+
             var customExpression = HandleCustomWrite(output, declaredType, valueAccessExpression, settings);
             if (customExpression != null)
             {
@@ -329,6 +336,36 @@ namespace Apex.Serialization.Internal
                     writeStatements
                     );
             }
+        }
+
+        private static Expression? HandleNullableWrite(ParameterExpression stream, ParameterExpression output,
+            Type declaredType, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes,
+            Expression valueAccessExpression)
+        {
+            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
+            {
+                return null;
+            }
+
+            var hasValueMethod = declaredType.GetProperty("HasValue")!.GetGetMethod()!;
+            var valueMethod = declaredType.GetProperty("Value")!.GetGetMethod()!;
+            var nullableType = declaredType.GenericTypeArguments[0];
+            var isPrimitive = TypeFields.IsPrimitive(nullableType);
+
+            return Expression.IfThenElse(
+                Expression.Call(valueAccessExpression, hasValueMethod),
+                Expression.Block(
+                    new[] {
+                        !isPrimitive ? (Expression)Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(1)) : Expression.Empty(),
+                        Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)1)),
+                    }
+                        .Concat(
+                    GetWriteStatementsForType(nullableType, settings, stream, output,
+                        Expression.Call(valueAccessExpression, valueMethod), false, Expression.Call(valueAccessExpression, valueMethod),
+                        visitedTypes, writeSize: !isPrimitive))
+                    ),
+                Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)0))
+                );
         }
 
         private static Expression? HandleCustomWrite(ParameterExpression output, Type declaredType,
@@ -437,7 +474,7 @@ namespace Apex.Serialization.Internal
         }
 
         private static List<Expression> GetReadStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
-            ParameterExpression output, Expression result,List<ParameterExpression> localVariables,
+            ParameterExpression output, Expression result, List<ParameterExpression> localVariables,
             ImmutableHashSet<Type> visitedTypes, bool readMetadata = false,
             bool reserveNeededSize = true)
         {
@@ -903,6 +940,13 @@ namespace Apex.Serialization.Internal
                 return primitiveExpression;
             }
 
+            var nullableExpression = HandleNullableRead(stream, output, declaredType, settings, localVariables, visitedTypes);
+            if (nullableExpression != null)
+            {
+                isInlineRead = true;
+                return nullableExpression;
+            }
+
             var readStructExpression = ReadStructExpression(declaredType, stream, TypeFields.GetOrderedFields(declaredType));
             if (readStructExpression != null)
             {
@@ -970,6 +1014,34 @@ namespace Apex.Serialization.Internal
             }
 
             return null;
+        }
+
+        private static Expression? HandleNullableRead(ParameterExpression stream, ParameterExpression output, Type declaredType,
+            ImmutableSettings settings, List<ParameterExpression> localVariables, ImmutableHashSet<Type> visitedTypes)
+        {
+            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
+            {
+                return null;
+            }
+
+            var nullableType = declaredType.GenericTypeArguments[0];
+            var isPrimitive = TypeFields.IsPrimitive(nullableType);
+            var tempResult = Expression.Variable(nullableType, "tempResult");
+
+            return 
+                Expression.Block(
+                    !isPrimitive ? (Expression)Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(1)) : Expression.Empty(),
+                    Expression.Condition(
+                        Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
+                        Expression.Default(declaredType),
+                        Expression.Convert(
+                            Expression.Block(new[] { tempResult },
+                                GetReadStatementsForType(nullableType, settings, stream, output, tempResult, localVariables,
+                                    visitedTypes, reserveNeededSize: !isPrimitive)
+                                .Concat(new[] { tempResult })),
+                            declaredType)
+                        )
+                    );
         }
     }
 }

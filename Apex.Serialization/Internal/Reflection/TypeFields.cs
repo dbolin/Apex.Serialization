@@ -99,6 +99,19 @@ namespace Apex.Serialization.Internal.Reflection
             var fields = GetFields(type);
             int size;
 
+            if (type.IsGenericType && typeof(Nullable<>) == type.GetGenericTypeDefinition())
+            {
+                var (innerSize, isRef) = GetSizeForType(type.GenericTypeArguments[0]);
+                if(isRef)
+                {
+                    sizeForField = 5;
+                    return false;
+                }
+
+                sizeForField = innerSize + Unsafe.SizeOf<byte>();
+                return true;
+            }
+
             if (type.IsValueType && fields.All(f => IsPrimitive(f.FieldType)))
             {
                 if(fields.Count == 0)

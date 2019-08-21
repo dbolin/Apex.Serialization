@@ -23,15 +23,13 @@ namespace Apex.Serialization.Tests.Collections.Objects
         public static bool operator ==(RandomHashcode hashcode1, RandomHashcode hashcode2) => hashcode1.Equals(hashcode2);
         public static bool operator !=(RandomHashcode hashcode1, RandomHashcode hashcode2) => !(hashcode1 == hashcode2);
 
-        private static Random _random = new Random();
-
         internal static void NewRandomizer()
         {
             var old = HashCodeRandomizer;
 
             while (HashCodeRandomizer == old)
             {
-                HashCodeRandomizer = _random.Next();
+                HashCodeRandomizer = HashCodeRandomizer * 37 + 19999;
             }
         }
 
