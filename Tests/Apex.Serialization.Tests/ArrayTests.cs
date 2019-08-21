@@ -136,6 +136,14 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
+        public void NullableStructArray()
+        {
+            var x = new Test2?[] { new Test2 { Value = 1 }, null, null, null, null, new Test2 { Value = 2 } };
+
+            RoundTrip(x);
+        }
+
+        [Fact]
         public void RefArray()
         {
             var x = new[] {new Test3 {Value = 5}};
@@ -196,7 +204,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void NullableDecimalArray()
         {
-            var x = new[] {12.0m, (decimal?) null};
+            var x = new[] {12.0m, (decimal?) null, 13m, 14m, 15m, 16m, 17m, null, 18m};
 
             RoundTrip(x);
         }

@@ -43,3 +43,8 @@ Internal benchmarks
 | S_SortedDictionaryOfValues | 1.351 us | 0.0048 us | 0.0045 us |      - |     - |     - |         - |
 | D_SortedDictionaryOfValues | 9.416 us | 0.1115 us | 0.0989 us | 0.4425 |     - |     - |    4936 B |
 
+|      Method |      Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
+|------------ |----------:|----------:|----------:|-------:|------:|------:|----------:|
+| S_Nullables |  6.177 us | 0.0572 us | 0.0535 us |      - |     - |     - |         - |
+| D_Nullables | 15.901 us | 0.1371 us | 0.1282 us | 3.9673 |     - |     - |   49208 B |
+
