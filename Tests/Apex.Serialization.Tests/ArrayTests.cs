@@ -1,6 +1,7 @@
 ﻿using FluentAssertions;
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 using System.Numerics;
 using System.Runtime.InteropServices;
@@ -207,6 +208,30 @@ namespace Apex.Serialization.Tests
             var x = new[] {12.0m, (decimal?) null, 13m, 14m, 15m, 16m, 17m, null, 18m};
 
             RoundTrip(x);
+        }
+
+        public sealed class TestObject1
+        {
+            public decimal O { get; }
+            public string? Im { get; }
+            public string? T { get; }
+            public string? In { get; }
+            public ImmutableArray<CustomProperty>? Cu { get; }
+
+            public TestObject1(
+                ImmutableArray<CustomProperty>? cu)
+            {
+                Cu = cu;
+            }
+        }
+
+        [Fact]
+        public void NestedNullable()
+        {
+            var a = Enumerable.Range(0, 100).Select(x => new CustomProperty("", new Value { _string = "" })).ToImmutableArray();
+            var x = new TestObject1(a);
+
+            RoundTrip(x, (a,b) => true);
         }
 
         [Fact]

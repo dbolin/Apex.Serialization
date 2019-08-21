@@ -43,8 +43,12 @@ Internal benchmarks
 | S_SortedDictionaryOfValues | 1.351 us | 0.0048 us | 0.0045 us |      - |     - |     - |         - |
 | D_SortedDictionaryOfValues | 9.416 us | 0.1115 us | 0.0989 us | 0.4425 |     - |     - |    4936 B |
 
-|      Method |      Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
-|------------ |----------:|----------:|----------:|-------:|------:|------:|----------:|
-| S_Nullables |  6.177 us | 0.0572 us | 0.0535 us |      - |     - |     - |         - |
-| D_Nullables | 15.901 us | 0.1371 us | 0.1282 us | 3.9673 |     - |     - |   49208 B |
+|         Method |     Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
+|--------------- |---------:|----------:|----------:|-------:|------:|------:|----------:|
+| S_NullableInts | 3.582 us | 0.0100 us | 0.0093 us |      - |     - |     - |         - |
+| D_NullableInts | 5.318 us | 0.1031 us | 0.1227 us | 0.6638 |     - |     - |    8248 B |
 
+|            Method |      Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
+|------------------ |----------:|----------:|----------:|-------:|------:|------:|----------:|
+| S_NullableWrapper |  3.540 us | 0.0141 us | 0.0125 us |      - |     - |     - |         - |
+| D_NullableWrapper | 10.697 us | 0.0948 us | 0.0886 us | 3.9978 |     - |     - |   49208 B |
