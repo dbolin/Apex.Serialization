@@ -151,7 +151,7 @@ namespace Apex.Serialization.Internal
             }
         }
 
-
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Write(string? input)
         {
             ReserveSize(40);
@@ -165,6 +165,22 @@ namespace Apex.Serialization.Internal
             Write(byteCount);
             byteCount *= 2;
 
+            var allowed = (uint)(_size - _bufferPosition);
+            if (input.Length < 2048 && allowed >= byteCount)
+            {
+                fixed (void* text = input)
+                {
+                    Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), text, byteCount);
+                    _bufferPosition += byteCount;
+                    return;
+                }
+            }
+
+            WriteStringSlow(input, byteCount, allowed);
+        }
+
+        private void WriteStringSlow(string input, uint byteCount, uint allowed)
+        {
 #if !NETSTANDARD2_0
             if (input.Length >= 2048)
             {
@@ -182,7 +198,6 @@ namespace Apex.Serialization.Internal
             {
                 do
                 {
-                    var allowed = (uint)(_size - _bufferPosition);
                     if (byteCount > allowed)
                     {
                         Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), Unsafe.Add<byte>(text, (int)sourcePosition), allowed);
@@ -200,6 +215,7 @@ namespace Apex.Serialization.Internal
                         _bufferPosition += byteCount;
                         byteCount = 0;
                     }
+                    allowed = (uint)(_size - _bufferPosition);
                 } while (byteCount > 0);
             }
         }
@@ -271,6 +287,7 @@ namespace Apex.Serialization.Internal
             }
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public string? Read()
         {
             ReserveSize(4);
@@ -280,15 +297,32 @@ namespace Apex.Serialization.Internal
                 return null;
             }
 
-            byteCount = byteCount * 2;
+            byteCount *= 2;
 
-            uint sourcePosition = 0;
             var result = new string('\0', (int)byteCount / 2);
+            var allowed = (uint)(_size - _bufferPosition);
+
+            if (allowed >= byteCount)
+            {
+                fixed (void* text = result)
+                {
+                    Unsafe.CopyBlock(text, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), byteCount);
+                    _bufferPosition += byteCount;
+                    return result;
+                }
+            }
+
+            ReadStringSlow(byteCount, result, allowed);
+            return result;
+        }
+
+        private void ReadStringSlow(uint byteCount, string result, uint allowed)
+        {
+            uint sourcePosition = 0;
             fixed (void* text = result)
             {
                 do
                 {
-                    var allowed = (uint)(_size - _bufferPosition);
                     if (byteCount > allowed)
                     {
                         Unsafe.CopyBlock(Unsafe.Add<byte>(text, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), allowed);
@@ -306,9 +340,9 @@ namespace Apex.Serialization.Internal
                         _bufferPosition += byteCount;
                         byteCount = 0;
                     }
+                    allowed = (uint)(_size - _bufferPosition);
                 } while (byteCount > 0);
             }
-            return result;
         }
 
         public byte* ReadTypeId(out int length1, out int length2)
@@ -392,7 +426,22 @@ namespace Apex.Serialization.Internal
             Dispose(true);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteBytes(void* source, uint length)
+        {
+            var allowed = (uint)(_size - _bufferPosition);
+
+            if (length < 4096 && allowed >= length)
+            {
+                Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), source, length);
+                _bufferPosition += length;
+                return;
+            }
+
+            WriteBytesSlow(source, length, allowed);
+        }
+
+        private void WriteBytesSlow(void* source, uint length, uint allowed)
         {
 #if !NETSTANDARD2_0
             if (length >= 4096)
@@ -405,7 +454,6 @@ namespace Apex.Serialization.Internal
             uint sourcePosition = 0;
             do
             {
-                var allowed = (uint)(_size - _bufferPosition);
                 if (length > allowed)
                 {
                     Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), Unsafe.Add<byte>(source, (int)sourcePosition), allowed);
@@ -423,15 +471,30 @@ namespace Apex.Serialization.Internal
                     _bufferPosition += length;
                     length = 0;
                 }
+                allowed = (uint)(_size - _bufferPosition);
             } while (length > 0);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadBytes(void* destination, uint length)
+        {
+            var allowed = (uint)(_size - _bufferPosition);
+
+            if (allowed >= length)
+            {
+                Unsafe.CopyBlock(destination, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), length);
+                _bufferPosition += length;
+                return;
+            }
+
+            ReadBytesSlow(destination, length, allowed);
+        }
+
+        private void ReadBytesSlow(void* destination, uint length, uint allowed)
         {
             uint sourcePosition = 0;
             do
             {
-                var allowed = (uint)(_size - _bufferPosition);
                 if (length > allowed)
                 {
                     Unsafe.CopyBlock(Unsafe.Add<byte>(destination, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), allowed);
@@ -449,6 +512,7 @@ namespace Apex.Serialization.Internal
                     _bufferPosition += length;
                     length = 0;
                 }
+                allowed = (uint)(_size - _bufferPosition);
             } while (length > 0);
         }
 
