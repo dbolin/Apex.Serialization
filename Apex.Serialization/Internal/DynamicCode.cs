@@ -220,24 +220,14 @@ namespace Apex.Serialization.Internal
         {
             if (type.IsValueType)
             {
-                if (type.IsExplicitLayout)
+                if (fields.Count == 0)
                 {
-                    if (fields.Any(x => !x.FieldType.IsValueType))
-                    {
-                        throw new NotSupportedException(
-                            "Structs with explicit layout and reference fields are not supported");
-                    }
+                    return Expression.Empty();
                 }
 
-                if (type.IsExplicitLayout ||
-                    (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
-                )
+                var isPrimitive = fields.All(x => TypeFields.IsPrimitive(x.FieldType));
+                if (type.IsExplicitLayout && isPrimitive)
                 {
-                    if(fields.Count == 0)
-                    {
-                        return Expression.Empty();
-                    }
-
                     var method = (MethodInfo) typeof(BinaryStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)
                         .GetField("WriteValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
@@ -857,23 +847,14 @@ namespace Apex.Serialization.Internal
         {
             if (type.IsValueType)
             {
-                if (type.IsExplicitLayout)
+                if (fields.Count == 0)
                 {
-                    if (fields.Any(x => !x.FieldType.IsValueType))
-                    {
-                        throw new NotSupportedException(
-                            "Structs with explicit layout and reference fields are not supported");
-                    }
+                    return Expression.Default(type);
                 }
 
-                if (type.IsExplicitLayout ||
-                    (fields.Count <= 1 && fields.All(x => x.FieldType.IsValueType))
-                )
+                var isPrimitive = fields.All(x => TypeFields.IsPrimitive(x.FieldType));
+                if (type.IsExplicitLayout && isPrimitive)
                 {
-                    if (fields.Count == 0)
-                    {
-                        return Expression.Default(type);
-                    }
 
                     var method = (MethodInfo) typeof(BinaryStreamMethods<>.GenericMethods<>)
                         .MakeGenericType(typeof(TStream), type)

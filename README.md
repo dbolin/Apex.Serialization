@@ -21,7 +21,6 @@ NEVER deserialize data from an untrusted source.
 
 Some types aren't supported:
 - Objects that use randomized hashing or other runtime specific data to determine their behavior (including HashSet<>, Dictionary<,> and their immutable counterparts)
-- Structs with explicit layout that contain reference fields
 - Objects containing pointers or handles to unmanaged resources
 - BlockingCollection\<>
 - Non-generic standard collections

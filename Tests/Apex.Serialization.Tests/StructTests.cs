@@ -55,6 +55,27 @@ namespace Apex.Serialization.Tests
             RoundTrip(x);
         }
 
+        [StructLayout(LayoutKind.Explicit)]
+        public struct ExplicitReferences
+        {
+            [FieldOffset(0)]
+            public string StringValue;
+            [FieldOffset(0)]
+            public object ObjectValue;
+        }
+
+        [Fact]
+        public void ExplicitLayoutReferences()
+        {
+            var x = new ExplicitReferences { ObjectValue = 12 };
+
+            RoundTrip(x);
+
+            x = new ExplicitReferences { StringValue = "abc" };
+
+            RoundTrip(x);
+        }
+
         [Fact]
         public void Empty()
         {
