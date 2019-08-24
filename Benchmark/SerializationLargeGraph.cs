@@ -164,9 +164,7 @@ namespace Benchmark
 
             var config = new SerializerConfig { DefaultTargets = TargetMember.AllFields, PreserveReferences = true };
             config.Advanced.ReadonlyFieldHandling = ReadonlyFieldHandling.ForcedOverwrite;
-            config.ConfigType<TopLevel>().ConstructByUninitialized();
-            config.ConfigType<FirstLevelChild>().ConstructByUninitialized();
-            config.ConfigType<SecondLevelChild>().ConstructByUninitialized();
+            config.OnConfigNewType = tc => tc.TypeConstruction = TypeConstruction.ByUninitialized();
             config.UseImmutableFormatters();
             ceras = new CerasSerializer(config);
 

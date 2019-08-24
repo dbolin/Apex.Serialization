@@ -7,7 +7,6 @@
     <AssemblyOriginatorKeyFile>Benchmark.snk</AssemblyOriginatorKeyFile>
     <LangVersion>8.0</LangVersion>
     <Nullable>enable</Nullable>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <NoWarn>NU1701;CS8002</NoWarn>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
@@ -15,7 +14,7 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.11.5" />
     <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.11.5" />
-    <PackageReference Include="Ceras" Version="4.1.6" />
+    <PackageReference Include="Ceras" Version="4.1.7" />
     <PackageReference Include="Ceras.ImmutableCollections" Version="1.0.0" />
     <PackageReference Include="FluentAssertions" Version="5.8.0" />
     <PackageReference Include="Hyperion" Version="0.9.8" />

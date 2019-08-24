@@ -218,8 +218,9 @@ namespace Apex.Serialization.Internal.Reflection
                     arg0Loaded = false;
                     paramLoaded = false;
 
-                    var fieldRef = instruction.Operand as FieldReference;
-                    var fieldDef = fieldRef != null ? fieldRef.Resolve() : (FieldDefinition)instruction.Operand;
+                    var fieldDef = instruction.Operand is FieldReference fieldRef
+                        ? fieldRef.Resolve()
+                        : (FieldDefinition)instruction.Operand;
                     var field = fields.SingleOrDefault(x => x.Name == fieldDef.Name);
                     if (field == null)
                     {
@@ -236,8 +237,7 @@ namespace Apex.Serialization.Internal.Reflection
                     if (arg0Loaded && paramLoaded)
                     {
                         // check for property set
-                        var propertyMethodDef = instruction.Operand as MethodDefinition;
-                        if (propertyMethodDef == null)
+                        if (!(instruction.Operand is MethodDefinition propertyMethodDef))
                         {
                             return null;
                         }
@@ -273,8 +273,9 @@ namespace Apex.Serialization.Internal.Reflection
                         paramLoaded = false;
                         var stFld = filteredInstructions[2];
 
-                        var fieldRef = stFld.Operand as FieldReference;
-                        var fieldDef = fieldRef != null ? fieldRef.Resolve() : (FieldDefinition)stFld.Operand;
+                        var fieldDef = stFld.Operand is FieldReference fieldRef
+                            ? fieldRef.Resolve()
+                            : (FieldDefinition)stFld.Operand;
                         var field = fields.SingleOrDefault(x => x.Name == fieldDef.Name);
                         if (field == null)
                         {
@@ -291,9 +292,10 @@ namespace Apex.Serialization.Internal.Reflection
                         return null;
                     }
 
-                    var methodRef = instruction.Operand as MethodReference;
-                    var methodDef = methodRef != null ? methodRef.Resolve() : (MethodDefinition)instruction.Operand;
-                    if(!IsEmptyConstructor(methodDef))
+                    var methodDef = instruction.Operand is MethodReference methodRef
+                        ? methodRef.Resolve() :
+                        (MethodDefinition)instruction.Operand;
+                    if (!IsEmptyConstructor(methodDef))
                     {
                         return null;
                     }
@@ -404,8 +406,7 @@ namespace Apex.Serialization.Internal.Reflection
                 return false;
             }
 
-            var constructorCalled = baseConstructorCall.Operand as MethodReference;
-            if (constructorCalled == null)
+            if (!(baseConstructorCall.Operand is MethodReference constructorCalled))
             {
                 return false;
             }

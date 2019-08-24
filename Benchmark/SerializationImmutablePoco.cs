@@ -29,16 +29,16 @@ namespace Benchmark
             }
             [Key(0)]
             [ProtoMember(1)]
-            public readonly string StringProp;      //using the text "hello"
+            public string StringProp { get; }      //using the text "hello"
             [Key(1)]
             [ProtoMember(2)]
-            public readonly int IntProp;            //123
+            public int IntProp { get; }            //123
             [Key(2)]
             [ProtoMember(3)]
-            public readonly Guid GuidProp;          //Guid.NewGuid()
+            public Guid GuidProp { get; }          //Guid.NewGuid()
             [Key(3)]
             [ProtoMember(4)]
-            public readonly DateTime DateProp;      //DateTime.Now
+            public DateTime DateProp { get; }      //DateTime.Now
         }
 
         private IBinary _binary = Binary.Create();
@@ -59,6 +59,7 @@ namespace Benchmark
         {
             var config = new SerializerConfig { DefaultTargets = TargetMember.AllFields, PreserveReferences = false };
             config.Advanced.ReadonlyFieldHandling = ReadonlyFieldHandling.ForcedOverwrite;
+            config.Advanced.SkipCompilerGeneratedFields = false;
             config.ConfigType<ImmutablePoco>().ConstructByUninitialized();
             ceras = new CerasSerializer(config);
 
