@@ -129,6 +129,7 @@ namespace Apex.Serialization.Internal
             // also encodes whether this entry _itself_ is part of the free list by changing sign and subtracting 3,
             // so -2 means end of free list, -3 means index 0 but on free list, -4 means index 1 but on free list, etc.
             public int next;
+            public int bucket;
         }
 
         public DictionarySlim()
@@ -180,6 +181,7 @@ namespace Apex.Serialization.Internal
             return false;
         }
 
+        /*
         public bool Remove(TKey key)
         {
             Entry[] entries = _entries;
@@ -215,6 +217,7 @@ namespace Apex.Serialization.Internal
 
             return false;
         }
+        */
 
         // Not safe for concurrent _reads_ (at least, if either of them add)
         public ref TValue GetOrAddValueRef(TKey key)
@@ -254,6 +257,7 @@ namespace Apex.Serialization.Internal
 
             entries[entryIndex].key = key;
             entries[entryIndex].next = _buckets[bucketIndex] - 1;
+            entries[entryIndex].bucket = bucketIndex;
             _buckets[bucketIndex] = entryIndex + 1;
             _count++;
             return ref entries[entryIndex].value;
@@ -261,18 +265,32 @@ namespace Apex.Serialization.Internal
 
         public unsafe void Clear()
         {
-            if (_count > 0)
+            if(_count == 0)
             {
-                //for (int i = 0; i < _buckets.Length; i++) _buckets[i] = -1;
+                return;
+            }
+
+            if(_count < _buckets.Length >> 5)
+            {
+                for (int i = 0; i < _count; ++i)
+                {
+                    var bucket = _entries[i].bucket;
+                    _entries[i] = default;
+                    _buckets[bucket] = 0;
+                }
+            }
+            else
+            {
                 fixed (void* b = &_buckets[0])
                 {
                     Unsafe.InitBlock(b, 0, (uint)(4 * _buckets.Length));
                 }
 
                 Array.Clear(_entries, 0, _count);
-                _freeList = -1;
-                _count = 0;
             }
+
+            _freeList = -1;
+            _count = 0;
         }
 
         private Entry[] Resize()
@@ -289,6 +307,7 @@ namespace Apex.Serialization.Internal
             while (count-- > 0)
             {
                 int bucketIndex = entries[count].key.GetHashCode() & (newBuckets.Length - 1);
+                entries[count].bucket = bucketIndex;
                 entries[count].next = newBuckets[bucketIndex] - 1;
                 newBuckets[bucketIndex] = count + 1;
             }
