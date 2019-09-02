@@ -16,9 +16,11 @@
 
         public bool SupportSerializationHooks { get; set; }
 
+        public bool DisableInlining { get; set; }
+
         public static implicit operator ImmutableSettings(Settings s)
         {
-            return new ImmutableSettings(s.SerializationMode, s.AllowFunctionSerialization, s.SupportSerializationHooks);
+            return new ImmutableSettings(s.SerializationMode, s.AllowFunctionSerialization, s.SupportSerializationHooks, s.DisableInlining);
         }
     }
 
@@ -28,16 +30,17 @@
         public bool AllowFunctionSerialization { get; }
         public bool SupportSerializationHooks { get; }
         public bool UseConstructors { get; } = true;
-        public bool EnableInlining { get; } = true;
+        public bool EnableInlining { get; }
 
-        public ImmutableSettings(Mode serializationMode, bool allowFunctionSerialization, bool supportSerializationHooks)
+        public ImmutableSettings(Mode serializationMode, bool allowFunctionSerialization, bool supportSerializationHooks, bool disableInlining)
         {
             SerializationMode = serializationMode;
             AllowFunctionSerialization = allowFunctionSerialization;
             SupportSerializationHooks = supportSerializationHooks;
+            EnableInlining = !disableInlining;
         }
 
-        internal const int MaxSettingsIndex = 0b111;
-        internal int SettingsIndex => (int) SerializationMode | (AllowFunctionSerialization ? 0b10 : 0) | (SupportSerializationHooks ? 0b100 : 0);
+        internal const int MaxSettingsIndex = 0b1111;
+        internal int SettingsIndex => (int) SerializationMode | (AllowFunctionSerialization ? 0b10 : 0) | (SupportSerializationHooks ? 0b100 : 0) | (EnableInlining ? 0b1000 : 0);
     }
 }

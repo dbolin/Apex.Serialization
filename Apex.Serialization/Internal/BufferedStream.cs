@@ -151,7 +151,6 @@ namespace Apex.Serialization.Internal
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Write(string? input)
         {
             ReserveSize(40);
@@ -287,7 +286,6 @@ namespace Apex.Serialization.Internal
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public string? Read()
         {
             ReserveSize(4);
@@ -426,7 +424,6 @@ namespace Apex.Serialization.Internal
             Dispose(true);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteBytes(void* source, uint length)
         {
             var allowed = (uint)(_size - _bufferPosition);
@@ -475,7 +472,6 @@ namespace Apex.Serialization.Internal
             } while (length > 0);
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReadBytes(void* destination, uint length)
         {
             var allowed = (uint)(_size - _bufferPosition);
