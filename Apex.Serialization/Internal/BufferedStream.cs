@@ -180,7 +180,7 @@ namespace Apex.Serialization.Internal
 
         private void WriteStringSlow(string input, uint byteCount, uint allowed)
         {
-#if !NETSTANDARD2_0
+#if NETCOREAPP3_0
             if (input.Length >= 2048)
             {
                 Flush();
@@ -440,7 +440,7 @@ namespace Apex.Serialization.Internal
 
         private void WriteBytesSlow(void* source, uint length, uint allowed)
         {
-#if !NETSTANDARD2_0
+#if NETCOREAPP3_0
             if (length >= 4096)
             {
                 Flush();
