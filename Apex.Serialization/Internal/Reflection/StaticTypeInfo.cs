@@ -32,22 +32,16 @@ namespace Apex.Serialization.Internal.Reflection
                     return false;
                 }
 
-                foreach (var type in AllTypes())
-                {
-                    if (type.IsSubclassOf(t))
-                    {
-                        return false;
-                    }
-                }
-                return true;
+                return !GetTypesWithDescendents().Contains(t);
             }
             );
         }
 
         private static HashSet<Type>? _allTypes;
+        private static HashSet<Type>? _typesWithDescendents;
         private static object _allAssembliesLock = new object();
 
-        private static IEnumerable<Type> AllTypes()
+        private static HashSet<Type> AllTypes()
         {
             if (_allTypes != null)
             {
@@ -68,6 +62,34 @@ namespace Apex.Serialization.Internal.Reflection
                 _allTypes = GetAllTypesFrom(allAssemblies);
                 return _allTypes;
             }
+        }
+
+        private static HashSet<Type> GetTypesWithDescendents()
+        {
+            if(_typesWithDescendents != null)
+            {
+                return _typesWithDescendents;
+            }
+
+            lock(_allAssembliesLock)
+            {
+                _typesWithDescendents = GetAllTypesWithDescendents(AllTypes());
+                return _typesWithDescendents;
+            }
+        }
+
+        private static HashSet<Type> GetAllTypesWithDescendents(HashSet<Type> allTypes)
+        {
+            var result = new HashSet<Type>();
+            foreach(var type in allTypes)
+            {
+                if(type.BaseType != null)
+                {
+                    result.Add(type.BaseType);
+                }
+            }
+
+            return result;
         }
 
         private static HashSet<Type> GetAllTypesFrom(HashSet<Assembly> allAssemblies)
