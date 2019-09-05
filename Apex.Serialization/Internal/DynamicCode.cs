@@ -418,6 +418,8 @@ namespace Apex.Serialization.Internal
         }
 
         private static readonly ThreadLocal<HashSet<FieldInfo>> _fieldsToRestoreInitOnly = new ThreadLocal<HashSet<FieldInfo>>(() => new HashSet<FieldInfo>());
+        private static readonly Dictionary<FieldInfo, int> _allFieldsToRestoreInitOnly = new Dictionary<FieldInfo, int>();
+        private static readonly object _fieldInfoModifierLock = new object();
 
         internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed)
             where T : Delegate
@@ -436,7 +438,13 @@ namespace Apex.Serialization.Internal
             {
                 foreach(var fieldInfo in _fieldsToRestoreInitOnly.Value!)
                 {
-                    FieldInfoModifier.setFieldInfoReadonly!(fieldInfo);
+                    lock (_fieldInfoModifierLock)
+                    {
+                        if (_allFieldsToRestoreInitOnly[fieldInfo]-- == 0)
+                        {
+                            FieldInfoModifier.setFieldInfoReadonly!(fieldInfo);
+                        }
+                    }
                 }
                 _fieldsToRestoreInitOnly.Value!.Clear();
             }
@@ -905,8 +913,19 @@ namespace Apex.Serialization.Internal
             {
                 if(FieldInfoModifier.setFieldInfoNotReadonly != null)
                 {
-                    FieldInfoModifier.setFieldInfoNotReadonly(fieldInfo);
-                    _fieldsToRestoreInitOnly.Value!.Add(fieldInfo);
+                    lock (_fieldInfoModifierLock)
+                    {
+                        FieldInfoModifier.setFieldInfoNotReadonly(fieldInfo);
+                        _fieldsToRestoreInitOnly.Value!.Add(fieldInfo);
+                        if(_allFieldsToRestoreInitOnly.TryGetValue(fieldInfo, out var v))
+                        {
+                            _allFieldsToRestoreInitOnly[fieldInfo] = v + 1;
+                        }
+                        else
+                        {
+                            _allFieldsToRestoreInitOnly.Add(fieldInfo, 1);
+                        }
+                    }
                 }
                 else
                 {
