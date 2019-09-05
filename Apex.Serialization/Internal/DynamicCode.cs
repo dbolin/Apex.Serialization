@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal.Reflection;
 
@@ -416,16 +417,29 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
+        private static readonly ThreadLocal<HashSet<FieldInfo>> _fieldsToRestoreInitOnly = new ThreadLocal<HashSet<FieldInfo>>(() => new HashSet<FieldInfo>());
+
         internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed)
             where T : Delegate
         {
-            if (!isBoxed)
+            try
             {
-                return GenerateReadMethodImpl<T>(type, settings, isBoxed);
-            }
+                if (!isBoxed)
+                {
+                    return GenerateReadMethodImpl<T>(type, settings, isBoxed);
+                }
 
-            return (T)_virtualReadMethods.GetOrAdd(new TypeKey { Type = type, SettingsIndex = settings.SettingsIndex },
-                t => GenerateReadMethodImpl<T>(type, settings, isBoxed));
+                return (T)_virtualReadMethods.GetOrAdd(new TypeKey { Type = type, SettingsIndex = settings.SettingsIndex },
+                    t => GenerateReadMethodImpl<T>(type, settings, isBoxed));
+            }
+            finally
+            {
+                foreach(var fieldInfo in _fieldsToRestoreInitOnly.Value!)
+                {
+                    FieldInfoModifier.setFieldInfoReadonly!(fieldInfo);
+                }
+                _fieldsToRestoreInitOnly.Value!.Clear();
+            }
         }
 
         internal static T GenerateReadMethodImpl<T>(Type type, ImmutableSettings settings, bool isBoxed)
@@ -892,6 +906,7 @@ namespace Apex.Serialization.Internal
                 if(FieldInfoModifier.setFieldInfoNotReadonly != null)
                 {
                     FieldInfoModifier.setFieldInfoNotReadonly(fieldInfo);
+                    _fieldsToRestoreInitOnly.Value!.Add(fieldInfo);
                 }
                 else
                 {

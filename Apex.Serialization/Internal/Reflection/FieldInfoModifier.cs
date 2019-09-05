@@ -24,6 +24,7 @@ namespace Apex.Serialization.Internal.Reflection
         }
 
         internal static Action<FieldInfo>? setFieldInfoNotReadonly;
+        internal static Action<FieldInfo>? setFieldInfoReadonly;
 
         internal static bool MustUseReflectionToSetReadonly => setFieldInfoNotReadonly == null;
 
@@ -47,6 +48,17 @@ namespace Apex.Serialization.Internal.Reflection
                         )
                     , fieldInfoParam
                     ).Compile();
+                setFieldInfoReadonly = (Action<FieldInfo>)Expression.Lambda(
+                    Expression.Block(
+                        Expression.Assign(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes),
+                            Expression.Convert(Expression.Or(Expression.Convert(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes), typeof(int)), Expression.Constant((int)(FieldAttributes.InitOnly)))
+                                , typeof(FieldAttributes))
+                            )
+                        , Expression.Return(returnLabel),
+                        Expression.Label(returnLabel)
+                        )
+                    , fieldInfoParam
+                    ).Compile();
 
                 var s = Binary.Create();
                 try
@@ -59,11 +71,13 @@ namespace Apex.Serialization.Internal.Reflection
                     if (test.Value != 5)
                     {
                         setFieldInfoNotReadonly = null;
+                        setFieldInfoReadonly = null;
                     }
                 }
                 catch (VerificationException)
                 {
                     setFieldInfoNotReadonly = null;
+                    setFieldInfoReadonly = null;
                 }
                 finally
                 {
