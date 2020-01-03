@@ -16,7 +16,7 @@
     <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.12.0" />
     <PackageReference Include="Ceras" Version="4.1.7" />
     <PackageReference Include="Ceras.ImmutableCollections" Version="1.0.0" />
-    <PackageReference Include="FluentAssertions" Version="5.9.0" />
+    <PackageReference Include="FluentAssertions" Version="5.10.0" />
     <PackageReference Include="Hyperion" Version="0.9.11" />
     <PackageReference Include="MessagePack" Version="2.0.323" />
     <PackageReference Include="MessagePack.ImmutableCollection" Version="2.0.323" />
