@@ -82,5 +82,13 @@ namespace Apex.Serialization.Tests
             RoundTrip(x);
             FieldInfoModifier.setFieldInfoNotReadonly = t;
         }
+
+#if NETCOREAPP
+        [Fact]
+        public void ShouldBeAbleToSetReadonlyFieldsDirectly()
+        {
+            FieldInfoModifier.MustUseReflectionToSetReadonly.Should().BeFalse();
+        }
+#endif
     }
 }

@@ -40,8 +40,18 @@ namespace Apex.Serialization.Internal.Reflection
             }
 
             var allConstructors = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+#if DEBUG
+            TypesUsingEmptyConstructor.TryAdd(type, true);
+#endif
             return allConstructors.Single(x => x.GetParameters().Length == 0);
         }
+
+#if DEBUG
+        internal static ConcurrentDictionary<Type, bool> TypesUsingEmptyConstructor = new ConcurrentDictionary<Type, bool>();
+        internal static bool TypeUsesEmptyConstructor(Type t) => TypesUsingEmptyConstructor.ContainsKey(t);
+        internal static ConcurrentDictionary<Type, bool> TypesUsingConstructor = new ConcurrentDictionary<Type, bool>();
+        internal static bool TypeUsesFullConstructor(Type t) => TypesUsingConstructor.ContainsKey(t);
+#endif
 
         public static (ConstructorInfo constructor, List<int> fieldOrder)? FindSpecificDeserializationConstructor(Type type, List<FieldInfo> fields)
         {
@@ -70,6 +80,9 @@ namespace Apex.Serialization.Internal.Reflection
                         {
                             if (Matches(typeRef, constructor, method))
                             {
+#if DEBUG
+                                TypesUsingConstructor.TryAdd(type, true);
+#endif
                                 return (constructor, fieldOrder);
                             }
                         }

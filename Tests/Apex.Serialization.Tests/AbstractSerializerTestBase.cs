@@ -2,6 +2,8 @@
 using System;
 using System.IO;
 using Apex.Serialization.Internal;
+using System.Diagnostics;
+using Apex.Serialization.Internal.Reflection;
 
 namespace Apex.Serialization.Tests
 {
@@ -171,6 +173,25 @@ namespace Apex.Serialization.Tests
             check(obj2[1], loaded2[1]);
 
             return loaded;
+        }
+
+        [Conditional("DEBUG")]
+        protected void TypeShouldUseEmptyConstructor(Type t)
+        {
+            Cil.TypeUsesEmptyConstructor(t).Should().BeTrue();
+        }
+
+        [Conditional("DEBUG")]
+        protected void TypeShouldUseFullConstructor(Type t)
+        {
+            Cil.TypeUsesFullConstructor(t).Should().BeTrue();
+        }
+
+        [Conditional("DEBUG")]
+        protected void TypeShouldNotUseConstructor(Type t)
+        {
+            Cil.TypeUsesEmptyConstructor(t).Should().BeFalse();
+            Cil.TypeUsesFullConstructor(t).Should().BeFalse();
         }
     }
 }

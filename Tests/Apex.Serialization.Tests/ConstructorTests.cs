@@ -123,6 +123,8 @@ namespace Apex.Serialization.Tests
             var x = new Test {Value = 5};
 
             RoundTrip(x, (a, b) => { b.Value.Should().Be(0); });
+
+            TypeShouldUseEmptyConstructor(typeof(Test));
         }
 
         [Fact]
@@ -131,6 +133,8 @@ namespace Apex.Serialization.Tests
             var x = new TestEmpty2 { BaseField = 5 };
 
             RoundTrip(x, (a, b) => { b.BaseField.Should().Be(0); });
+
+            TypeShouldNotUseConstructor(typeof(Test));
         }
 
         [InlineData(true, false)]
@@ -143,6 +147,8 @@ namespace Apex.Serialization.Tests
             var x = new Test2(val1, val2);
 
             RoundTrip(x);
+
+            TypeShouldUseFullConstructor(typeof(Test2));
         }
 
         [Fact]
@@ -151,6 +157,8 @@ namespace Apex.Serialization.Tests
             var x = new Test8Args(1, 2, "3", 4, 5, 6, 7, "8");
 
             RoundTrip(x);
+
+            TypeShouldUseFullConstructor(typeof(Test8Args));
         }
 
         [Fact]
@@ -159,6 +167,8 @@ namespace Apex.Serialization.Tests
             var x = new { a = 1, b = 2, c = 3, d = "d", e = 5, f = 6, g = "g", h = 8 };
 
             RoundTrip(x);
+
+            TypeShouldUseFullConstructor(x.GetType());
         }
 
         [Fact]
@@ -167,6 +177,8 @@ namespace Apex.Serialization.Tests
             var x = new PartialConstructorTest(1);
 
             RoundTrip(x);
+
+            TypeShouldNotUseConstructor(typeof(PartialConstructorTest));
         }
 
         [Fact]
@@ -178,6 +190,8 @@ namespace Apex.Serialization.Tests
             y.Inst = x;
 
             RoundTripGraphOnly(x);
+
+            TypeShouldNotUseConstructor(x.GetType());
         }
 
         [Fact]
@@ -241,6 +255,8 @@ namespace Apex.Serialization.Tests
             x.A = 3;
 
             RoundTrip(x, (x, y) => { ConstructorSettingStaticField.B.Should().Be(0); y.A.Should().Be(3); });
+
+            TypeShouldNotUseConstructor(typeof(ConstructorSettingStaticField));
         }
 
         public class ConstructorSettingStaticFieldIndirect
@@ -266,6 +282,8 @@ namespace Apex.Serialization.Tests
             x.A = 3;
 
             RoundTrip(x, (x, y) => { ConstructorSettingStaticFieldIndirect.B.Should().Be(0); y.A.Should().Be(3); });
+
+            TypeShouldNotUseConstructor(typeof(ConstructorSettingStaticFieldIndirect));
         }
 
         public class ConstructorBaseClassWithSideEffects
@@ -293,6 +311,8 @@ namespace Apex.Serialization.Tests
             x.A = 3;
 
             RoundTrip(x);
+
+            TypeShouldNotUseConstructor(typeof(DerivedClassWithBaseConstructor));
         }
     }
 }
