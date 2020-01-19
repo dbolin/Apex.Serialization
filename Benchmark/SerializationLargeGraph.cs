@@ -130,6 +130,7 @@ namespace Benchmark
         //private Serializer _hyperion = new Serializer();
         //private NetSerializer.Serializer _netSerializer = new NetSerializer.Serializer(new[] { typeof(List<TopLevel>) });
         private readonly CerasSerializer ceras;
+        private readonly MessagePackSerializerOptions _msgPackOptions;
         private byte[] b = new byte[16];
 
         private MemoryStream _m1 = new MemoryStream();
@@ -169,11 +170,15 @@ namespace Benchmark
             ceras = new CerasSerializer(config);
 
             //_hyperion.Serialize(_t1, _m2);
-            CompositeResolver.RegisterAndSetAsDefault(
+
+            _msgPackOptions = MessagePackSerializerOptions.Standard.WithResolver(
+                CompositeResolver.Create(
                 ImmutableCollectionResolver.Instance,
                 DynamicObjectResolver.Instance,
                 StandardResolver.Instance
-                );
+                )
+            );
+                
             //_netSerializer.Serialize(_m5, _t1);
         }
 
@@ -256,14 +261,14 @@ namespace Benchmark
         public void S_MessagePack()
         {
             _m4.Seek(0, SeekOrigin.Begin);
-            MessagePackSerializer.Serialize(_m4, _t1);
+            MessagePackSerializer.Serialize(_m4, _t1, _msgPackOptions);
         }
 
         [Benchmark]
         public object D_MessagePack()
         {
             _m4.Seek(0, SeekOrigin.Begin);
-            return MessagePackSerializer.Deserialize<List<TopLevel>>(_m4);
+            return MessagePackSerializer.Deserialize<List<TopLevel>>(_m4, _msgPackOptions);
         }
 
         [GlobalSetup(Targets = new[] { nameof(S_Ceras), nameof(D_Ceras) })]
