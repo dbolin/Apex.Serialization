@@ -195,7 +195,7 @@ namespace Apex.Serialization.Internal
                 return Expression.Call(output, WriteFunctionMethod, Expression.Convert(source, typeof(Delegate)));
             }
 
-            var custom = HandleCustomWrite(output, type, actualSource, settings);
+            var custom = HandleCustomWrite(output, stream, type, actualSource, settings);
             if (custom != null)
             {
                 return custom;
@@ -273,7 +273,7 @@ namespace Apex.Serialization.Internal
                 return nullableExpression;
             }
 
-            var customExpression = HandleCustomWrite(output, declaredType, valueAccessExpression, settings);
+            var customExpression = HandleCustomWrite(output, stream, declaredType, valueAccessExpression, settings);
             if (customExpression != null)
             {
                 inlineWrite = true;
@@ -359,7 +359,7 @@ namespace Apex.Serialization.Internal
                 );
         }
 
-        private static Expression? HandleCustomWrite(ParameterExpression output, Type declaredType,
+        private static Expression? HandleCustomWrite(ParameterExpression output, ParameterExpression stream, Type declaredType,
             Expression valueAccessExpression, ImmutableSettings settings)
         {
             if (!settings.SupportSerializationHooks)
@@ -368,6 +368,7 @@ namespace Apex.Serialization.Internal
             }
 
             var statements = new List<Expression>();
+            var customWriteStatements = new List<Expression>();
 
             foreach (var entry in Binary.CustomActionSerializers)
             {
@@ -377,7 +378,7 @@ namespace Apex.Serialization.Internal
                     if (customContextType != null)
                     {
                         var customContext = Expression.Call(output, CustomContextGetter.MakeGenericMethod(customContextType));
-                        statements.Add(Expression.Call(
+                        customWriteStatements.Add(Expression.Call(
                             Expression.Convert(
                                 Expression.Constant(entry.Value.Action),
                                 typeof(Action<,,>).MakeGenericType(declaredType, typeof(IBinaryWriter), customContextType)),
@@ -387,7 +388,7 @@ namespace Apex.Serialization.Internal
                     }
                     else
                     {
-                        statements.Add(Expression.Call(
+                        customWriteStatements.Add(Expression.Call(
                             Expression.Convert(
                                 Expression.Constant(entry.Value.Action),
                                 typeof(Action<,>).MakeGenericType(declaredType, typeof(IBinaryWriter))),
@@ -397,7 +398,30 @@ namespace Apex.Serialization.Internal
                 }
             }
 
-            return statements.Count > 0 ? Expression.Block(statements) : null;
+            if (customWriteStatements.Count == 0)
+            {
+                return null;
+            }
+
+            var afterWriteLabel = Expression.Label("afterWrite");
+            if (!declaredType.IsValueType)
+            {
+                statements.Add(ReserveConstantSize(stream, 1));
+                statements.Add(Expression.IfThenElse(
+                        Expression.ReferenceEqual(valueAccessExpression, Expression.Constant(null)),
+                        Expression.Block(
+                            Expression.Call(stream, BinaryStreamMethods<BufferedStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)0)),
+                            Expression.Continue(afterWriteLabel)
+                        ),
+                        Expression.Block(
+                            Expression.Call(stream, BinaryStreamMethods<BufferedStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)1))
+                        )
+                    ));
+                statements.AddRange(customWriteStatements);
+                statements.Add(Expression.Label(afterWriteLabel));
+            }
+
+            return statements.Count > 0 ? Expression.Block(statements) : Expression.Block(customWriteStatements);
         }
 
         private static Expression? HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
@@ -790,7 +814,7 @@ namespace Apex.Serialization.Internal
                 return Expression.Assign(result, Expression.Convert(Expression.Call(output, ReadFunctionMethod), type));
             }
 
-            var custom = HandleCustomRead(type, output, result, settings);
+            var custom = HandleCustomRead(type, output, stream, result, settings);
             if (custom != null)
             {
                 created = false;
@@ -824,7 +848,7 @@ namespace Apex.Serialization.Internal
             return collection;
         }
 
-        private static Expression? HandleCustomRead(Type type, ParameterExpression output, Expression result, ImmutableSettings settings)
+        private static Expression? HandleCustomRead(Type type, ParameterExpression output, ParameterExpression stream, Expression result, ImmutableSettings settings)
         {
             if (!settings.SupportSerializationHooks)
             {
@@ -832,16 +856,17 @@ namespace Apex.Serialization.Internal
             }
 
             var statements = new List<Expression>();
+            var customReadStatements = new List<Expression>();
 
             foreach (var entry in Binary.CustomActionDeserializers)
             {
                 if (entry.Key.IsAssignableFrom(type))
                 {
                     var customContextType = entry.Value.CustomContextType;
-                    if(customContextType != null)
+                    if (customContextType != null)
                     {
                         var customContext = Expression.Call(output, CustomContextGetter.MakeGenericMethod(customContextType));
-                        statements.Add(Expression.Call(
+                        customReadStatements.Add(Expression.Call(
                             Expression.Convert(
                                 Expression.Constant(entry.Value.Action),
                                 typeof(Action<,,>).MakeGenericType(type, typeof(IBinaryReader), customContextType)),
@@ -851,7 +876,7 @@ namespace Apex.Serialization.Internal
                     }
                     else
                     {
-                        statements.Add(Expression.Call(
+                        customReadStatements.Add(Expression.Call(
                             Expression.Convert(
                                 Expression.Constant(entry.Value.Action),
                                 typeof(Action<,>).MakeGenericType(type, typeof(IBinaryReader))),
@@ -861,7 +886,26 @@ namespace Apex.Serialization.Internal
                 }
             }
 
-            return statements.Count > 0 ? Expression.Block(statements) : null;
+            if(customReadStatements.Count == 0)
+            {
+                return null;
+            }
+
+            if (!type.IsValueType)
+            {
+                statements.Add(ReserveConstantSize(stream, 1));
+                statements.Add(Expression.IfThenElse(
+                        Expression.Equal(Expression.Constant((byte)0), Expression.Call(stream, BinaryStreamMethods<BufferedStream>.GenericMethods<byte>.ReadValueMethodInfo)),
+                        Expression.Block(
+                            Expression.Constant(null)
+                        ),
+                        Expression.Block(
+                            customReadStatements
+                        )
+                    ));
+            }
+
+            return statements.Count > 0 ? Expression.Block(statements) : Expression.Block(customReadStatements);
         }
 
         private static Expression? ReadStructExpression(Type type, ParameterExpression stream,

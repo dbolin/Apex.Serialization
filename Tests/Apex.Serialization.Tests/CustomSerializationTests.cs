@@ -101,5 +101,75 @@ namespace Apex.Serialization.Tests
             binary.Precompile<Settings>();
             binary.Precompile<CustomSerializationTests>();
         }
+
+        public class TestWithConstructor
+        {
+            public int Value;
+
+            public TestWithConstructor(int value)
+            {
+                Value = value;
+            }
+
+            public static void Serialize(TestWithConstructor t, IBinaryWriter writer)
+            {
+                writer.Write(t.Value - 1);
+            }
+
+            public static void Deserialize(TestWithConstructor t, IBinaryReader reader)
+            {
+                t.Value.Should().Be(0);
+                t.Value = reader.Read<int>();
+            }
+        }
+
+        [Fact]
+        public void CustomSerializationShouldNotBePassedNull()
+        {
+            Binary.Instantiated = false;
+            Binary.CustomActionSerializers.Remove(typeof(TestWithConstructor));
+            Binary.CustomActionDeserializers.Remove(typeof(TestWithConstructor));
+            Binary.RegisterCustomSerializer<TestWithConstructor>(TestWithConstructor.Serialize, TestWithConstructor.Deserialize);
+
+            var binary = Binary.Create(new Settings { SupportSerializationHooks = true });
+            var m = new MemoryStream();
+
+            binary.Write<object>(new { A = (TestWithConstructor?)null }, m);
+
+            m.Seek(0, SeekOrigin.Begin);
+
+            var y = binary.Read<object>(m);
+            TestWithConstructor? r = ((dynamic)y).A;
+            r.Should().BeNull();
+        }
+
+        [Fact]
+        public void CustomSerializationShouldAlwaysStartUninitialized()
+        {
+            Binary.Instantiated = false;
+            Binary.CustomActionSerializers.Remove(typeof(TestWithConstructor));
+            Binary.CustomActionDeserializers.Remove(typeof(TestWithConstructor));
+            Binary.RegisterCustomSerializer<TestWithConstructor>(TestWithConstructor.Serialize, TestWithConstructor.Deserialize);
+
+            var binary = Binary.Create(new Settings { SupportSerializationHooks = true });
+            var m = new MemoryStream();
+
+            var list = new List<TestWithConstructor>();
+            for (int i = 0; i < 10; ++i)
+            {
+                list.Add(new TestWithConstructor(10));
+            }
+
+            binary.Write(list, m);
+
+            m.Seek(0, SeekOrigin.Begin);
+
+            var y = binary.Read<List<TestWithConstructor>>(m);
+
+            foreach (var v in y)
+            {
+                v.Value.Should().Be(9);
+            }
+        }
     }
 }

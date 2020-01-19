@@ -41,7 +41,7 @@ namespace Apex.Serialization
 
         /// <summary>
         /// Registers a custom serializer action.
-        /// This cannot be done after an instance of the Binary class has been create.
+        /// This cannot be done after an instance of the Binary class has been created.
         /// This method is not thread-safe.
         /// </summary>
         /// <typeparam name="T">Type to which the custom serialization will apply.  Does not support primitives.</typeparam>
@@ -62,7 +62,7 @@ namespace Apex.Serialization
 
         /// <summary>
         /// Registers a custom serializer action.
-        /// This cannot be done after an instance of the Binary class has been create.
+        /// This cannot be done after an instance of the Binary class has been created.
         /// This method is not thread-safe.
         /// </summary>
         /// <typeparam name="T">Type to which the custom serialization will apply.  Does not support primitives.</typeparam>
@@ -86,6 +86,12 @@ namespace Apex.Serialization
 
         internal static ArrayPool<byte> ByteArrayPool = ArrayPool<byte>.Shared;
 
+        /// <summary>
+        /// Sets the Byte array pool that binary serializes will use.
+        /// Cannot be set after an instance of the Binary class has been created.
+        /// This method is not thread-safe.
+        /// </summary>
+        /// <param name="arrayPool"></param>
         public static void SetByteArrayPool(ArrayPool<byte> arrayPool)
         {
             CheckInstantiantedArrayPool();
