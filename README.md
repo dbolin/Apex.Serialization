@@ -41,7 +41,9 @@ Deserialization
 var obj = binarySerializer.Read<SerializedClassType>(inputStream)
 ```
 
-Always reuse serializer instances when possible, as the instance caches a lot of data to improve performance when repeatedly serializing or deserializing objects.
+Class instances are not thread safe, static methods are thread safe unless otherwise noted in their documentation. 
+
+Always reuse serializer instances when possible, as the instance caches a lot of data to improve performance when repeatedly serializing or deserializing objects.  Since the instances are not thread-safe, you should use an object pool or some other method to ensure that only one thread uses an instance at a time.
 
 Fields with the [Nonserialized] attribute will not be serialized or deserialized.
 

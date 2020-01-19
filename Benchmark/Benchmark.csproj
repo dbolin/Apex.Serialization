@@ -12,15 +12,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.11.5" />
-    <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.11.5" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.12.0" />
+    <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.12.0" />
     <PackageReference Include="Ceras" Version="4.1.7" />
     <PackageReference Include="Ceras.ImmutableCollections" Version="1.0.0" />
-    <PackageReference Include="FluentAssertions" Version="5.9.0" />
-    <PackageReference Include="Hyperion" Version="0.9.8" />
-    <PackageReference Include="MessagePack" Version="1.7.3.7" />
-    <PackageReference Include="MessagePack.ImmutableCollection" Version="1.7.3.7" />
-    <PackageReference Include="NetSerializer" Version="4.1.0" />
+    <PackageReference Include="FluentAssertions" Version="5.10.0" />
+    <PackageReference Include="Hyperion" Version="0.9.11" />
+    <PackageReference Include="MessagePack" Version="2.0.335" />
+    <PackageReference Include="MessagePack.ImmutableCollection" Version="2.0.335" />
+    <PackageReference Include="NetSerializer" Version="4.1.1" />
     <PackageReference Include="protobuf-net" Version="3.0.0-alpha.43" />
     <PackageReference Include="ZeroFormatter" Version="1.6.4" />
   </ItemGroup>
