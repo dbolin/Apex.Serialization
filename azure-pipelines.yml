@@ -13,8 +13,8 @@ steps:
   inputs:
     Contents: '**/*.cobertura.xml'
 - script: |
-   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f net472 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
-   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f net472 -c Release --logger "trx;LogFileName=results.trx"
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f net47 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f net47 -c Release --logger "trx;LogFileName=results.trx"
    dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
    dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Release --logger "trx;LogFileName=results.trx"
   displayName: 'dotnet test'
