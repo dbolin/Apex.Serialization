@@ -8,29 +8,28 @@ using Apex.Serialization.Internal;
 
 namespace Apex.Serialization
 {
-    internal static class WriteMethods<T, TStream>
+    internal static class WriteMethods<T, TStream, TSettingGen>
         where TStream : struct, IBinaryStream
     {
-        public delegate void WriteSealed(T obj, ref TStream stream, Binary<TStream> binary);
+        public delegate void WriteSealed(T obj, ref TStream stream, Binary<TStream, TSettingGen> binary);
 
-        public static WriteSealed[] Methods = new WriteSealed[ImmutableSettings.MaxSettingsIndex + 1];
+        public static WriteSealed? Method;
     }
 
-    internal static class ReadMethods<T, TStream>
+    internal static class ReadMethods<T, TStream, TSettingGen>
         where TStream : struct, IBinaryStream
     {
-        public delegate T ReadSealed(ref TStream stream, Binary<TStream> binary);
+        public delegate T ReadSealed(ref TStream stream, Binary<TStream, TSettingGen> binary);
 
-        public static ReadSealed[] Methods = new ReadSealed[ImmutableSettings.MaxSettingsIndex + 1];
+        public static ReadSealed? Method;
     }
 
-    internal sealed partial class Binary<TStream> : ISerializer, IBinary where TStream : struct, IBinaryStream
+    internal sealed partial class Binary<TStream, TSettingGen> : ISerializer, IBinary where TStream : struct, IBinaryStream
     {
-        public delegate void WriteObject(object obj, ref TStream stream, Binary<TStream> binary);
-        public delegate object ReadObject(ref TStream stream, Binary<TStream> binary);
+        public delegate void WriteObject(object obj, ref TStream stream, Binary<TStream, TSettingGen> binary);
+        public delegate object ReadObject(ref TStream stream, Binary<TStream, TSettingGen> binary);
 
-        public ImmutableSettings Settings { get; } = Serialization.Settings.Default;
-        private readonly int _settingsIndex;
+        public ImmutableSettings Settings { get; }
         internal TStream _stream;
 
         internal List<object> LoadedObjectRefs => _loadedObjectRefs;
@@ -77,33 +76,12 @@ namespace Apex.Serialization
         private object _customContext;
 
 #pragma warning disable CS8618 // Non-nullable field is uninitialized.
-        internal Binary(TStream stream)
+        internal Binary(ImmutableSettings settings, TStream stream)
 #pragma warning restore CS8618 // Non-nullable field is uninitialized.
         {
-            _binaryWriter = new BinaryWriter<TStream>(this);
-            _binaryReader = new BinaryReader<TStream>(this);
-            _settingsIndex = Settings.SettingsIndex;
-            _stream = stream;
-            if (Settings.SerializationMode == Mode.Graph)
-            {
-                _savedObjectLookup = new DictionarySlim<object, int>(16);
-                _loadedObjectRefs = new List<object>(16);
-            }
-
-            if (Settings.SupportSerializationHooks)
-            {
-                _deserializationHooks = new List<ValueTuple<Action<object, object>, object>>();
-            }
-        }
-
-#pragma warning disable CS8618 // Non-nullable field is uninitialized.
-        internal Binary(Settings settings, TStream stream)
-#pragma warning restore CS8618 // Non-nullable field is uninitialized.
-        {
-            _binaryWriter = new BinaryWriter<TStream>(this);
-            _binaryReader = new BinaryReader<TStream>(this);
             Settings = settings;
-            _settingsIndex = Settings.SettingsIndex;
+            _binaryWriter = new BinaryWriter<TStream, TSettingGen>(this);
+            _binaryReader = new BinaryReader<TStream, TSettingGen>(this);
             _stream = stream;
             if (Settings.SerializationMode == Mode.Graph)
             {
@@ -170,12 +148,17 @@ namespace Apex.Serialization
 
         public void Precompile(Type type)
         {
+            if(type.IsGenericTypeDefinition)
+            {
+                throw new ArgumentException("Cannot compile for a generic type definition", nameof(type));
+            }
+
             lock (VirtualReadMethods)
             {
                 ref var readMethod = ref VirtualReadMethods.GetOrAddValueRef(type);
                 if (readMethod == null)
                 {
-                    readMethod = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadObject>(type, Settings, true);
+                    readMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true);
                 }
             }
 
@@ -184,30 +167,28 @@ namespace Apex.Serialization
                 ref var writeMethod = ref VirtualWriteMethods.GetOrAddValueRef(type);
                 if (writeMethod == null)
                 {
-                    writeMethod = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
+                    writeMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
                 }
             }
 
             if(type.IsSealed || type.IsValueType)
             {
-                typeof(Binary<TStream>).GetMethods().Single(x => x.IsGenericMethod && x.Name == "Precompile")
+                typeof(Binary<TStream, TSettingGen>).GetMethods().Single(x => x.IsGenericMethod && x.Name == "Precompile")
                     .MakeGenericMethod(type).Invoke(this, Array.Empty<object>());
             }
         }
 
         public void Precompile<T>()
         {
-            var readMethod = ReadMethods<T, TStream>.Methods[_settingsIndex];
+            ref var readMethod = ref ReadMethods<T, TStream, TSettingGen>.Method;
             if (readMethod == null)
             {
-                readMethod = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadMethods<T, TStream>.ReadSealed>(typeof(T), Settings, false);
-                ReadMethods<T, TStream>.Methods[_settingsIndex] = readMethod;
+                readMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
             }
-            var writeMethod = WriteMethods<T, TStream>.Methods[_settingsIndex];
+            ref var writeMethod = ref WriteMethods<T, TStream, TSettingGen>.Method;
             if (writeMethod == null)
             {
-                writeMethod = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(typeof(T), Settings, false);
-                WriteMethods<T, TStream>.Methods[_settingsIndex] = writeMethod;
+                writeMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(typeof(T), Settings, false);
             }
         }
 

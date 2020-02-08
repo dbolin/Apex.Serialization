@@ -25,7 +25,7 @@ namespace Benchmark
         private readonly MemoryStream _memoryStream = new MemoryStream();
 
         private readonly IBinary _binaryTree = Binary.Create(new Settings
-        { SerializationMode = Mode.Tree });
+        { SerializationMode = Mode.Tree }.MarkSerializable(x => true));
 
         //private readonly Serializer _hyperion = new Serializer(new SerializerOptions());
 

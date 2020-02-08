@@ -3,12 +3,12 @@ using System.Runtime.CompilerServices;
 
 namespace Apex.Serialization.Extensions
 {
-    internal class BinaryReader<TStream> : IBinaryReader
+    internal class BinaryReader<TStream, TSettingGen> : IBinaryReader
         where TStream : struct, IBinaryStream
     {
-        public Binary<TStream> _instance;
+        public Binary<TStream, TSettingGen> _instance;
 
-        public BinaryReader(Binary<TStream> instance)
+        public BinaryReader(Binary<TStream, TSettingGen> instance)
         {
             _instance = instance;
         }

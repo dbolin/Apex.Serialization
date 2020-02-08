@@ -1,59 +1,59 @@
 
 Internal benchmarks
 
-|              Method |     Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
-|-------------------- |---------:|----------:|----------:|-------:|------:|------:|----------:|
-| S_SingleEmptyObject | 38.29 ns | 0.2806 ns | 0.2625 ns |      - |     - |     - |         - |
-| D_SingleEmptyObject | 57.68 ns | 1.1845 ns | 1.6606 ns | 0.0020 |     - |     - |      24 B |
+|              Method |     Mean |    Error |   StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
+|-------------------- |---------:|---------:|---------:|-------:|------:|------:|----------:|
+| S_SingleEmptyObject | 40.29 ns | 0.263 ns | 0.246 ns |      - |     - |     - |         - |
+| D_SingleEmptyObject | 56.77 ns | 0.289 ns | 0.256 ns | 0.0015 |     - |     - |      24 B |
 
 |          Method |     Mean |     Error |    StdDev |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
 |---------------- |---------:|----------:|----------:|-------:|-------:|------:|----------:|
-| S_ListEmptyFull | 2.009 us | 0.0095 us | 0.0089 us |      - |      - |     - |         - |
-| D_ListEmptyFull | 8.940 us | 0.1822 us | 0.4768 us | 2.7313 | 0.2289 |     - |   32824 B |
+| S_ListEmptyFull | 1.791 us | 0.0059 us | 0.0055 us |      - |      - |     - |         - |
+| D_ListEmptyFull | 7.787 us | 0.1065 us | 0.0996 us | 2.2278 | 0.1678 |     - |   32824 B |
 
-|            Method |     Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
-|------------------ |---------:|----------:|----------:|-------:|------:|------:|----------:|
-| S_NestedListEmpty | 1.799 us | 0.0047 us | 0.0044 us |      - |     - |     - |         - |
-| D_NestedListEmpty | 6.923 us | 0.0962 us | 0.0900 us | 2.5406 |     - |     - |   26696 B |
+|            Method |     Mean |     Error |    StdDev |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
+|------------------ |---------:|----------:|----------:|-------:|-------:|------:|----------:|
+| S_NestedListEmpty | 1.747 us | 0.0035 us | 0.0033 us |      - |      - |     - |         - |
+| D_NestedListEmpty | 6.295 us | 0.0380 us | 0.0317 us | 1.7471 | 0.0076 |     - |   26696 B |
 
-|             Method |     Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
-|------------------- |---------:|----------:|----------:|-------:|------:|------:|----------:|
-| S_NestedListFields | 20.95 us | 0.1660 us | 0.1553 us |      - |     - |     - |         - |
-| D_NestedListFields | 58.26 us | 1.2793 us | 1.6179 us | 7.7515 |     - |     - |   87968 B |
+|             Method |     Mean |    Error |   StdDev |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
+|------------------- |---------:|---------:|---------:|-------:|-------:|------:|----------:|
+| S_NestedListFields | 14.87 us | 0.036 us | 0.034 us |      - |      - |     - |         - |
+| D_NestedListFields | 25.90 us | 0.207 us | 0.193 us | 5.7678 | 1.2512 |     - |   87968 B |
 
 |                    Method |      Mean |     Error |    StdDev |   Gen 0 |  Gen 1 | Gen 2 | Allocated |
 |-------------------------- |----------:|----------:|----------:|--------:|-------:|------:|----------:|
-|  STree_ISD_IS_FullHistory | 173.75 us | 0.8236 us | 0.7704 us |       - |      - |     - |         - |
-|  DTree_ISD_IS_FullHistory | 885.52 us | 5.7649 us | 5.3925 us | 11.7188 | 2.9297 |     - |  654240 B |
-| SGraph_ISD_IS_FullHistory |  46.70 us | 0.4185 us | 0.3710 us |       - |      - |     - |         - |
-| DGraph_ISD_IS_FullHistory |  93.85 us | 1.2763 us | 1.1314 us |  5.3711 |      - |     - |   59368 B |
+|  STree_ISD_IS_FullHistory | 161.34 us |  0.337 us |  0.281 us |       - |      - |     - |         - |
+|  DTree_ISD_IS_FullHistory | 918.26 us | 18.170 us | 22.314 us | 12.6953 | 4.8828 |     - |  654240 B |
+| SGraph_ISD_IS_FullHistory |  46.35 us |  0.207 us |  0.193 us |       - |      - |     - |         - |
+| DGraph_ISD_IS_FullHistory |  90.63 us |  0.987 us |  0.875 us |  3.9063 |      - |     - |   59368 B |
 
-|               Method |     Mean |    Error |    StdDev |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
-|--------------------- |---------:|---------:|----------:|-------:|-------:|------:|----------:|
-| S_DictionaryOfValues | 225.3 ns | 8.765 ns | 10.434 ns |      - |      - |     - |         - |
-| D_DictionaryOfValues | 750.8 ns | 9.825 ns |  7.671 ns | 0.3881 | 0.0038 |     - |    4064 B |
+|               Method |     Mean |    Error |   StdDev |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
+|--------------------- |---------:|---------:|---------:|-------:|-------:|------:|----------:|
+| S_DictionaryOfValues | 243.6 ns |  0.48 ns |  0.44 ns |      - |      - |     - |         - |
+| D_DictionaryOfValues | 701.5 ns | 12.09 ns | 10.72 ns | 0.2670 | 0.0019 |     - |    4064 B |
 
 |                   Method |     Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
 |------------------------- |---------:|----------:|----------:|-------:|------:|------:|----------:|
-| S_DictionaryOfReferences | 3.232 us | 0.0087 us | 0.0077 us |      - |     - |     - |         - |
-| D_DictionaryOfReferences | 8.015 us | 0.1418 us | 0.1893 us | 0.7477 |     - |     - |    7920 B |
+| S_DictionaryOfReferences | 3.200 us | 0.0076 us | 0.0071 us |      - |     - |     - |         - |
+| D_DictionaryOfReferences | 7.971 us | 0.0777 us | 0.0727 us | 0.5188 |     - |     - |    7920 B |
 
 |                     Method |     Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
 |--------------------------- |---------:|----------:|----------:|-------:|------:|------:|----------:|
-| S_SortedDictionaryOfValues | 1.351 us | 0.0048 us | 0.0045 us |      - |     - |     - |         - |
-| D_SortedDictionaryOfValues | 9.416 us | 0.1115 us | 0.0989 us | 0.4425 |     - |     - |    4936 B |
+| S_SortedDictionaryOfValues | 1.224 us | 0.0035 us | 0.0032 us |      - |     - |     - |         - |
+| D_SortedDictionaryOfValues | 8.813 us | 0.0507 us | 0.0423 us | 0.3204 |     - |     - |    4936 B |
 
 |         Method |     Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
 |--------------- |---------:|----------:|----------:|-------:|------:|------:|----------:|
-| S_NullableInts | 3.582 us | 0.0100 us | 0.0093 us |      - |     - |     - |         - |
-| D_NullableInts | 5.318 us | 0.1031 us | 0.1227 us | 0.6638 |     - |     - |    8248 B |
+| S_NullableInts | 3.632 us | 0.0078 us | 0.0073 us |      - |     - |     - |         - |
+| D_NullableInts | 5.321 us | 0.0237 us | 0.0222 us | 0.5493 |     - |     - |    8248 B |
 
-|            Method |      Mean |     Error |    StdDev |  Gen 0 | Gen 1 | Gen 2 | Allocated |
-|------------------ |----------:|----------:|----------:|-------:|------:|------:|----------:|
-| S_NullableWrapper |  3.540 us | 0.0141 us | 0.0125 us |      - |     - |     - |         - |
-| D_NullableWrapper | 10.697 us | 0.0948 us | 0.0886 us | 3.9978 |     - |     - |   49208 B |
+|            Method |      Mean |     Error |    StdDev |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
+|------------------ |----------:|----------:|----------:|-------:|-------:|------:|----------:|
+| S_NullableWrapper |  3.613 us | 0.0125 us | 0.0111 us |      - |      - |     - |         - |
+| D_NullableWrapper | 10.844 us | 0.1162 us | 0.1030 us | 3.6621 | 0.2747 |     - |   49208 B |
 
 |       Method |      Mean |     Error |    StdDev |  Gen 0 |  Gen 1 | Gen 2 | Allocated |
 |------------- |----------:|----------:|----------:|-------:|-------:|------:|----------:|
-| S_StringList |  4.813 us | 0.0120 us | 0.0112 us |      - |      - |     - |         - |
-| D_StringList | 15.775 us | 0.0549 us | 0.0458 us | 3.4180 | 0.0305 |     - |   41016 B |
+| S_StringList |  6.673 us | 0.1332 us | 0.1368 us |      - |      - |     - |         - |
+| D_StringList | 16.332 us | 0.2117 us | 0.1981 us | 2.8076 | 0.0916 |     - |   41016 B |

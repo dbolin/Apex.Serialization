@@ -9,7 +9,7 @@ using System.Reflection;
 
 namespace Apex.Serialization
 {
-    internal sealed partial class Binary<TStream>
+    internal sealed partial class Binary<TStream, TSettingGen>
         where TStream : struct, IBinaryStream
     {
         internal void WriteObjectEntry<T>(T value)
@@ -71,7 +71,7 @@ namespace Apex.Serialization
 
             if (method == null)
             {
-                method = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadObject>(type, Settings, true);
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true);
             }
 
             _lastReadType = type;
@@ -107,13 +107,14 @@ namespace Apex.Serialization
 
         internal T ReadValueInternal<T>()
         {
-            var method = ReadMethods<T, TStream>.Methods[_settingsIndex];
+#if !DEBUG
+            ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
+#else
+            var method = ReadMethods<T, TStream, TSettingGen>.Method;
+#endif
             if (method == null)
             {
-                method = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadMethods<T, TStream>.ReadSealed>(typeof(T), Settings, false);
-#if !DEBUG
-                ReadMethods<T, TStream>.Methods[_settingsIndex] = method;
-#endif
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
             }
 
             return method(ref _stream, this);
@@ -126,13 +127,14 @@ namespace Apex.Serialization
                 return result;
             }
 
-            var method = ReadMethods<T, TStream>.Methods[_settingsIndex];
+#if !DEBUG
+            ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
+#else
+            var method = ReadMethods<T, TStream, TSettingGen>.Method;
+#endif
             if (method == null)
             {
-                method = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadMethods<T, TStream>.ReadSealed>(typeof(T), Settings, false);
-#if !DEBUG
-                ReadMethods<T, TStream>.Methods[_settingsIndex] = method;
-#endif
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
             }
 
             return method(ref _stream, this);
@@ -225,7 +227,7 @@ namespace Apex.Serialization
 
             if (method == null)
             {
-                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
             }
 
             _lastWriteType = type;
@@ -519,15 +521,16 @@ namespace Apex.Serialization
 
         internal void WriteValueInternal<T>(T value)
         {
-            var method = WriteMethods<T, TStream>.Methods[_settingsIndex];
+#if !DEBUG
+            ref var method = ref WriteMethods<T, TStream, TSettingGen>.Method;
+#else
+            var method = WriteMethods<T, TStream, TSettingGen>.Method;
+#endif
             if (method == null)
             {
                 CheckTypes(value);
 
-                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value!.GetType(), Settings, false);
-#if !DEBUG
-                WriteMethods<T, TStream>.Methods[_settingsIndex] = method;
-#endif
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(value!.GetType(), Settings, false);
             }
 
             method(value, ref _stream, this);
@@ -546,15 +549,16 @@ namespace Apex.Serialization
                 _stream.Write((byte)1);
             }
 
-            var method = WriteMethods<T, TStream>.Methods[_settingsIndex];
+#if !DEBUG
+            ref var method = ref WriteMethods<T, TStream, TSettingGen>.Method;
+#else
+            var method = WriteMethods<T, TStream, TSettingGen>.Method;
+#endif
             if (method == null)
             {
                 CheckTypes(value!);
 
-                method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value!.GetType(), Settings, false);
-#if !DEBUG
-                WriteMethods<T, TStream>.Methods[_settingsIndex] = method;
-#endif
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(value!.GetType(), Settings, false);
             }
 
             method(value, ref _stream, this);

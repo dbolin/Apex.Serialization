@@ -60,7 +60,7 @@ namespace Apex.Serialization.Internal.Reflection
                     , fieldInfoParam
                     ).Compile();
 
-                var s = Binary.Create();
+                var s = Binary.Create(Settings.Default);
                 try
                 {
                     var test = new TestReadonly(5);

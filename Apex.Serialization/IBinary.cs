@@ -5,8 +5,6 @@ namespace Apex.Serialization
 {
     public interface IBinary : IDisposable
     {
-        ImmutableSettings Settings { get; }
-
         void Intern(object o);
         void Precompile(Type type);
         void Precompile<T>();
