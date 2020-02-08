@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using FluentAssertions;
 using Xunit;
 
@@ -6,6 +7,17 @@ namespace Apex.Serialization.Tests.Collections
 {
     public class NonGenericCollectionTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ArrayList),
+                typeof(BitArray),
+                typeof(Queue),
+                typeof(Stack)
+            };
+        }
+
         public class Test
         {
             public int Value;

@@ -8,6 +8,14 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
 {
     public class ConcurrentBagTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ConcurrentBag<>)
+            };
+        }
+
         [Fact]
         public void ConcurrentBagObject()
         {

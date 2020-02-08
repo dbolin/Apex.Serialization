@@ -9,7 +9,7 @@ namespace Apex.Serialization.Internal.Reflection
     // If I didn't do it, then someone else would
     internal static class FieldInfoModifier
     {
-        private class TestReadonly
+        internal class TestReadonly
         {
             public TestReadonly()
             {

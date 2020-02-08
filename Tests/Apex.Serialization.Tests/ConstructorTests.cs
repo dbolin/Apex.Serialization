@@ -10,6 +10,14 @@ namespace Apex.Serialization.Tests
 {
     public class ConstructorTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableList<>)
+            };
+        }
+
         public class Test
         {
             public Test()

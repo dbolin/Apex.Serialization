@@ -1,15 +1,23 @@
 ﻿using Apex.Serialization.Extensions;
+using Apex.Serialization.Internal.Reflection;
 using System;
 using System.Buffers;
 using System.Collections.Generic;
+using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.Serialization;
 using BufferedStream = Apex.Serialization.Internal.BufferedStream;
 
 namespace Apex.Serialization
 {
     public static class Binary
     {
+#if !DEBUG
         internal static bool Instantiated;
+#endif
         internal class CustomSerializerDelegate
         {
             public readonly Delegate Action;
@@ -27,15 +35,22 @@ namespace Apex.Serialization
         internal static Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>();
         internal static Dictionary<Type, CustomSerializerDelegate> CustomActionDeserializers = new Dictionary<Type, CustomSerializerDelegate>();
 
+        internal static HashSet<Type> WhitelistedTypes = new HashSet<Type>();
+        internal static List<Func<Type, bool>> WhitelistFuncs = new List<Func<Type, bool>>();
+
         public static IBinary Create()
         {
+#if !DEBUG
             Instantiated = true;
+#endif
             return new Binary<BufferedStream>(BufferedStream.Create());
         }
 
         public static IBinary Create(Settings settings)
         {
+#if !DEBUG
             Instantiated = true;
+#endif
             return new Binary<BufferedStream>(settings, BufferedStream.Create());
         }
 
@@ -98,20 +113,191 @@ namespace Apex.Serialization
             ByteArrayPool = arrayPool;
         }
 
+        /// <summary>
+        /// Marks a type as able to be serialized.
+        /// Cannot be done after an instance of the Binary class has been created.
+        /// This method is not thread-safe.
+        /// </summary>
+        /// <param name="type">The type to mark as serializable</param>
+        public static void MarkSerializable(Type type)
+        {
+#if !DEBUG
+            if (Instantiated)
+            {
+                throw new InvalidOperationException("Cannot mark types as serializable after an instance of a Binary serializer has been created");
+            }
+#endif
+            WhitelistedTypes.Add(type);
+        }
+
+        /// <summary>
+        /// Marks types as serializable according to a predicate.
+        /// Cannot be done after an instance of the Binary class has been created.
+        /// This method is not thread-safe.
+        /// </summary>
+        /// <param name="type">The predicate function to determine whether a type can be serialized</param>
+        public static void MarkSerializable(Func<Type, bool> isTypeSerializable)
+        {
+#if !DEBUG
+            if (Instantiated)
+            {
+                throw new InvalidOperationException("Cannot mark types as serializable after an instance of a Binary serializer has been created");
+            }
+#endif
+            WhitelistFuncs.Add(isTypeSerializable);
+        }
+
+        // For internal testing
+        internal static void ClearSerializableMarks()
+        {
+            WhitelistedTypes.Clear();
+            WhitelistFuncs.Clear();
+        }
+
+        private static HashSet<Type> _autoWhitelistedTypes = new HashSet<Type>
+        {
+            typeof(string),
+            typeof(object),
+            typeof(KeyValuePair<,>),
+            typeof(Tuple<>),
+            typeof(Tuple<,>),
+            typeof(Tuple<,,>),
+            typeof(Tuple<,,,>),
+            typeof(Tuple<,,,,>),
+            typeof(Tuple<,,,,,>),
+            typeof(Tuple<,,,,,,>),
+            typeof(Tuple<,,,,,,,>),
+            typeof(ValueTuple<>),
+            typeof(ValueTuple<,>),
+            typeof(ValueTuple<,,>),
+            typeof(ValueTuple<,,,>),
+            typeof(ValueTuple<,,,,>),
+            typeof(ValueTuple<,,,,,>),
+            typeof(ValueTuple<,,,,,,>),
+            typeof(ValueTuple<,,,,,,,>),
+        };
+
+        internal static bool IsTypeSerializable(Type type)
+        {
+            if(type.IsGenericType && !type.IsGenericTypeDefinition)
+            {
+                type = type.GetGenericTypeDefinition();
+                if (_autoWhitelistedTypes.Contains(type))
+                {
+                    return true;
+                }
+            }
+
+            if (type == typeof(FieldInfoModifier.TestReadonly))
+            {
+                return true;
+            }
+
+            if(type.IsArray)
+            {
+                return true;
+            }
+
+            if(typeof(Delegate).IsAssignableFrom(type))
+            {
+                return true;
+            }
+
+            if(typeof(Type).IsAssignableFrom(type))
+            {
+                return true;
+            }
+
+            if(type.GetCustomAttribute(typeof(CompilerGeneratedAttribute)) != null)
+            {
+                return true;
+            }
+
+            if(TypeFields.IsPrimitive(type))
+            {
+                return true;
+            }
+
+            if (IsSpecialCoreType(type))
+            {
+                return true;
+            }
+
+            if (_autoWhitelistedTypes.Contains(type))
+            {
+                return true;
+            }
+
+            var declaringTypeIsSerializeable = type.DeclaringType != null && IsTypeSerializable(type.DeclaringType);
+
+            return declaringTypeIsSerializeable
+                || WhitelistedTypes.Contains(type) 
+                || WhitelistFuncs.Any(x => x(type));
+        }
+
+        private static bool IsSpecialCoreType(Type type)
+        {
+            if (
+                (
+                    type.Assembly == typeof(List<>).Assembly
+                    || type.Assembly == typeof(Queue<>).Assembly
+                    || type.Assembly == typeof(ImmutableList<>).Assembly
+                )
+                && 
+                (type.Namespace == "System.Collections.Generic"
+                || type.Namespace == "System.Collections.Immutable")
+                && (!type.IsPublic))
+            {
+                return true;
+            }
+
+            if (type.BaseType != null
+                && type.BaseType.IsGenericType
+                && type.BaseType.GetGenericTypeDefinition() == typeof(EqualityComparer<>)
+                && typeof(EqualityComparer<>).Assembly == type.Assembly)
+            {
+                return true;
+            }
+
+            if (type.BaseType != null
+                && type.BaseType.IsGenericType
+                && type.BaseType.GetGenericTypeDefinition() == typeof(Comparer<>)
+                && typeof(Comparer<>).Assembly == type.Assembly)
+            {
+                return true;
+            }
+
+            if(type.BaseType != null && IsTypeSerializable(type.BaseType))
+            {
+                return true;
+            }
+
+            if (type == typeof(SerializationInfo))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
         private static void CheckInstantiantedCustomSerializer()
         {
+#if !DEBUG
             if (Instantiated)
             {
                 throw new InvalidOperationException("Cannot register custom serializers after an instance of a Binary serializer has been created");
             }
+#endif
         }
 
         private static void CheckInstantiantedArrayPool()
         {
+#if !DEBUG
             if (Instantiated)
             {
                 throw new InvalidOperationException("Cannot set array pool after an instance of a Binary serializer has been created");
             }
+#endif
         }
     }
 }

@@ -9,6 +9,14 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
 {
     public class ConcurrentStackTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ConcurrentStack<>)
+            };
+        }
+       
         [Fact]
         public void ConcurrentStackObject()
         {

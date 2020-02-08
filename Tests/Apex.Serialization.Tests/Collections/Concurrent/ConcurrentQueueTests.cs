@@ -8,6 +8,14 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
 {
     public class ConcurrentQueueTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ConcurrentQueue<>)
+            };
+        }
+
         [Fact]
         public void ConcurrentQueueObject()
         {

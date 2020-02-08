@@ -111,7 +111,9 @@ namespace Apex.Serialization
             if (method == null)
             {
                 method = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadMethods<T, TStream>.ReadSealed>(typeof(T), Settings, false);
+#if !DEBUG
                 ReadMethods<T, TStream>.Methods[_settingsIndex] = method;
+#endif
             }
 
             return method(ref _stream, this);
@@ -128,7 +130,9 @@ namespace Apex.Serialization
             if (method == null)
             {
                 method = DynamicCode<TStream, Binary<TStream>>.GenerateReadMethod<ReadMethods<T, TStream>.ReadSealed>(typeof(T), Settings, false);
+#if !DEBUG
                 ReadMethods<T, TStream>.Methods[_settingsIndex] = method;
+#endif
             }
 
             return method(ref _stream, this);
@@ -521,7 +525,9 @@ namespace Apex.Serialization
                 CheckTypes(value);
 
                 method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value!.GetType(), Settings, false);
+#if !DEBUG
                 WriteMethods<T, TStream>.Methods[_settingsIndex] = method;
+#endif
             }
 
             method(value, ref _stream, this);
@@ -546,7 +552,9 @@ namespace Apex.Serialization
                 CheckTypes(value!);
 
                 method = DynamicCode<TStream, Binary<TStream>>.GenerateWriteMethod<WriteMethods<T, TStream>.WriteSealed>(value!.GetType(), Settings, false);
+#if !DEBUG
                 WriteMethods<T, TStream>.Methods[_settingsIndex] = method;
+#endif
             }
 
             method(value, ref _stream, this);

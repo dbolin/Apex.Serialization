@@ -21,6 +21,9 @@ namespace Apex.Serialization.Internal
         internal static T GenerateWriteMethod<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
             where T : Delegate
         {
+#if DEBUG
+            return GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo);
+#else
             if (!shouldWriteTypeInfo)
             {
                 return GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo);
@@ -28,6 +31,7 @@ namespace Apex.Serialization.Internal
 
             return (T)_virtualWriteMethods.GetOrAdd(new TypeKey {Type = type, SettingsIndex = settings.SettingsIndex}, 
                 t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo));
+#endif
         }
 
         internal static T GenerateWriteMethodImpl<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
@@ -65,6 +69,11 @@ namespace Apex.Serialization.Internal
             ImmutableHashSet<Type> visitedTypes,
             bool writeNullByte = false, bool writeSize = true)
         {
+            if(!Binary.IsTypeSerializable(type))
+            {
+                throw new InvalidOperationException($"Type {type.FullName} was encountered during serialization but was not marked as serializable. Use Binary.MarkSerializable before creating any serializers if this type is intended to be serialized.");
+            }
+
             var fields = TypeFields.GetOrderedFields(type);
             var maxSizeNeeded = writeSize ? (IsBlittable(type) ? TypeFields.GetSizeForType(type).size : fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size)) : 0;
             int metaBytes = 0;
@@ -450,6 +459,9 @@ namespace Apex.Serialization.Internal
         {
             try
             {
+#if DEBUG
+                return GenerateReadMethodImpl<T>(type, settings, isBoxed);
+#else
                 if (!isBoxed)
                 {
                     return GenerateReadMethodImpl<T>(type, settings, isBoxed);
@@ -457,6 +469,7 @@ namespace Apex.Serialization.Internal
 
                 return (T)_virtualReadMethods.GetOrAdd(new TypeKey { Type = type, SettingsIndex = settings.SettingsIndex },
                     t => GenerateReadMethodImpl<T>(type, settings, isBoxed));
+#endif
             }
             finally
             {
@@ -514,6 +527,11 @@ namespace Apex.Serialization.Internal
             ImmutableHashSet<Type> visitedTypes, bool readMetadata = false,
             bool reserveNeededSize = true)
         {
+            if (!Binary.IsTypeSerializable(type))
+            {
+                throw new InvalidOperationException($"Type {type.FullName} was encountered during deserialization but was not marked as serializable. Use Binary.MarkSerializable before creating any serializers if this type is intended to be serialized.");
+            }
+
             var fields = TypeFields.GetOrderedFields(type);
             var readStatements = new List<Expression>();
 

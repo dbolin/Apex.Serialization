@@ -1,4 +1,5 @@
-﻿using System.Collections.Immutable;
+﻿using System;
+using System.Collections.Immutable;
 using FluentAssertions;
 using Xunit;
 
@@ -6,6 +7,14 @@ namespace Apex.Serialization.Tests.Collections.Immutable
 {
     public class ImmutableStackTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableStack<>)
+            };
+        }
+
         [Fact]
         public void ImmutableStackObject()
         {

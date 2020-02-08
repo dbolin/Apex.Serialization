@@ -4,21 +4,26 @@ variables:
   BuildConfiguration: 'Release'
 
 steps:
-- script: 'dotnet-sdk.dotnet build Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)'
+- script: 'dotnet build Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)'
   displayName: 'dotnet build'
 - task: DeleteFiles@1
   inputs:
     Contents: '**/*.trx'
+- task: DeleteFiles@1
+  inputs:
+    Contents: '**/*.cobertura.xml'
 - script: |
-   dotnet-sdk.dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.0 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
-   dotnet-sdk.dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.0 -c Release --logger "trx;LogFileName=results.trx"
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f net47 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f net47 -c Release --logger "trx;LogFileName=results.trx"
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Release --logger "trx;LogFileName=results.trx"
   displayName: 'dotnet test'
 
 - task: PublishCodeCoverageResults@1
   displayName: 'Publish code coverage'
   inputs:
     codeCoverageTool: Cobertura
-    summaryFileLocation: '**/coverage.cobertura.xml'
+    summaryFileLocation: '**/*.cobertura.xml'
     failIfCoverageEmpty: true
 - task: PublishTestResults@2
   inputs:

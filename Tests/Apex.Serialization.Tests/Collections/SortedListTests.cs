@@ -1,10 +1,19 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Xunit;
 
 namespace Apex.Serialization.Tests.Collections
 {
     public class SortedListTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(SortedList<,>),
+            };
+        }
+
         [Fact]
         public void SortedListObject()
         {

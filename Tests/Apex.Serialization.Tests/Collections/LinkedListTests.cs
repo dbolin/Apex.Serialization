@@ -7,6 +7,14 @@ namespace Apex.Serialization.Tests.Collections
 {
     public class LinkedListTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(LinkedList<>)
+            };
+        }
+
         [Fact]
         public void LinkedListInt()
         {

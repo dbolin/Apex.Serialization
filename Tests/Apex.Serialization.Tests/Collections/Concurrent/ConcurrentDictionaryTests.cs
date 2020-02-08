@@ -11,6 +11,14 @@ namespace Apex.Serialization.Tests.Collections.Concurrent
 {
     public class ConcurrentDictionaryTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ConcurrentDictionary<,>)
+            };
+        }
+
         [Fact]
         public void ConcurrentDictionaryObject()
         {

@@ -8,6 +8,19 @@ namespace Apex.Serialization.Tests
 {
     public class RegressionTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(TestObject1),
+                typeof(TestObject2),
+                typeof(ImmutableArray<>),
+                typeof(CustomProperty),
+                typeof(Value),
+                typeof(PrimitiveValue)
+            };
+        }
+
         [Fact]
         public void Test1()
         {

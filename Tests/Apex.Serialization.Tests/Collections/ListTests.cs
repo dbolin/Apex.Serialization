@@ -8,6 +8,14 @@ namespace Apex.Serialization.Tests.Collections
 {
     public class ListTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(List<>)
+            };
+        }
+
         public sealed class Test
         {
             public int Value;

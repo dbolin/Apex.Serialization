@@ -1,19 +1,20 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Apex.Serialization.Extensions;
-using Apex.Serialization.Internal;
 using FluentAssertions;
 using Xunit;
-using BufferedStream = Apex.Serialization.Internal.BufferedStream;
 
 namespace Apex.Serialization.Tests
 {
     public class CustomSerializationTests
     {
+        public CustomSerializationTests() : base()
+        {
+#if !DEBUG
+            Binary.Instantiated = false;
+#endif
+        }
+
         public class Test
         {
             public int Value;
@@ -52,8 +53,8 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void SimpleTest()
         {
-            Binary.Instantiated = false;
             Binary.RegisterCustomSerializer<Test>(Test.Serialize, Test.Deserialize);
+            Binary.MarkSerializable(typeof(Test));
 
             var binary = Binary.Create(new Settings {SupportSerializationHooks = true});
             var m = new MemoryStream();
@@ -72,8 +73,8 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void CustomContextTest()
         {
-            Binary.Instantiated = false;
             Binary.RegisterCustomSerializer<TestCustomContext, CustomContext>(TestCustomContext.Serialize, TestCustomContext.Deserialize);
+            Binary.MarkSerializable(typeof(TestCustomContext));
 
             var binary = Binary.Create(new Settings { SupportSerializationHooks = true });
             var m = new MemoryStream();
@@ -95,6 +96,8 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void Precompile()
         {
+            Binary.MarkSerializable(typeof(Settings));
+            Binary.MarkSerializable(typeof(CustomSerializationTests));
             var binary = Binary.Create(new Settings { SupportSerializationHooks = true });
 
             binary.Precompile(typeof(Settings));
@@ -126,10 +129,10 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void CustomSerializationShouldNotBePassedNull()
         {
-            Binary.Instantiated = false;
             Binary.CustomActionSerializers.Remove(typeof(TestWithConstructor));
             Binary.CustomActionDeserializers.Remove(typeof(TestWithConstructor));
             Binary.RegisterCustomSerializer<TestWithConstructor>(TestWithConstructor.Serialize, TestWithConstructor.Deserialize);
+            Binary.MarkSerializable(typeof(TestWithConstructor));
 
             var binary = Binary.Create(new Settings { SupportSerializationHooks = true });
             var m = new MemoryStream();
@@ -146,10 +149,11 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void CustomSerializationShouldAlwaysStartUninitialized()
         {
-            Binary.Instantiated = false;
             Binary.CustomActionSerializers.Remove(typeof(TestWithConstructor));
             Binary.CustomActionDeserializers.Remove(typeof(TestWithConstructor));
             Binary.RegisterCustomSerializer<TestWithConstructor>(TestWithConstructor.Serialize, TestWithConstructor.Deserialize);
+            Binary.MarkSerializable(typeof(TestWithConstructor));
+            Binary.MarkSerializable(typeof(List<>));
 
             var binary = Binary.Create(new Settings { SupportSerializationHooks = true });
             var m = new MemoryStream();

@@ -9,6 +9,14 @@ namespace Apex.Serialization.Tests.Collections
 {
     public class HashSetTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(HashSet<>)
+            };
+        }
+
         [Fact]
         public void HashSetInt()
         {

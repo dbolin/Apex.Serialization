@@ -11,6 +11,14 @@ namespace Apex.Serialization.Tests.Collections.Immutable
 {
     public class ImmutableSortedDictionaryTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableSortedDictionary<,>)
+            };
+        }
+
         [Fact]
         public void ImmutableSortedDictionaryObject()
         {
