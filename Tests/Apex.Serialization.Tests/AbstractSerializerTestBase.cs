@@ -4,19 +4,68 @@ using System.IO;
 using Apex.Serialization.Internal;
 using System.Diagnostics;
 using Apex.Serialization.Internal.Reflection;
+using System.Reflection;
 
 namespace Apex.Serialization.Tests
 {
-    public abstract class AbstractSerializerTestBase
+    public abstract class AbstractSerializerTestBase : IDisposable
     {
         internal ISerializer _serializer;
         internal ISerializer _serializerGraph;
         internal MemoryStream _stream = new MemoryStream();
 
+        static AbstractSerializerTestBase()
+        {
+#if !DEBUG
+            Binary.MarkSerializable(x => true);
+#endif
+        }
+
         protected AbstractSerializerTestBase()
         {
+#if DEBUG
+            var innerDefs = GetType().GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic);
+            foreach(var def in innerDefs)
+            {
+                Binary.MarkSerializable(def);
+            }
+
+            var additionalTypesMethod = GetType().GetMethod("SerializableTypes");
+            if (additionalTypesMethod != null)
+            {
+                var types = (Type[]?)additionalTypesMethod.Invoke(null, null);
+                if (types != null)
+                {
+                    foreach (var type in types)
+                    {
+                        Binary.MarkSerializable(type);
+                    }
+                }
+            }
+#endif
             _serializer = (ISerializer)Binary.Create(new Settings {AllowFunctionSerialization = true, SupportSerializationHooks = true});
             _serializerGraph = (ISerializer)Binary.Create(new Settings {SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true});
+        }
+
+        public void Dispose()
+        {
+#if DEBUG
+            Binary.ClearSerializableMarks();
+#endif
+            DisposeSerializers();
+        }
+
+        private void DisposeSerializers()
+        {
+            if(_serializer is IDisposable d)
+            {
+                d.Dispose();
+            }
+
+            if(_serializerGraph is IDisposable d2)
+            {
+                d2.Dispose();
+            }
         }
 
         protected T RoundTrip<T>(T obj)
@@ -175,23 +224,26 @@ namespace Apex.Serialization.Tests
             return loaded;
         }
 
-        [Conditional("DEBUG")]
         protected void TypeShouldUseEmptyConstructor(Type t)
         {
+#if DEBUG
             Cil.TypeUsesEmptyConstructor(t).Should().BeTrue();
+#endif
         }
 
-        [Conditional("DEBUG")]
         protected void TypeShouldUseFullConstructor(Type t)
         {
+#if DEBUG
             Cil.TypeUsesFullConstructor(t).Should().BeTrue();
+#endif
         }
 
-        [Conditional("DEBUG")]
         protected void TypeShouldNotUseConstructor(Type t)
         {
+#if DEBUG
             Cil.TypeUsesEmptyConstructor(t).Should().BeFalse();
             Cil.TypeUsesFullConstructor(t).Should().BeFalse();
+#endif
         }
     }
 }

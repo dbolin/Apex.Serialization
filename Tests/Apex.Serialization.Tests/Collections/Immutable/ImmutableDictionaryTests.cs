@@ -11,6 +11,15 @@ namespace Apex.Serialization.Tests.Collections.Immutable
 {
     public class ImmutableDictionaryTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableDictionary<,>),
+                typeof(ImmutableList<>)
+            };
+        }
+
         [Fact]
         public void ImmutableDictionaryObject()
         {

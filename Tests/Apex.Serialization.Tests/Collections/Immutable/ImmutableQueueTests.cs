@@ -1,10 +1,20 @@
-﻿using System.Collections.Immutable;
+﻿using System;
+using System.Collections.Immutable;
 using Xunit;
 
 namespace Apex.Serialization.Tests.Collections.Immutable
 {
     public class ImmutableQueueTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableQueue<>),
+                typeof(ImmutableStack<>)
+            };
+        }
+
         [Fact]
         public void ImmutableQueueObject()
         {

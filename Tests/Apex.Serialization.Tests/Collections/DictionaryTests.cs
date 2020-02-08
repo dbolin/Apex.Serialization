@@ -10,6 +10,14 @@ namespace Apex.Serialization.Tests.Collections
 {
     public class DictionaryTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(Dictionary<,>)
+            };
+        }
+
         public sealed class Test
         {
             public int Value;

@@ -7,6 +7,14 @@ namespace Apex.Serialization.Tests.Collections
 {
     public class QueueTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(Queue<>),
+            };
+        }
+
         [Fact]
         public void QueueObject()
         {

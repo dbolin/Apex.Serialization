@@ -11,6 +11,15 @@ namespace Apex.Serialization.Tests.Collections.Immutable
 {
     public class ImmutableHashSetTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableHashSet<>),
+                typeof(ImmutableList<>)
+            };
+        }
+
         [Fact]
         public void ImmutableHashSetObject()
         {

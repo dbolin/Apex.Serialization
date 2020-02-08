@@ -8,6 +8,14 @@ namespace Apex.Serialization.Tests.Collections.Immutable
 {
     public class ImmutableListTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableList<>)
+            };
+        }
+
         [Fact]
         public void ImmutableListObject()
         {

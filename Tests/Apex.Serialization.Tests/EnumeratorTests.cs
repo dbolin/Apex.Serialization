@@ -10,6 +10,14 @@ namespace Apex.Serialization.Tests
 {
     public class EnumeratorTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(Dictionary<,>)
+            };
+        }
+
         [Fact]
         public void DictionaryEnumerator()
         {

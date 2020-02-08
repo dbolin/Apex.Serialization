@@ -9,6 +9,14 @@ namespace Apex.Serialization.Tests.Collections.Immutable
 {
     public class ImmutableSortedSetTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableSortedSet<>)
+            };
+        }
+
         [Fact]
         public void ImmutableSortedSetObject()
         {

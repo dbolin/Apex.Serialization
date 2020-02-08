@@ -10,6 +10,14 @@ namespace Apex.Serialization.Tests.Collections
 {
     public class SortedDictionaryTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(SortedDictionary<,>)
+            };
+        }
+
         [Fact]
         public void SortedDictionaryObject()
         {

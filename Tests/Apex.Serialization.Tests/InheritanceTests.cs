@@ -7,6 +7,14 @@ namespace Apex.Serialization.Tests
 {
     public class InheritanceTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(List<>)
+            };
+        }
+
         public class Base
         {
             public Base(int v)

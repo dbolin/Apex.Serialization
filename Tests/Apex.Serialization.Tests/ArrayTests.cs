@@ -12,6 +12,17 @@ namespace Apex.Serialization.Tests
 {
     public class ArrayTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableArray<>),
+                typeof(CustomProperty),
+                typeof(Value),
+                typeof(PrimitiveValue)
+            };
+        }
+
         [StructLayout(LayoutKind.Explicit)]
         public struct ExplicitLayoutTest2
         {

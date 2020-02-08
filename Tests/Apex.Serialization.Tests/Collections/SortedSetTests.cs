@@ -7,6 +7,14 @@ namespace Apex.Serialization.Tests.Collections
 {
     public class SortedSetTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(SortedSet<>),
+            };
+        }
+
         [Fact]
         public void SortedSetObject()
         {

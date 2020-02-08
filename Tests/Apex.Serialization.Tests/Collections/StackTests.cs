@@ -8,6 +8,14 @@ namespace Apex.Serialization.Tests.Collections
 {
     public class StackTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(Stack<>),
+            };
+        }
+
         [Fact]
         public void StackObject()
         {
