@@ -11,9 +11,9 @@ steps:
     Contents: '**/*.trx'
 - task: DeleteFiles@1
   inputs:
-    Contents: '**/coverage.cobertura.xml'
+    Contents: '**/*.cobertura.xml'
 - script: |
-   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f net472 -c Debug --logger "trx;LogFileName=results.trx"
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f net472 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
    dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f net472 -c Release --logger "trx;LogFileName=results.trx"
    dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
    dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Release --logger "trx;LogFileName=results.trx"
@@ -23,7 +23,7 @@ steps:
   displayName: 'Publish code coverage'
   inputs:
     codeCoverageTool: Cobertura
-    summaryFileLocation: '**/coverage.cobertura.xml'
+    summaryFileLocation: '**/*.cobertura.xml'
     failIfCoverageEmpty: true
 - task: PublishTestResults@2
   inputs:
