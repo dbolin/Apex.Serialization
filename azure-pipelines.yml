@@ -9,7 +9,7 @@ steps:
 - task: DeleteFiles@1
   inputs:
     Contents: '**/*.trx'
-- task: DeleteFiles@2
+- task: DeleteFiles@1
   inputs:
     Contents: '**/coverage.cobertura.xml'
 - script: |
