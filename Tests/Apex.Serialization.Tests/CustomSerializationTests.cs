@@ -10,7 +10,9 @@ namespace Apex.Serialization.Tests
     {
         public CustomSerializationTests() : base()
         {
+#if !DEBUG
             Binary.Instantiated = false;
+#endif
         }
 
         public class Test
