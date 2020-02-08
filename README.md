@@ -27,6 +27,10 @@ Some types aren't supported:
 
 Requires code generation capabilities
 
+### Migrating to version 2.x
+
+Version 2 adds type whitelisting, which means no types can be serialized unless marked by calling Binary.MarkSerializable(Type | Func<Type, bool>).  To restore the previous behavior for backwards compatibility you can simply pass a function that always returns true.
+
 ### Usage
 
 Serialization
