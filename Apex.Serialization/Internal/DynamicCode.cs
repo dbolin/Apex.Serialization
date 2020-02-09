@@ -11,30 +11,33 @@ using Apex.Serialization.Internal.Reflection;
 
 namespace Apex.Serialization.Internal
 {
+    internal static class DynamicCodeMethods
+    {
+        internal struct GeneratedDelegate
+        {
+            public Delegate Delegate;
+            public int SerializedVersionUniqueId;
+        }
+
+        internal static readonly ConcurrentDictionary<TypeKey, GeneratedDelegate> _virtualWriteMethods = new ConcurrentDictionary<TypeKey, GeneratedDelegate>();
+        internal static readonly ConcurrentDictionary<TypeKey, GeneratedDelegate> _virtualReadMethods = new ConcurrentDictionary<TypeKey, GeneratedDelegate>();
+        internal static readonly ThreadLocal<HashSet<FieldInfo>> _fieldsToRestoreInitOnly = new ThreadLocal<HashSet<FieldInfo>>(() => new HashSet<FieldInfo>());
+        internal static readonly Dictionary<FieldInfo, int> _allFieldsToRestoreInitOnly = new Dictionary<FieldInfo, int>();
+        internal static readonly object _fieldInfoModifierLock = new object();
+    }
+
     internal static partial class DynamicCode<TStream, TBinary>
         where TStream : IBinaryStream
         where TBinary : ISerializer
     {
-        private static readonly ConcurrentDictionary<TypeKey, Delegate> _virtualWriteMethods = new ConcurrentDictionary<TypeKey, Delegate>();
-        private static readonly ConcurrentDictionary<TypeKey, Delegate> _virtualReadMethods = new ConcurrentDictionary<TypeKey, Delegate>();
-
         internal static T GenerateWriteMethod<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
             where T : Delegate
         {
-#if DEBUG
-            return GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo);
-#else
-            if (!shouldWriteTypeInfo)
-            {
-                return GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo);
-            }
-
-            return (T)_virtualWriteMethods.GetOrAdd(new TypeKey {Type = type, Settings = settings}, 
-                t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo));
-#endif
+            return (T)DynamicCodeMethods._virtualWriteMethods.GetOrAdd(new TypeKey {Type = type, Settings = settings, IncludesTypeInfo = shouldWriteTypeInfo}, 
+                t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo)).Delegate;
         }
 
-        internal static T GenerateWriteMethodImpl<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
+        internal static DynamicCodeMethods.GeneratedDelegate GenerateWriteMethodImpl<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
             where T : Delegate
         {
             var source = Expression.Parameter(shouldWriteTypeInfo ? typeof(object) : type, "source");
@@ -59,8 +62,17 @@ namespace Apex.Serialization.Internal
 
             writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, visitedTypes));
 
-            var lambda = Expression.Lambda<T>(Expression.Block(localVariables, writeStatements), $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
-            return lambda;
+            var finalBody = Expression.Block(localVariables, writeStatements);
+
+            var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
+            return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(finalBody)};
+        }
+
+        private static int GetSerializedVersionUniqueId(Expression expr)
+        {
+            var visitor = new VersionUniqueIdExpressionVisitor();
+            visitor.Visit(expr);
+            return visitor.GetResult();
         }
 
         private static IEnumerable<Expression> GetWriteStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
@@ -123,14 +135,14 @@ namespace Apex.Serialization.Internal
                 {
                     writeStatements.Add(
                         Expression.IfThen(
-                            Expression.Call(output, WriteTypeRefMethod, Expression.Constant(type)),
+                            Expression.Call(output, WriteTypeRefMethod, Expression.Constant(type), Expression.Constant(settings.UseSerializedVersionId)),
                             ReserveConstantSize(stream, maxSizeNeeded)
                         )
                     );
                 }
                 else
                 {
-                    writeStatements.Add(Expression.Call(output, WriteTypeRefMethod, Expression.Constant(type)));
+                    writeStatements.Add(Expression.Call(output, WriteTypeRefMethod, Expression.Constant(type), Expression.Constant(settings.UseSerializedVersionId)));
                 }
             }
 
@@ -191,7 +203,7 @@ namespace Apex.Serialization.Internal
 
             if (typeof(Type).IsAssignableFrom(type))
             {
-                return Expression.Call(output, WriteTypeRefMethod, actualSource);
+                return Expression.Call(output, WriteTypeRefMethod, actualSource, Expression.Constant(false));
             }
 
             if (typeof(Delegate).IsAssignableFrom(type))
@@ -450,44 +462,31 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
-        private static readonly ThreadLocal<HashSet<FieldInfo>> _fieldsToRestoreInitOnly = new ThreadLocal<HashSet<FieldInfo>>(() => new HashSet<FieldInfo>());
-        private static readonly Dictionary<FieldInfo, int> _allFieldsToRestoreInitOnly = new Dictionary<FieldInfo, int>();
-        private static readonly object _fieldInfoModifierLock = new object();
-
         internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed)
             where T : Delegate
         {
             try
             {
-#if DEBUG
-                return GenerateReadMethodImpl<T>(type, settings, isBoxed);
-#else
-                if (!isBoxed)
-                {
-                    return GenerateReadMethodImpl<T>(type, settings, isBoxed);
-                }
-
-                return (T)_virtualReadMethods.GetOrAdd(new TypeKey { Type = type, Settings = settings },
-                    t => GenerateReadMethodImpl<T>(type, settings, isBoxed));
-#endif
+                return (T)DynamicCodeMethods._virtualReadMethods.GetOrAdd(new TypeKey { Type = type, Settings = settings, IncludesTypeInfo = isBoxed },
+                    t => GenerateReadMethodImpl<T>(type, settings, isBoxed)).Delegate;
             }
             finally
             {
-                foreach(var fieldInfo in _fieldsToRestoreInitOnly.Value!)
+                foreach(var fieldInfo in DynamicCodeMethods._fieldsToRestoreInitOnly.Value!)
                 {
-                    lock (_fieldInfoModifierLock)
+                    lock (DynamicCodeMethods._fieldInfoModifierLock)
                     {
-                        if (_allFieldsToRestoreInitOnly[fieldInfo]-- == 0)
+                        if (DynamicCodeMethods._allFieldsToRestoreInitOnly[fieldInfo]-- == 0)
                         {
                             FieldInfoModifier.setFieldInfoReadonly!(fieldInfo);
                         }
                     }
                 }
-                _fieldsToRestoreInitOnly.Value!.Clear();
+                DynamicCodeMethods._fieldsToRestoreInitOnly.Value!.Clear();
             }
         }
 
-        internal static T GenerateReadMethodImpl<T>(Type type, ImmutableSettings settings, bool isBoxed)
+        internal static DynamicCodeMethods.GeneratedDelegate GenerateReadMethodImpl<T>(Type type, ImmutableSettings settings, bool isBoxed)
             where T : Delegate
         {
             var stream = Expression.Parameter(typeof(TStream).MakeByRefType(), "stream");
@@ -517,9 +516,10 @@ namespace Apex.Serialization.Internal
                 readStatements.Add(result);
             }
 
-            var lambda = Expression.Lambda<T>(Expression.Block(localVariables, readStatements), $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
+            var finalBody = Expression.Block(localVariables, readStatements);
+            var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
 
-            return lambda;
+            return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(finalBody) };
         }
 
         private static List<Expression> GetReadStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
@@ -818,7 +818,7 @@ namespace Apex.Serialization.Internal
             if (typeof(Type).IsAssignableFrom(type))
             {
                 created = true;
-                return Expression.Assign(result, Expression.Convert(Expression.Call(output, ReadTypeRefMethod), type));
+                return Expression.Assign(result, Expression.Convert(Expression.Call(output, ReadTypeRefMethod, Expression.Constant(false)), type));
             }
 
             if (typeof(Delegate).IsAssignableFrom(type))
@@ -975,17 +975,17 @@ namespace Apex.Serialization.Internal
             {
                 if(FieldInfoModifier.setFieldInfoNotReadonly != null)
                 {
-                    lock (_fieldInfoModifierLock)
+                    lock (DynamicCodeMethods._fieldInfoModifierLock)
                     {
                         FieldInfoModifier.setFieldInfoNotReadonly(fieldInfo);
-                        _fieldsToRestoreInitOnly.Value!.Add(fieldInfo);
-                        if(_allFieldsToRestoreInitOnly.TryGetValue(fieldInfo, out var v))
+                        DynamicCodeMethods._fieldsToRestoreInitOnly.Value!.Add(fieldInfo);
+                        if(DynamicCodeMethods._allFieldsToRestoreInitOnly.TryGetValue(fieldInfo, out var v))
                         {
-                            _allFieldsToRestoreInitOnly[fieldInfo] = v + 1;
+                            DynamicCodeMethods._allFieldsToRestoreInitOnly[fieldInfo] = v + 1;
                         }
                         else
                         {
-                            _allFieldsToRestoreInitOnly.Add(fieldInfo, 1);
+                            DynamicCodeMethods._allFieldsToRestoreInitOnly.Add(fieldInfo, 1);
                         }
                     }
                 }

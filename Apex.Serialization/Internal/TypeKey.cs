@@ -7,19 +7,33 @@ namespace Apex.Serialization.Internal
     {
         public Type Type;
         public ImmutableSettings Settings;
+        public bool IncludesTypeInfo;
 
-        public override bool Equals(object? obj) => obj is TypeKey && Equals((TypeKey)obj);
-        public bool Equals(TypeKey other) => EqualityComparer<Type>.Default.Equals(Type, other.Type) && Settings.Equals(other.Settings);
+        public TypeKey(Type type, ImmutableSettings settings, bool includesTypeInfo)
+        {
+            Type = type;
+            Settings = settings;
+            IncludesTypeInfo = includesTypeInfo;
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is TypeKey key && Equals(key);
+        }
+
+        public bool Equals(TypeKey other)
+        {
+            return EqualityComparer<Type>.Default.Equals(Type, other.Type) &&
+                   EqualityComparer<ImmutableSettings>.Default.Equals(Settings, other.Settings) &&
+                   IncludesTypeInfo == other.IncludesTypeInfo;
+        }
 
         public override int GetHashCode()
         {
-            var hashCode = -1649973959;
-            hashCode = hashCode * -1521134295 + EqualityComparer<Type>.Default.GetHashCode(Type);
-            hashCode = hashCode * -1521134295 + Settings.GetHashCode();
-            return hashCode;
+            return HashCode.Combine(Type, Settings, IncludesTypeInfo);
         }
 
-        public static bool operator ==(TypeKey key1, TypeKey key2) => key1.Equals(key2);
-        public static bool operator !=(TypeKey key1, TypeKey key2) => !(key1 == key2);
+        public static bool operator ==(TypeKey left, TypeKey right) => left.Equals(right);
+        public static bool operator !=(TypeKey left, TypeKey right) => !(left == right);
     }
 }

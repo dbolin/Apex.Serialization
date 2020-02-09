@@ -21,7 +21,7 @@ namespace Apex.Serialization
 
     public sealed class Settings
     {
-        public static Settings Default { get; set; } = new Settings();
+        public static Settings Default { get; set; } = new Settings { UseSerializedVersionId = true };
 
         public Mode SerializationMode { get; set; }
 
@@ -30,6 +30,8 @@ namespace Apex.Serialization
         public bool SupportSerializationHooks { get; set; }
 
         public bool DisableInlining { get; set; }
+
+        public bool UseSerializedVersionId { get; set; }
 
         private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>();
         private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionDeserializers = new Dictionary<Type, CustomSerializerDelegate>();
@@ -109,6 +111,7 @@ namespace Apex.Serialization
                 AllowFunctionSerialization,
                 SupportSerializationHooks,
                 DisableInlining,
+                UseSerializedVersionId,
                 CustomActionSerializers,
                 CustomActionDeserializers,
                 WhitelistedTypes,
@@ -131,6 +134,7 @@ namespace Apex.Serialization
         public Mode SerializationMode { get; }
         public bool AllowFunctionSerialization { get; }
         public bool SupportSerializationHooks { get; }
+        public bool UseSerializedVersionId { get; }
         public Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers { get; }
         public Dictionary<Type, CustomSerializerDelegate> CustomActionDeserializers { get; }
         public HashSet<Type> WhitelistedTypes { get; }
@@ -274,6 +278,7 @@ namespace Apex.Serialization
             bool allowFunctionSerialization,
             bool supportSerializationHooks,
             bool disableInlining,
+            bool useSerializedVersionId,
             Dictionary<Type, CustomSerializerDelegate> customActionSerializers,
             Dictionary<Type, CustomSerializerDelegate> customActionDeserializers,
             HashSet<Type> whitelistedTypes,
@@ -282,6 +287,7 @@ namespace Apex.Serialization
             SerializationMode = serializationMode;
             AllowFunctionSerialization = allowFunctionSerialization;
             SupportSerializationHooks = supportSerializationHooks;
+            UseSerializedVersionId = useSerializedVersionId;
             EnableInlining = !disableInlining;
 
             CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>(customActionSerializers);
@@ -294,7 +300,8 @@ namespace Apex.Serialization
                     AllowFunctionSerialization,
                     SupportSerializationHooks,
                     UseConstructors,
-                    EnableInlining),
+                    EnableInlining,
+                    UseSerializedVersionId),
                 HashCode.Combine(CustomActionSerializers.Select(x => HashCode.Combine(x.Key, x.Value.GetHashCode())).Aggregate(0, (a,b) => HashCode.Combine(a,b))),
                 HashCode.Combine(CustomActionDeserializers.Select(x => HashCode.Combine(x.Key, x.Value.GetHashCode())).Aggregate(0, (a, b) => HashCode.Combine(a, b))),
                 HashCode.Combine(WhitelistedTypes.Select(x => x.GetHashCode()).Aggregate(0, (a, b) => HashCode.Combine(a, b))),
