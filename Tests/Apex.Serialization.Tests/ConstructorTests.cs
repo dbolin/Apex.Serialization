@@ -197,7 +197,7 @@ namespace Apex.Serialization.Tests
             x.x = y;
             y.Inst = x;
 
-            RoundTripGraphOnly(x);
+            RoundTrip(x, s => s.SerializationMode == Mode.Graph);
 
             TypeShouldNotUseConstructor(x.GetType());
         }
@@ -217,7 +217,7 @@ namespace Apex.Serialization.Tests
 
             var y = new { a1 = x, a2 = x };
 
-            RoundTripGraphOnly(y);
+            RoundTrip(y, s => s.SerializationMode == Mode.Graph);
         }
 
         public class ThrowsOnConstruct

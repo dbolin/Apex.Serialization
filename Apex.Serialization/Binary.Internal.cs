@@ -129,11 +129,7 @@ namespace Apex.Serialization
                 }
             }
 
-#if !DEBUG
             ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
-#else
-            var method = ReadMethods<T, TStream, TSettingGen>.Method;
-#endif
             if (method == null)
             {
                 method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
@@ -149,11 +145,7 @@ namespace Apex.Serialization
                 return result;
             }
 
-#if !DEBUG
             ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
-#else
-            var method = ReadMethods<T, TStream, TSettingGen>.Method;
-#endif
             if (method == null)
             {
                 method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
@@ -589,11 +581,7 @@ namespace Apex.Serialization
                 var id = GetSerializedVersionUniqueId<T>();
                 _stream.Write(id);
             }
-#if !DEBUG
             ref var method = ref WriteMethods<T, TStream, TSettingGen>.Method;
-#else
-            var method = WriteMethods<T, TStream, TSettingGen>.Method;
-#endif
             if (method == null)
             {
                 CheckTypes(value);
@@ -622,11 +610,7 @@ namespace Apex.Serialization
                 var id = GetSerializedVersionUniqueId<T>();
                 _stream.Write(id);
             }
-#if !DEBUG
             ref var method = ref WriteMethods<T, TStream, TSettingGen>.Method;
-#else
-            var method = WriteMethods<T, TStream, TSettingGen>.Method;
-#endif
             if (method == null)
             {
                 CheckTypes(value!);

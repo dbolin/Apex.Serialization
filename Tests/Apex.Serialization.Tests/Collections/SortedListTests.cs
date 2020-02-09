@@ -19,7 +19,7 @@ namespace Apex.Serialization.Tests.Collections
         {
             var x = new SortedList<int, object?> {{1, 1}, {2, "2"}, {3, null}};
 
-            RoundTrip(x);
+            RoundTrip(x, s => s.SerializationMode == Mode.Graph);
         }
     }
 }

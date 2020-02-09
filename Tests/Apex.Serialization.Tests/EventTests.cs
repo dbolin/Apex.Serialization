@@ -35,7 +35,7 @@ namespace Apex.Serialization.Tests
             x.Value.Should().Be(2);
 
             // closure target has a reference to the event
-            x = RoundTripGraphOnly(x);
+            x = RoundTrip(x, s => s.SerializationMode == Mode.Graph);
 
             x.RaiseEvent();
             x.Value.Should().Be(6);

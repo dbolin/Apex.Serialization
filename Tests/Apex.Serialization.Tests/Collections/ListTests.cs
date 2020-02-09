@@ -59,7 +59,7 @@ namespace Apex.Serialization.Tests.Collections
             var t = new Test {Value = 2};
             var x = new List<Test> {t, t};
 
-            var y = RoundTripGraphOnly(x);
+            var y = RoundTrip(x, s => s.SerializationMode == Mode.Graph);
 
             y[0].GetHashCode().Should().Be(y[1].GetHashCode());
         }

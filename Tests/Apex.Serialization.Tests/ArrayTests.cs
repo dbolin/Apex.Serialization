@@ -315,13 +315,13 @@ namespace Apex.Serialization.Tests
             x.ArrayOuter = new[] { x };
             x.ArrayInner = new[] { new InnerWrapper { Ref = x, Array = new[] { x } } };
 
-            RoundTripGraphOnly(x, (x,y) =>
+            RoundTrip(x, (x,y) =>
             {
                 y.Self.Should().Be(y);
                 y.ArrayOuter[0].Should().Be(y);
                 y.ArrayInner[0].Ref.Should().Be(y);
                 y.ArrayInner[0].Array[0].Should().Be(y);
-            });
+            }, s => s.SerializationMode == Mode.Graph);
         }
     }
 }

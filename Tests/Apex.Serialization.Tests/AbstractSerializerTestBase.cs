@@ -5,13 +5,12 @@ using Apex.Serialization.Internal;
 using System.Diagnostics;
 using Apex.Serialization.Internal.Reflection;
 using System.Reflection;
+using System.Linq;
 
 namespace Apex.Serialization.Tests
 {
-    public abstract class AbstractSerializerTestBase : IDisposable
+    public abstract class AbstractSerializerTestBase
     {
-        private ISerializer _serializer;
-        private ISerializer _serializerGraph;
         private MemoryStream _stream = new MemoryStream();
         internal Action<ISerializer> _setupSerializer;
         internal Action<ISerializer> _setupSerializerGraph;
@@ -22,17 +21,27 @@ namespace Apex.Serialization.Tests
         {
         }
 
-        private void ConstructSerializers()
+        private ISerializer[] ConstructSerializers(Func<Settings, bool>? filter)
         {
-            Dispose();
-            var treeSettings = new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true };
-            var graphSettings = new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true };
+            var settings = new[]
+            {
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true },
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false },
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, DisableInlining = true },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, DisableInlining = true },
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, DisableInlining = true },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, DisableInlining = true }
+            };
 
             var innerDefs = GetType().GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic);
             foreach (var def in innerDefs)
             {
-                treeSettings.MarkSerializable(def);
-                graphSettings.MarkSerializable(def);
+                foreach(var setting in settings)
+                {
+                    setting.MarkSerializable(def);
+                }
             }
 
             var additionalTypesMethod = GetType().GetMethod("SerializableTypes");
@@ -43,223 +52,103 @@ namespace Apex.Serialization.Tests
                 {
                     foreach (var type in types)
                     {
-                        treeSettings.MarkSerializable(type);
-                        graphSettings.MarkSerializable(type);
+                        foreach(var setting in settings)
+                        {
+                            setting.MarkSerializable(type);
+                        }
                     }
                 }
             }
-            _serializer = (ISerializer)Binary.Create(treeSettings);
-            _setupSerializer?.Invoke(_serializer);
-            _serializerGraph = (ISerializer)Binary.Create(graphSettings);
-            _setupSerializerGraph?.Invoke(_serializerGraph);
+            
+            var treeSerializers = settings
+                .Where(x => x.SerializationMode == Mode.Tree)
+                .Where(x => filter?.Invoke(x) ?? true)
+                .Select(x => (ISerializer)Binary.Create(x))
+                .Select(x => { _setupSerializer?.Invoke(x); return x; });
+            var graphSerializers = settings
+                .Where(x => x.SerializationMode == Mode.Graph)
+                .Where(x => filter?.Invoke(x) ?? true)
+                .Select(x => (ISerializer)Binary.Create(x))
+                .Select(x => { _setupSerializerGraph?.Invoke(x); return x; });
+
+            return treeSerializers.Concat(graphSerializers).ToArray();
         }
 
-        public void Dispose()
+        private void DisposeSerializers(ISerializer[] serializers)
         {
-            DisposeSerializers();
-        }
-
-        private void DisposeSerializers()
-        {
-            if(_serializer is IDisposable d)
+            foreach(var s in serializers)
             {
-                d.Dispose();
+                if (s is IDisposable d)
+                {
+                    d.Dispose();
+                }
+            }
+        }
+
+        protected T RoundTrip<T>(T obj, Func<Settings, bool>? filter = null)
+        {
+            var loaded = RunTest(obj, (r, o) => r.Should().BeEquivalentTo(o), filter);
+            RunTest(new[] { obj, obj }, (r, o) => r.Should().BeEquivalentTo(o), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
+            RunTest2(obj, (r, o) => r.Should().BeEquivalentTo(o), filter);
+            RunTest2(new[] { obj, obj }, (r, o) => r.Should().BeEquivalentTo(o), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
+
+            return loaded;
+        }
+
+        private T RunTest<T>(T obj, Action<T, T> assertion, Func<Settings, bool>? filter)
+        {
+            var serializers = ConstructSerializers(filter);
+            T loaded = default!;
+            foreach (var s in serializers)
+            {
+                _stream.Seek(0, SeekOrigin.Begin);
+                s.Write(obj, _stream);
+                _stream.Seek(0, SeekOrigin.Begin);
+                loaded = s.Read<T>(_stream);
+                assertion(loaded, obj);
+            }
+            DisposeSerializers(serializers);
+
+            return loaded;
+        }
+
+        private void RunTest2<T>(T obj, Action<T, T> assertion, Func<Settings, bool>? filter)
+        {
+            var serializers = ConstructSerializers(filter);
+            for(int i=0;i<serializers.Length;++i)
+            {
+                var s = serializers[i];
+                _stream.Seek(0, SeekOrigin.Begin);
+                s.Write(obj, _stream);
+
+                DisposeSerializers(serializers);
+                serializers = ConstructSerializers(filter);
+                s = serializers[i];
+
+                _stream.Seek(0, SeekOrigin.Begin);
+                var loaded = s.Read<T>(_stream);
+                assertion(loaded, obj);
             }
 
-            if(_serializerGraph is IDisposable d2)
-            {
-                d2.Dispose();
-            }
+            DisposeSerializers(serializers);
         }
 
-        protected T RoundTrip<T>(T obj)
+        protected T RoundTrip<T>(T obj, Func<T, T, bool> check, Func<Settings, bool>? filter = null)
         {
-            ConstructSerializers();
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializer.Write(obj, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded = _serializer.Read<T>(_stream);
-            ConstructSerializers();
-
-            loaded.Should().BeEquivalentTo(obj);
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            loaded = _serializerGraph.Read<T>(_stream);
-            ConstructSerializers();
-
-            loaded.Should().BeEquivalentTo(obj);
-
-            var obj2 = new[] { obj, obj };
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj2, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded2 = _serializerGraph.Read<T[]>(_stream);
-            ConstructSerializers();
-
-            loaded2.Should().BeEquivalentTo(obj2);
+            var loaded = RunTest(obj, (r, o) => check(o, r).Should().BeTrue(), filter);
+            RunTest(new[] { obj, obj }, (r, o) => check(o[1], r[1]).Should().BeTrue(), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
+            RunTest2(obj, (r, o) => check(o, r).Should().BeTrue(), filter);
+            RunTest2(new[] { obj, obj }, (r, o) => check(o[1], r[1]).Should().BeTrue(), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
 
             return loaded;
         }
 
-        protected T RoundTrip<T>(T obj, Func<T, T, bool> check)
+        protected T RoundTrip<T>(T obj, Action<T, T> check, Func<Settings, bool>? filter = null)
         {
-            ConstructSerializers();
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializer.Write(obj, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded = _serializer.Read<T>(_stream);
-            ConstructSerializers();
-
-            check(obj, loaded).Should().Be(true);
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            loaded = _serializerGraph.Read<T>(_stream);
-            ConstructSerializers();
-
-            check(obj, loaded).Should().BeTrue();
-
-            var obj2 = new[] { obj, obj };
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj2, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded2 = _serializerGraph.Read<T[]>(_stream);
-            ConstructSerializers();
-
-            check(obj2[1], loaded2[1]).Should().BeTrue();
-
-            return loaded;
-        }
-
-        protected T RoundTrip<T>(T obj, Action<T, T> check)
-        {
-            ConstructSerializers();
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializer.Write(obj, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded = _serializer.Read<T>(_stream);
-            ConstructSerializers();
-
-            check(obj, loaded);
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            loaded = _serializerGraph.Read<T>(_stream);
-            ConstructSerializers();
-
-            check(obj, loaded);
-
-            var obj2 = new[] { obj, obj };
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj2, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded2 = _serializerGraph.Read<T[]>(_stream);
-            ConstructSerializers();
-
-            check(obj2[1], loaded2[1]);
-
-            return loaded;
-        }
-
-        protected T RoundTripGraphOnly<T>(T obj)
-        {
-            ConstructSerializers();
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded = _serializerGraph.Read<T>(_stream);
-            ConstructSerializers();
-
-            loaded.Should().BeEquivalentTo(obj);
-
-            var obj2 = new[] { obj, obj };
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj2, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded2 = _serializerGraph.Read<T[]>(_stream);
-            ConstructSerializers();
-
-            loaded2.Should().BeEquivalentTo(obj2);
-
-            return loaded;
-        }
-
-        protected T RoundTripGraphOnly<T>(T obj, Func<T, T, bool> check)
-        {
-            ConstructSerializers();
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded = _serializerGraph.Read<T>(_stream);
-            ConstructSerializers();
-
-            check(obj, loaded).Should().BeTrue();
-
-            var obj2 = new[] { obj, obj };
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj2, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded2 = _serializerGraph.Read<T[]>(_stream);
-            ConstructSerializers();
-
-            check(obj2[1], loaded2[1]).Should().BeTrue();
-
-            return loaded;
-        }
-
-        protected T RoundTripGraphOnly<T>(T obj, Action<T, T> check)
-        {
-            ConstructSerializers();
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded = _serializerGraph.Read<T>(_stream);
-            ConstructSerializers();
-
-            check(obj, loaded);
-
-            var obj2 = new[] { obj, obj };
-            _stream.Seek(0, SeekOrigin.Begin);
-            _serializerGraph.Write(obj2, _stream);
-            ConstructSerializers();
-
-            _stream.Seek(0, SeekOrigin.Begin);
-            var loaded2 = _serializerGraph.Read<T[]>(_stream);
-            ConstructSerializers();
-
-            check(obj2[1], loaded2[1]);
+            var loaded = RunTest(obj, (r, o) => check(o, r), filter);
+            RunTest(new[] { obj, obj }, (r, o) => check(o[1], r[1]), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
+            RunTest2(obj, (r, o) => check(o, r), filter);
+            RunTest2(new[] { obj, obj }, (r, o) => check(o[1], r[1]), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
 
             return loaded;
         }

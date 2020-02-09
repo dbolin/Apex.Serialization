@@ -343,10 +343,10 @@ namespace Apex.Serialization
         private Type CreateGeneratedType()
         {
             var assemblyName = new AssemblyName("Apex.Serialization.Anonymous.Settings");
-            var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.Run);
+            var assemblyBuilder = AssemblyBuilder.DefineDynamicAssembly(assemblyName, AssemblyBuilderAccess.RunAndCollect);
             var moduleBuilder = assemblyBuilder.DefineDynamicModule("Main");
             var tb = moduleBuilder.DefineType(
-                $"Settings_{Guid.NewGuid()}",
+                $"Settings_{_hashCode}_{Guid.NewGuid()}",
                 TypeAttributes.NotPublic
                 | TypeAttributes.Class
                 | TypeAttributes.Sealed
