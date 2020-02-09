@@ -18,11 +18,11 @@ namespace Apex.Serialization
             {
                 if (StaticTypeInfo<T>.IsValueType)
                 {
-                    WriteValueInternal(value!);
+                    WriteValueInternal(value!, Settings.UseSerializedVersionId);
                 }
                 else
                 {
-                    WriteSealedInternal(value);
+                    WriteSealedInternal(value, Settings.UseSerializedVersionId);
                 }
             }
             else
@@ -38,11 +38,11 @@ namespace Apex.Serialization
             {
                 if (StaticTypeInfo<T>.IsValueType)
                 {
-                    result = ReadValueInternal<T>();
+                    result = ReadValueInternal<T>(Settings.UseSerializedVersionId);
                 }
                 else
                 {
-                    result = ReadSealedInternal<T>();
+                    result = ReadSealedInternal<T>(Settings.UseSerializedVersionId);
                 }
             }
             else
@@ -116,9 +116,9 @@ namespace Apex.Serialization
             return type;
         }
 
-        internal T ReadValueInternal<T>()
+        internal T ReadValueInternal<T>(bool useSerializedVersionId)
         {
-            if (Settings.UseSerializedVersionId)
+            if (useSerializedVersionId)
             {
                 var expectedId = GetSerializedVersionUniqueId<T>();
                 _stream.ReserveSize(4);
@@ -142,9 +142,9 @@ namespace Apex.Serialization
             return method(ref _stream, this);
         }
 
-        internal T ReadSealedInternal<T>()
+        internal T ReadSealedInternal<T>(bool useSerializedVersionId)
         {
-            if (ReadObjectRefHeader(Settings.UseSerializedVersionId, out T result))
+            if (ReadObjectRefHeader(useSerializedVersionId, out T result))
             {
                 return result;
             }
@@ -581,9 +581,9 @@ namespace Apex.Serialization
             return Delegate.Combine(list)!;
         }
 
-        internal void WriteValueInternal<T>(T value)
+        internal void WriteValueInternal<T>(T value, bool useSerializedVersionId)
         {
-            if (Settings.UseSerializedVersionId)
+            if (useSerializedVersionId)
             {
                 _stream.ReserveSize(4);
                 var id = GetSerializedVersionUniqueId<T>();
@@ -604,7 +604,7 @@ namespace Apex.Serialization
             method(value, ref _stream, this);
         }
 
-        internal void WriteSealedInternal<T>(T value)
+        internal void WriteSealedInternal<T>(T value, bool useSerializedVersionId)
         {
             _stream.ReserveSize(5);
             if (ReferenceEquals(value, null))
@@ -617,7 +617,7 @@ namespace Apex.Serialization
                 _stream.Write((byte)1);
             }
 
-            if(Settings.UseSerializedVersionId)
+            if(useSerializedVersionId)
             {
                 var id = GetSerializedVersionUniqueId<T>();
                 _stream.Write(id);

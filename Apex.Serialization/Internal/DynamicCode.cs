@@ -330,7 +330,7 @@ namespace Apex.Serialization.Internal
                 if (visitedTypes.Contains(declaredType) || !settings.EnableInlining)
                 {
                     inlineWrite = false;
-                    return Expression.Call(output, "WriteSealedInternal", new[] { declaredType }, valueAccessExpression);
+                    return Expression.Call(output, "WriteSealedInternal", new[] { declaredType }, valueAccessExpression, Expression.Constant(false));
                 }
 
                 visitedTypes = visitedTypes.Add(declaredType);
@@ -1058,7 +1058,7 @@ namespace Apex.Serialization.Internal
                 if(visitedTypes.Contains(declaredType) || !settings.EnableInlining)
                 {
                     isInlineRead = false;
-                    return Expression.Call(output, "ReadSealedInternal", new[] { declaredType });
+                    return Expression.Call(output, "ReadSealedInternal", new[] { declaredType }, Expression.Constant(false));
                 }
 
                 visitedTypes = visitedTypes.Add(declaredType);
