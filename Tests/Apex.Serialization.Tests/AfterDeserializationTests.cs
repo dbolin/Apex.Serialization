@@ -65,7 +65,7 @@ namespace Apex.Serialization.Tests
             [AfterDeserialization]
             private static void AfterDeserializationMethod(StaticTestWithContext o, StaticTestContext context)
             {
-                o.CachedValue = (context?.Value) ?? 0;
+                o.CachedValue = (context?.Value) ?? 255;
             }
         }
 
@@ -84,7 +84,7 @@ namespace Apex.Serialization.Tests
             [AfterDeserialization]
             private void AfterDeserializationMethod(MethodTestContext context)
             {
-                CachedValue = (context?.Value) ?? 0;
+                CachedValue = (context?.Value) ?? 255;
             }
         }
 
@@ -118,8 +118,8 @@ namespace Apex.Serialization.Tests
             var context = new StaticTestContext { Value = 3 };
             var x = new StaticTestWithContext { InnerValue = 3, CachedValue = 3 };
 
-            (_serializer as IBinary).SetCustomHookContext(context);
-            (_serializerGraph as IBinary).SetCustomHookContext(context);
+            _setupSerializer = s => (s as IBinary).SetCustomHookContext(context);
+            _setupSerializerGraph = s => (s as IBinary).SetCustomHookContext(context);
 
             RoundTrip(x);
         }
@@ -127,7 +127,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void NullContext()
         {
-            var x = new StaticTestWithContext { InnerValue = 3, CachedValue = 0 };
+            var x = new StaticTestWithContext { InnerValue = 3, CachedValue = 255 };
 
             RoundTrip(x);
         }
@@ -138,8 +138,8 @@ namespace Apex.Serialization.Tests
             var context = new MethodTestContext { Value = 3 };
             var x = new MethodTestWithContext { InnerValue = 3, CachedValue = 3 };
 
-            (_serializer as IBinary).SetCustomHookContext(context);
-            (_serializerGraph as IBinary).SetCustomHookContext(context);
+            _setupSerializer = s => (s as IBinary).SetCustomHookContext(context);
+            _setupSerializerGraph = s => (s as IBinary).SetCustomHookContext(context);
 
             RoundTrip(x);
         }

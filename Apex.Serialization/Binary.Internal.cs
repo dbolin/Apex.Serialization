@@ -55,12 +55,12 @@ namespace Apex.Serialization
 
         internal object ReadInternal()
         {
-            if (ReadObjectRefHeader<object>(out var result))
+            if (ReadObjectRefHeader<object>(false, out var result))
             {
                 return result;
             }
 
-            var type = ReadTypeRef();
+            var type = ReadTypeRef(Settings.UseSerializedVersionId);
 
             if (_lastReadType == type)
             {
@@ -80,7 +80,7 @@ namespace Apex.Serialization
             return method(ref _stream, this);
         }
 
-        private unsafe Type ReadTypeRef()
+        private unsafe Type ReadTypeRef(bool readSerializedVersionId)
         {
             _stream.ReserveSize(4);
             var knownTypeIndex = _stream.Read<int>();
@@ -99,6 +99,17 @@ namespace Apex.Serialization
                     _knownTypes.Add(typeId, typeLen1 + typeLen2, type);
                 }
 
+                if (readSerializedVersionId)
+                {
+                    _stream.ReserveSize(4);
+                    var expectedId = GetSerializedVersionUniqueId(type);
+                    var id = _stream.Read<int>();
+                    if(id != expectedId)
+                    {
+                        throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {type.FullName}");
+                    }
+                }
+
                 _loadedTypeRefs.Add(type);
             }
 
@@ -107,6 +118,17 @@ namespace Apex.Serialization
 
         internal T ReadValueInternal<T>()
         {
+            if (Settings.UseSerializedVersionId)
+            {
+                var expectedId = GetSerializedVersionUniqueId<T>();
+                _stream.ReserveSize(4);
+                var id = _stream.Read<int>();
+                if (id != expectedId)
+                {
+                    throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {typeof(T).FullName}");
+                }
+            }
+
 #if !DEBUG
             ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
 #else
@@ -122,7 +144,7 @@ namespace Apex.Serialization
 
         internal T ReadSealedInternal<T>()
         {
-            if (ReadObjectRefHeader(out T result))
+            if (ReadObjectRefHeader(Settings.UseSerializedVersionId, out T result))
             {
                 return result;
             }
@@ -140,15 +162,23 @@ namespace Apex.Serialization
             return method(ref _stream, this);
         }
 
-        private bool ReadObjectRefHeader<T>(out T result)
+        private bool ReadObjectRefHeader<T>(bool checkSerializedVersionId, out T result)
         {
             result = default!;
-            _stream.ReserveSize(5);
+            _stream.ReserveSize(9);
             var isNull = _stream.Read<byte>() == 0;
             if (isNull)
             {
+                return true;
+            }
+
+            if (checkSerializedVersionId)
+            {
+                var expectedId = GetSerializedVersionUniqueId<T>();
+                var id = _stream.Read<int>();
+                if(id != expectedId)
                 {
-                    return true;
+                    throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {typeof(T).FullName}");
                 }
             }
 
@@ -183,7 +213,7 @@ namespace Apex.Serialization
             }
         }
 
-        internal bool WriteTypeRef(Type value)
+        internal bool WriteTypeRef(Type value, bool writeSerializedVersionId)
         {
             if(_lastRefType == value)
             {
@@ -199,6 +229,12 @@ namespace Apex.Serialization
                 index = _savedTypeLookup.Count;
                 _stream.Write(-1);
                 _stream.WriteTypeId(value);
+                if (writeSerializedVersionId)
+                {
+                    _stream.ReserveSize(4);
+                    var id = GetSerializedVersionUniqueId(value);
+                    _stream.Write(id);
+                }
                 _lastRefIndex = index;
                 return true;
             }
@@ -206,6 +242,32 @@ namespace Apex.Serialization
             _stream.Write(index);
             _lastRefIndex = index;
             return false;
+        }
+
+        private int GetSerializedVersionUniqueId(Type t)
+        {
+            if(!DynamicCodeMethods._virtualWriteMethods.TryGetValue(
+                new TypeKey { IncludesTypeInfo = true, Type = t, Settings = Settings },
+                out var gd))
+            {
+                Precompile(t);
+                return GetSerializedVersionUniqueId(t);
+            }
+
+            return gd.SerializedVersionUniqueId;
+        }
+
+        private int GetSerializedVersionUniqueId<T>()
+        {
+            if (!DynamicCodeMethods._virtualWriteMethods.TryGetValue(
+                new TypeKey { IncludesTypeInfo = false, Type = typeof(T), Settings = Settings },
+                out var gd))
+            {
+                Precompile<T>();
+                return GetSerializedVersionUniqueId<T>();
+            }
+
+            return gd.SerializedVersionUniqueId;
         }
 
         internal void WriteInternal(object? value)
@@ -283,9 +345,9 @@ namespace Apex.Serialization
         {
             var delegateType = value.GetType();
             _stream.ReserveSize(4);
-            WriteTypeRef(delegateType);
+            WriteTypeRef(delegateType, false);
             _stream.ReserveSize(4);
-            WriteTypeRef(value.Method.DeclaringType!);
+            WriteTypeRef(value.Method.DeclaringType!, false);
             _stream.Write(value.Method.Name);
             _stream.ReserveSize(2);
             var parameters = GetMethodParameterTypes(value.Method);
@@ -295,12 +357,12 @@ namespace Apex.Serialization
             for (int i = 0; i < parameters.Length; ++i)
             {
                 _stream.ReserveSize(4);
-                WriteTypeRef(parameters[i]);
+                WriteTypeRef(parameters[i], false);
             }
             for (int i = 0; i < generics.Length; ++i)
             {
                 _stream.ReserveSize(4);
-                WriteTypeRef(generics[i]);
+                WriteTypeRef(generics[i], false);
             }
             _stream.ReserveSize(1);
             if (value.Target == null)
@@ -414,15 +476,15 @@ namespace Apex.Serialization
 
         internal Delegate ReadFunction()
         {
-            var delegateType = ReadTypeRef();
-            var declaringType = ReadTypeRef();
+            var delegateType = ReadTypeRef(false);
+            var declaringType = ReadTypeRef(false);
             var methodName = _stream.Read();
             _stream.ReserveSize(2);
             var parameterCount = _stream.Read<byte>();
             var genericCount = _stream.Read<byte>();
             for (int i = 0; i < parameterCount; ++i)
             {
-                _parameterTypeBuffer[i] = ReadTypeRef();
+                _parameterTypeBuffer[i] = ReadTypeRef(false);
             }
 
             var genericTypeBuffer = genericCount <= 4
@@ -431,7 +493,7 @@ namespace Apex.Serialization
 
             for (int i = 0; i < genericCount; ++i)
             {
-                genericTypeBuffer![i] = ReadTypeRef();
+                genericTypeBuffer![i] = ReadTypeRef(false);
             }
 
             _stream.ReserveSize(1);
@@ -521,6 +583,12 @@ namespace Apex.Serialization
 
         internal void WriteValueInternal<T>(T value)
         {
+            if (Settings.UseSerializedVersionId)
+            {
+                _stream.ReserveSize(4);
+                var id = GetSerializedVersionUniqueId<T>();
+                _stream.Write(id);
+            }
 #if !DEBUG
             ref var method = ref WriteMethods<T, TStream, TSettingGen>.Method;
 #else
@@ -538,7 +606,7 @@ namespace Apex.Serialization
 
         internal void WriteSealedInternal<T>(T value)
         {
-            _stream.ReserveSize(1);
+            _stream.ReserveSize(5);
             if (ReferenceEquals(value, null))
             {
                 _stream.Write((byte)0);
@@ -549,6 +617,11 @@ namespace Apex.Serialization
                 _stream.Write((byte)1);
             }
 
+            if(Settings.UseSerializedVersionId)
+            {
+                var id = GetSerializedVersionUniqueId<T>();
+                _stream.Write(id);
+            }
 #if !DEBUG
             ref var method = ref WriteMethods<T, TStream, TSettingGen>.Method;
 #else

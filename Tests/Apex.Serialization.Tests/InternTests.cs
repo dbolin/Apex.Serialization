@@ -11,7 +11,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void InternedObjectShouldKeepReferenceEquality()
         {
-            (_serializerGraph as IBinary).Intern(TheObject);
+            _setupSerializerGraph = s => (s as IBinary).Intern(TheObject);
             RoundTripGraphOnly(TheObject, (original, loaded) => ReferenceEquals(loaded, TheObject).Should().BeTrue());
         }
     }
