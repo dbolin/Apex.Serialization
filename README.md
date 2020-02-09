@@ -29,14 +29,14 @@ Requires code generation capabilities
 
 ### Migrating to version 2.x
 
-Version 2 adds type whitelisting, which means no types can be serialized unless marked by calling Binary.MarkSerializable(Type | Func<Type, bool>).  To restore the previous behavior for backwards compatibility you can simply pass a function that always returns true.
+Version 2 adds type whitelisting, which means no types can be serialized unless marked by calling Settings.MarkSerializable(Type | Func<Type, bool>).  To restore the previous behavior for backwards compatibility you can simply pass a function that always returns true.
 
 ### Usage
 
 Serialization
 ```csharp
 var obj = ClassToSerialize();
-var binarySerializer = Binary.Create();
+var binarySerializer = Binary.Create(new Settings().MarkSerializable<ClassToSerializeType>());
 binarySerializer.Write(obj, outputStream);
 ```
 
@@ -53,10 +53,13 @@ Fields with the [Nonserialized] attribute will not be serialized or deserialized
 
 #### Settings
 
-You may pass a Settings object to Binary.Create that lets you choose:
+You must pass a Settings object to Binary.Create that lets you choose:
 - between tree or graph serialization (graph serialization is required for cases where you have a cyclical reference or need to maintain object identity)
 - whether functions should be serialized
 - whether serialization hooks should be called (any methods with the [AfterDeserialization] attribute will be called after the object graph is completely deserialized.)
+- whether to disable inlining (reduces startup time at the cost of throughput)
+- custom serialization actions
+- what types are allowed to be serialized
 
 #### Performance
 
@@ -66,10 +69,10 @@ Performance is a feature!  Apex.Serialization is an extremely fast binary serial
 
 You can define custom serialization and deserialization simply by calling
 ```csharp
-Binary.RegisterCustomSerializer<CustomType>(writeAction, readAction)
+Settings.RegisterCustomSerializer<CustomType>(writeAction, readAction)
 ```
 
-All registrations must be done before instantiating the Binary class.  In order for custom serialization to be used, the SupportSerializationHooks property on the Settings used to instantiate the Binary class must be set to true.
+In order for custom serialization to be used, the SupportSerializationHooks property on the Settings used to instantiate the Binary class must also be set to true.
 
 Both the write Action and read Action will be called with an instance of the type being serialized/deserialized and a BinaryWriter/BinaryReader interface which exposes three methods:
 
