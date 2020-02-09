@@ -180,7 +180,6 @@ namespace Apex.Serialization.Internal
 
         private void WriteStringSlow(string input, uint byteCount, uint allowed)
         {
-#if NETCOREAPP3_0
             if (input.Length >= 2048)
             {
                 Flush();
@@ -190,7 +189,6 @@ namespace Apex.Serialization.Internal
                     return;
                 }
             }
-#endif
 
             uint sourcePosition = 0;
             fixed (void* text = input)
@@ -440,14 +438,13 @@ namespace Apex.Serialization.Internal
 
         private void WriteBytesSlow(void* source, uint length, uint allowed)
         {
-#if NETCOREAPP3_0
             if (length >= 4096)
             {
                 Flush();
                 _target.Write(new ReadOnlySpan<byte>(source, (int)length));
                 return;
             }
-#endif
+
             uint sourcePosition = 0;
             do
             {

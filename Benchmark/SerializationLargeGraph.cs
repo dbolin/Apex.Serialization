@@ -126,7 +126,7 @@ namespace Benchmark
             public readonly DateTime CreatedDateTime;
         }
 
-        private IBinary _binary = Binary.Create(new Settings { SerializationMode = Mode.Graph });
+        private IBinary _binary = Binary.Create(new Settings { SerializationMode = Mode.Graph }.MarkSerializable(x => true));
         //private Serializer _hyperion = new Serializer();
         //private NetSerializer.Serializer _netSerializer = new NetSerializer.Serializer(new[] { typeof(List<TopLevel>) });
         private readonly CerasSerializer ceras;

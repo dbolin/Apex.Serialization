@@ -29,7 +29,7 @@ namespace Apex.Serialization.Internal
                 return GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo);
             }
 
-            return (T)_virtualWriteMethods.GetOrAdd(new TypeKey {Type = type, SettingsIndex = settings.SettingsIndex}, 
+            return (T)_virtualWriteMethods.GetOrAdd(new TypeKey {Type = type, Settings = settings}, 
                 t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo));
 #endif
         }
@@ -69,7 +69,7 @@ namespace Apex.Serialization.Internal
             ImmutableHashSet<Type> visitedTypes,
             bool writeNullByte = false, bool writeSize = true)
         {
-            if(!Binary.IsTypeSerializable(type))
+            if(!settings.IsTypeSerializable(type))
             {
                 throw new InvalidOperationException($"Type {type.FullName} was encountered during serialization but was not marked as serializable. Use Binary.MarkSerializable before creating any serializers if this type is intended to be serialized.");
             }
@@ -379,7 +379,7 @@ namespace Apex.Serialization.Internal
             var statements = new List<Expression>();
             var customWriteStatements = new List<Expression>();
 
-            foreach (var entry in Binary.CustomActionSerializers)
+            foreach (var entry in settings.CustomActionSerializers)
             {
                 if (entry.Key.IsAssignableFrom(declaredType))
                 {
@@ -467,7 +467,7 @@ namespace Apex.Serialization.Internal
                     return GenerateReadMethodImpl<T>(type, settings, isBoxed);
                 }
 
-                return (T)_virtualReadMethods.GetOrAdd(new TypeKey { Type = type, SettingsIndex = settings.SettingsIndex },
+                return (T)_virtualReadMethods.GetOrAdd(new TypeKey { Type = type, Settings = settings },
                     t => GenerateReadMethodImpl<T>(type, settings, isBoxed));
 #endif
             }
@@ -527,7 +527,7 @@ namespace Apex.Serialization.Internal
             ImmutableHashSet<Type> visitedTypes, bool readMetadata = false,
             bool reserveNeededSize = true)
         {
-            if (!Binary.IsTypeSerializable(type))
+            if (!settings.IsTypeSerializable(type))
             {
                 throw new InvalidOperationException($"Type {type.FullName} was encountered during deserialization but was not marked as serializable. Use Binary.MarkSerializable before creating any serializers if this type is intended to be serialized.");
             }
@@ -876,7 +876,7 @@ namespace Apex.Serialization.Internal
             var statements = new List<Expression>();
             var customReadStatements = new List<Expression>();
 
-            foreach (var entry in Binary.CustomActionDeserializers)
+            foreach (var entry in settings.CustomActionDeserializers)
             {
                 if (entry.Key.IsAssignableFrom(type))
                 {

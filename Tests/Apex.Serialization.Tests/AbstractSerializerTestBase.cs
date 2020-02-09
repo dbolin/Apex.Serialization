@@ -14,20 +14,16 @@ namespace Apex.Serialization.Tests
         internal ISerializer _serializerGraph;
         internal MemoryStream _stream = new MemoryStream();
 
-        static AbstractSerializerTestBase()
-        {
-#if !DEBUG
-            Binary.MarkSerializable(x => true);
-#endif
-        }
-
         protected AbstractSerializerTestBase()
         {
-#if DEBUG
+            var treeSettings = new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true };
+            var graphSettings = new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true };
+
             var innerDefs = GetType().GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic);
             foreach(var def in innerDefs)
             {
-                Binary.MarkSerializable(def);
+                treeSettings.MarkSerializable(def);
+                graphSettings.MarkSerializable(def);
             }
 
             var additionalTypesMethod = GetType().GetMethod("SerializableTypes");
@@ -38,20 +34,17 @@ namespace Apex.Serialization.Tests
                 {
                     foreach (var type in types)
                     {
-                        Binary.MarkSerializable(type);
+                        treeSettings.MarkSerializable(type);
+                        graphSettings.MarkSerializable(type);
                     }
                 }
             }
-#endif
-            _serializer = (ISerializer)Binary.Create(new Settings {AllowFunctionSerialization = true, SupportSerializationHooks = true});
-            _serializerGraph = (ISerializer)Binary.Create(new Settings {SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true});
+            _serializer = (ISerializer)Binary.Create(treeSettings);
+            _serializerGraph = (ISerializer)Binary.Create(graphSettings);
         }
 
         public void Dispose()
         {
-#if DEBUG
-            Binary.ClearSerializableMarks();
-#endif
             DisposeSerializers();
         }
 
