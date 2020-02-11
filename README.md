@@ -91,5 +91,5 @@ The reader has corresponding methods for reading back the values.  Behavior of t
 
 - Use sealed type declarations when possible - this allows the serializer to skip writing any type information
 - Create empty constructors (or constructors that assign to every field from parameters matching the field types) for classes that will be serialized/deserialized a lot (only helps if there's no inline field initialization as well)
-- Use different serializer instances for different workloads (e.g. one for serializing a few objects at a time and one for large graphs)
+- Use different serializer instances for different workloads (e.g. one for serializing a few objects at a time and one for large graphs), and pool serializer instances
 - Don't inherit from standard collections
