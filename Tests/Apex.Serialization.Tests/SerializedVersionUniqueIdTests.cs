@@ -52,5 +52,44 @@ namespace Apex.Serialization.Tests
             m.Position = 0;
             Assert.Throws<InvalidOperationException>(() => sut.Read<KeyValuePair<int, int>>(m));
         }
+
+        [Fact]
+        public void TestHardCoded1()
+        {
+            var settings = new Settings { DisableInlining = true }.MarkSerializable(x => true);
+
+            using var sut0 = Binary.Create(settings);
+            sut0.Precompile<int>();
+
+            var id = DynamicCodeMethods._virtualWriteMethods.Single(x => x.Key.Type == typeof(int) && x.Key.IncludesTypeInfo == false).Value.SerializedVersionUniqueId;
+
+            id.Should().Be(1680343910);
+        }
+
+        [Fact]
+        public void TestHardCoded2()
+        {
+            var settings = new Settings { DisableInlining = true }.MarkSerializable(x => true);
+
+            using var sut0 = Binary.Create(settings);
+            sut0.Precompile<PrimitiveValue>();
+
+            var id = DynamicCodeMethods._virtualWriteMethods.Single(x => x.Key.Type == typeof(PrimitiveValue) && x.Key.IncludesTypeInfo == false).Value.SerializedVersionUniqueId;
+
+            id.Should().Be(-466265527);
+        }
+
+        [Fact]
+        public void TestHardCoded3()
+        {
+            var settings = new Settings { DisableInlining = true }.MarkSerializable(x => true);
+
+            using var sut0 = Binary.Create(settings);
+            sut0.Precompile<Value>();
+
+            var id = DynamicCodeMethods._virtualWriteMethods.Single(x => x.Key.Type == typeof(Value) && x.Key.IncludesTypeInfo == false).Value.SerializedVersionUniqueId;
+
+            id.Should().Be(-97059527);
+        }
     }
 }

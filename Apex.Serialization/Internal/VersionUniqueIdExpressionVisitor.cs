@@ -1,8 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Text;
 
 namespace Apex.Serialization.Internal
 {
@@ -23,7 +21,14 @@ namespace Apex.Serialization.Internal
             }
             else if (a is Type t)
             {
-                Combine(t.FullName);
+                if(t.Assembly == typeof(VersionUniqueIdExpressionVisitor).Assembly)
+                {
+                    Combine(t.Name);
+                }
+                else
+                {
+                    Combine(t.FullName);
+                }
             }
             else if (a is FieldInfo fi)
             {
@@ -36,6 +41,10 @@ namespace Apex.Serialization.Internal
                 Combine(mi.Name);
                 Combine(mi.MemberType);
                 Combine(mi.DeclaringType);
+            }
+            else if (a is string s)
+            {
+                Combine(NonRandomHashCode.Ordinal(s));
             }
             else
             {
@@ -52,6 +61,7 @@ namespace Apex.Serialization.Internal
 
             Combine(a.Name);
             Combine(a.DeclaringType);
+
             if (a.IsGenericMethod)
             {
                 foreach (var genericType in a.GetGenericArguments())
