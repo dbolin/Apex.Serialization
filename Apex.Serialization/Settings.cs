@@ -21,8 +21,6 @@ namespace Apex.Serialization
 
     public sealed class Settings
     {
-        public static Settings Default { get; set; } = new Settings { UseSerializedVersionId = true };
-
         public Mode SerializationMode { get; set; }
 
         public bool AllowFunctionSerialization { get; set; }
@@ -31,7 +29,7 @@ namespace Apex.Serialization
 
         public bool DisableInlining { get; set; }
 
-        public bool UseSerializedVersionId { get; set; }
+        public bool UseSerializedVersionId { get; set; } = true;
 
         private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>();
         private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionDeserializers = new Dictionary<Type, CustomSerializerDelegate>();

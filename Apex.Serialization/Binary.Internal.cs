@@ -253,7 +253,10 @@ namespace Apex.Serialization
         {
             if (!DynamicCodeMethods._virtualWriteMethods.TryGetValue(
                 new TypeKey { IncludesTypeInfo = false, Type = typeof(T), Settings = Settings },
-                out var gd))
+                out var gd)
+                && !DynamicCodeMethods._virtualWriteMethods.TryGetValue(
+                new TypeKey { IncludesTypeInfo = true, Type = typeof(T), Settings = Settings },
+                out gd))
             {
                 Precompile<T>();
                 return GetSerializedVersionUniqueId<T>();

@@ -8,8 +8,8 @@ namespace Benchmark
 {
     public class PerformanceSuiteBase
     {
-        private readonly IBinary binary = Binary.Create(new Settings().MarkSerializable(x => true));
-        private readonly IBinary binaryGraph = Binary.Create(new Settings { SerializationMode = Mode.Graph}.MarkSerializable(x => true));
+        private readonly IBinary binary = Binary.Create(new Settings { UseSerializedVersionId = false }.MarkSerializable(x => true));
+        private readonly IBinary binaryGraph = Binary.Create(new Settings { SerializationMode = Mode.Graph, UseSerializedVersionId = false }.MarkSerializable(x => true));
         private readonly IBinary binaryWithVersionIds = Binary.Create(new Settings { UseSerializedVersionId = true }.MarkSerializable(x => true));
         private readonly MemoryStream m1 = new MemoryStream();
         private readonly MemoryStream m2 = new MemoryStream();

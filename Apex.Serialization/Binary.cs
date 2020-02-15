@@ -181,15 +181,9 @@ namespace Apex.Serialization
         public void Precompile<T>()
         {
             ref var readMethod = ref ReadMethods<T, TStream, TSettingGen>.Method;
-            if (readMethod == null)
-            {
-                readMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
-            }
+            readMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
             ref var writeMethod = ref WriteMethods<T, TStream, TSettingGen>.Method;
-            if (writeMethod == null)
-            {
-                writeMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(typeof(T), Settings, false);
-            }
+            writeMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(typeof(T), Settings, false);
         }
 
         public void Intern(object o)

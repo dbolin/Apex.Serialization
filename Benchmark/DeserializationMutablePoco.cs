@@ -34,7 +34,7 @@ namespace Benchmark
             public DateTime DateProp { get; set; }      //DateTime.Now
         }
 
-        private IBinary _binary = Binary.Create(new Settings().MarkSerializable(x => true));
+        private IBinary _binary = Binary.Create(new Settings { UseSerializedVersionId = false }.MarkSerializable(x => true));
         //private Serializer _hyperion = new Serializer();
         private NetSerializer.Serializer _netSerializer = new NetSerializer.Serializer(new[] { typeof(List<Poco>) });
         private readonly CerasSerializer ceras = new CerasSerializer(new SerializerConfig { DefaultTargets = TargetMember.AllProperties, PreserveReferences = false });
