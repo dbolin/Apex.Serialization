@@ -14,6 +14,7 @@ namespace Apex.Serialization.Tests
         private MemoryStream _stream = new MemoryStream();
         internal Action<ISerializer> _setupSerializer;
         internal Action<ISerializer> _setupSerializerGraph;
+        internal Action<Settings> _modifySettings;
 
 #pragma warning disable CS8618 // Non-nullable field is uninitialized. Consider declaring as nullable.
         protected AbstractSerializerTestBase()
@@ -29,11 +30,16 @@ namespace Apex.Serialization.Tests
                 new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true },
                 new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false },
                 new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false },
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, DisableInlining = true },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, DisableInlining = true },
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, DisableInlining = true },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, DisableInlining = true }
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0 },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0 },
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0 },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0 }
             };
+
+            foreach(var s in settings)
+            {
+                _modifySettings?.Invoke(s);
+            }
 
             var innerDefs = GetType().GetNestedTypes(BindingFlags.Public | BindingFlags.NonPublic);
             foreach (var def in innerDefs)
@@ -87,10 +93,10 @@ namespace Apex.Serialization.Tests
 
         protected T RoundTrip<T>(T obj, Func<Settings, bool>? filter = null)
         {
-            var loaded = RunTest(obj, (r, o) => r.Should().BeEquivalentTo(o), filter);
-            RunTest(new[] { obj, obj }, (r, o) => r.Should().BeEquivalentTo(o), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
-            RunTest2(obj, (r, o) => r.Should().BeEquivalentTo(o), filter);
-            RunTest2(new[] { obj, obj }, (r, o) => r.Should().BeEquivalentTo(o), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
+            var loaded = RunTest(obj, (r, o) => r.Should().BeEquivalentTo(o, c => c.AllowingInfiniteRecursion()), filter);
+            RunTest(new[] { obj, obj }, (r, o) => r.Should().BeEquivalentTo(o, c => c.AllowingInfiniteRecursion()), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
+            RunTest2(obj, (r, o) => r.Should().BeEquivalentTo(o, c => c.AllowingInfiniteRecursion()), filter);
+            RunTest2(new[] { obj, obj }, (r, o) => r.Should().BeEquivalentTo(o, c => c.AllowingInfiniteRecursion()), s => filter?.Invoke(s) ?? true && s.SerializationMode == Mode.Graph);
 
             return loaded;
         }

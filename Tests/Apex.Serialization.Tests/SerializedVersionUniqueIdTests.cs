@@ -16,7 +16,7 @@ namespace Apex.Serialization.Tests
         {
             var m = new MemoryStream();
             var v = new CustomProperty("a", new Value { _primitive = new PrimitiveValue { Number = 2 } });
-            var settings = new Settings { DisableInlining = true }.MarkSerializable(x => true);
+            var settings = new Settings { InliningMaxDepth = 0 }.MarkSerializable(x => true);
 
             using var sut0 = Binary.Create(settings);
             sut0.Write(v, m);
@@ -56,7 +56,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void TestHardCoded1()
         {
-            var settings = new Settings { DisableInlining = true }.MarkSerializable(x => true);
+            var settings = new Settings { InliningMaxDepth = 0 }.MarkSerializable(x => true);
 
             using var sut0 = Binary.Create(settings);
             sut0.Precompile<int>();
@@ -69,7 +69,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void TestHardCoded2()
         {
-            var settings = new Settings { DisableInlining = true }.MarkSerializable(x => true);
+            var settings = new Settings { InliningMaxDepth = 0 }.MarkSerializable(x => true);
 
             using var sut0 = Binary.Create(settings);
             sut0.Precompile<PrimitiveValue>();
@@ -82,7 +82,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void TestHardCoded3()
         {
-            var settings = new Settings { DisableInlining = true }.MarkSerializable(x => true);
+            var settings = new Settings { InliningMaxDepth = 0 }.MarkSerializable(x => true);
 
             using var sut0 = Binary.Create(settings);
             sut0.Precompile<Value>();

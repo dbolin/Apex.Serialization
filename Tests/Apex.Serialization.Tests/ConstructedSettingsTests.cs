@@ -15,10 +15,10 @@ namespace Apex.Serialization.Tests
         public void Duplicates()
         {
             int initialCount = Settings._constructedSettings.Count;
-            var settings = new Settings { DisableInlining = true, SupportSerializationHooks = true }.MarkSerializable(typeof(List<>));
+            var settings = new Settings { InliningMaxDepth = 0, SupportSerializationHooks = true }.MarkSerializable(typeof(List<>));
             _ = settings.ToImmutable();
             Settings._constructedSettings.Count.Should().Be(initialCount + 1);
-            settings = new Settings { DisableInlining = true, SupportSerializationHooks = true }.MarkSerializable(typeof(List<>));
+            settings = new Settings { InliningMaxDepth = 0, SupportSerializationHooks = true }.MarkSerializable(typeof(List<>));
             _ = settings.ToImmutable();
             Settings._constructedSettings.Count.Should().Be(initialCount + 1);
         }

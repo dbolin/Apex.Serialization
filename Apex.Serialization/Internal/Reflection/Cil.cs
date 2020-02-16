@@ -14,6 +14,11 @@ namespace Apex.Serialization.Internal.Reflection
 
         public static ConstructorInfo? FindEmptyDeserializationConstructor(Type type)
         {
+            if (type.Assembly.IsDynamic)
+            {
+                return null;
+            }
+
             try
             {
                 var module = _moduleDefinitions.GetOrAdd(type.Assembly.Location, k => ModuleDefinition.ReadModule(k));
@@ -55,7 +60,7 @@ namespace Apex.Serialization.Internal.Reflection
 
         public static (ConstructorInfo constructor, List<int> fieldOrder)? FindSpecificDeserializationConstructor(Type type, List<FieldInfo> fields)
         {
-            if(fields.Count == 0)
+            if(fields.Count == 0 || type.Assembly.IsDynamic)
             {
                 return null;
             }

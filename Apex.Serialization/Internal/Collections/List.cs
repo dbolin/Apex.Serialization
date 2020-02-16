@@ -14,7 +14,11 @@ namespace Apex.Serialization.Internal
         where TBinary : ISerializer
     {
         internal static Expression? WriteList(Type type, ParameterExpression output, Expression actualSource,
-            ParameterExpression stream, Expression source, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
+            ParameterExpression stream,
+            Expression source,
+            ImmutableSettings settings,
+            ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
             var collectionType = type;
@@ -69,7 +73,7 @@ namespace Apex.Serialization.Internal
                         Expression.Block(new[] { loopVar },
                             Expression.Assign(loopVar, Expression.Property(enumeratorVar, "Current")),
                             Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
-                            WriteValue(stream, output, valueType, loopVar, settings, visitedTypes, out _)
+                            WriteValue(stream, output, valueType, loopVar, settings, visitedTypes, depth, out _)
                         ),
                         Expression.Break(breakLabel)
                     )
@@ -81,7 +85,7 @@ namespace Apex.Serialization.Internal
 
         internal static Expression? ReadList(Type type, ParameterExpression output, Expression result,
             ParameterExpression stream, ImmutableSettings settings, List<ParameterExpression> localVariables,
-            ImmutableHashSet<Type> visitedTypes)
+            ImmutableHashSet<Type> visitedTypes, int depth)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
             var collectionType = type;
@@ -171,7 +175,7 @@ namespace Apex.Serialization.Internal
                         Expression.Block(
                             Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(maxSize)),
                             Expression.Call(result, collectionType.GetMethod(addMethod, collectionType.GenericTypeArguments),
-                                ReadValue(stream, output, settings, valueType, localVariables, visitedTypes, out _)
+                                ReadValue(stream, output, settings, valueType, localVariables, visitedTypes, depth, out _)
                                 ),
                             Expression.AddAssign(countVar, Expression.Constant(-1))
                             )

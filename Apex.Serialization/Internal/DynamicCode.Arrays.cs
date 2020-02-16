@@ -11,7 +11,13 @@ namespace Apex.Serialization.Internal
         where TStream : IBinaryStream
         where TBinary : ISerializer
     {
-        private static Expression? WriteArray(Type type, ParameterExpression stream, ParameterExpression output, Expression actualSource, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
+        private static Expression? WriteArray(Type type,
+            ParameterExpression stream,
+            ParameterExpression output,
+            Expression actualSource,
+            ImmutableSettings settings,
+            ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             if (type.IsArray)
             {
@@ -49,7 +55,7 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    statements.Add(WriteArrayGeneral(output, actualSource, stream, dimensions, lengths, elementType, elementSize, settings, visitedTypes));
+                    statements.Add(WriteArrayGeneral(output, actualSource, stream, dimensions, lengths, elementType, elementSize, settings, visitedTypes, depth));
                 }
 
                 statements.Add(Expression.Label(skipLabel));
@@ -77,7 +83,9 @@ namespace Apex.Serialization.Internal
 
         private static Expression WriteArrayGeneral(ParameterExpression output, Expression actualSource,
             ParameterExpression stream, int dimensions, List<ParameterExpression> lengths, Type elementType, int elementSize,
-            ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
+            ImmutableSettings settings,
+            ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             var indices = new List<ParameterExpression>();
             var breakLabels = new List<LabelTarget>();
@@ -94,7 +102,7 @@ namespace Apex.Serialization.Internal
                 ? (Expression)Expression.ArrayIndex(actualSource, indices)
                 : Expression.ArrayIndex(actualSource, indices[0]);
 
-            var writeValue = WriteValue(stream, output, elementType, accessExpression, settings, visitedTypes, out var isSimpleWrite);
+            var writeValue = WriteValue(stream, output, elementType, accessExpression, settings, visitedTypes, depth, out var isSimpleWrite);
 
             var shouldWriteTypeInfo = typeof(Delegate).IsAssignableFrom(elementType) || typeof(Type).IsAssignableFrom(elementType);
 
@@ -102,7 +110,7 @@ namespace Apex.Serialization.Internal
             {
                 writeValue = Expression.Block(GetWriteStatementsForType(elementType, settings, stream, output,
                     accessExpression, shouldWriteTypeInfo, accessExpression,
-                    visitedTypes, true));
+                    visitedTypes, depth, true));
             }
             else
             {
@@ -129,7 +137,13 @@ namespace Apex.Serialization.Internal
             return Expression.Block(indices, loop);
         }
 
-        private static Expression? ReadArray(Type type, ParameterExpression stream, ParameterExpression output, Expression result, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
+        private static Expression? ReadArray(Type type,
+            ParameterExpression stream,
+            ParameterExpression output,
+            Expression result,
+            ImmutableSettings settings,
+            ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             if (type.IsArray)
             {
@@ -168,7 +182,7 @@ namespace Apex.Serialization.Internal
                         statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
                             SavedReferencesListAdd, result));
                     }
-                    statements.Add(ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths, settings, visitedTypes));
+                    statements.Add(ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths, settings, visitedTypes, depth));
                 }
 
                 return Expression.Block(lengths, statements);
@@ -179,7 +193,8 @@ namespace Apex.Serialization.Internal
 
         private static Expression ReadArrayGeneral(ParameterExpression output, Expression result,
             ParameterExpression stream, int dimensions, Type elementType, int elementSize,
-            List<ParameterExpression> lengths, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
+            List<ParameterExpression> lengths, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             var indices = new List<ParameterExpression>();
             var continueLabels = new List<LabelTarget>();
@@ -195,7 +210,7 @@ namespace Apex.Serialization.Internal
                 ? (Expression)Expression.ArrayAccess(result, indices)
                 : Expression.ArrayAccess(result, indices[0]);
 
-            var readValue = ReadValue(stream, output, settings, elementType, localVariables, visitedTypes, out var isSimpleRead);
+            var readValue = ReadValue(stream, output, settings, elementType, localVariables, visitedTypes, depth, out var isSimpleRead);
 
             if (!isSimpleRead && StaticTypeInfo.IsSealedOrHasNoDescendents(elementType)
                 && !typeof(Type).IsAssignableFrom(elementType)
@@ -206,14 +221,14 @@ namespace Apex.Serialization.Internal
                 {
                     var tempVar = Expression.Variable(elementType, "tempElement");
                     var elementReadStatements = GetReadStatementsForType(elementType, settings, stream, output,
-                        tempVar, localVariables, visitedTypes);
+                        tempVar, localVariables, visitedTypes, depth);
                     elementReadStatements.Add(Expression.Assign(accessExpression, tempVar));
                     readValue = Expression.Block(new[] { tempVar }, elementReadStatements);
                 }
                 else
                 {
                     readValue = Expression.Block(GetReadStatementsForType(elementType, settings, stream, output,
-                        accessExpression, localVariables, visitedTypes));
+                        accessExpression, localVariables, visitedTypes, depth));
                 }
 
                 if (!elementType.IsValueType)

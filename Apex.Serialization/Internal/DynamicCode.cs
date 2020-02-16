@@ -5,6 +5,9 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Reflection.Emit;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal.Reflection;
@@ -53,18 +56,26 @@ namespace Apex.Serialization.Internal
             {
                 castedSourceType = Expression.Variable(type, "castedSource");
                 localVariables.Add(castedSourceType);
-                writeStatements.Add(Expression.Assign(castedSourceType, Expression.Convert(source, type)));
+                if(type.IsValueType)
+                {
+                    writeStatements.Add(Expression.Assign(castedSourceType, Expression.Unbox(source, type)));
+                }
+                else
+                {
+                    writeStatements.Add(Expression.Assign(castedSourceType, Expression.Convert(source, type)));
+                }
             }
 
             var actualSource = castedSourceType ?? source;
 
             var visitedTypes = ImmutableHashSet<Type>.Empty;
 
-            writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, visitedTypes));
+            writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, visitedTypes, 0));
 
             var finalBody = Expression.Block(localVariables, writeStatements);
 
             var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
+
             return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(finalBody)};
         }
 
@@ -79,6 +90,7 @@ namespace Apex.Serialization.Internal
             ParameterExpression output, Expression source,
             bool shouldWriteTypeInfo, Expression actualSource,
             ImmutableHashSet<Type> visitedTypes,
+            int depth,
             bool writeNullByte = false, bool writeSize = true)
         {
             if(!settings.IsTypeSerializable(type))
@@ -147,7 +159,7 @@ namespace Apex.Serialization.Internal
             }
 
             // write fields for normal types, some things are special like collections
-            var specialExpression = HandleSpecialWrite(type, output, actualSource, stream, source, fields, settings, visitedTypes);
+            var specialExpression = HandleSpecialWrite(type, output, actualSource, stream, source, fields, settings, visitedTypes, depth);
 
             if (specialExpression != null)
             {
@@ -158,7 +170,7 @@ namespace Apex.Serialization.Internal
                 CheckTypeSupported(type, fields);
 
                 writeStatements.AddRange(fields.Select(x =>
-                    GetWriteFieldExpression(x, actualSource, stream, output, settings, visitedTypes)));
+                    GetWriteFieldExpression(x, actualSource, stream, output, settings, visitedTypes, depth + 1)));
             }
 
 
@@ -193,7 +205,7 @@ namespace Apex.Serialization.Internal
 
         internal static Expression? HandleSpecialWrite(Type type, ParameterExpression output,
             Expression actualSource, ParameterExpression stream, Expression source, List<FieldInfo> fields,
-            ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
+            ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes, int depth)
         {
             var primitive = HandlePrimitiveWrite(stream, output, type, actualSource);
             if(primitive != null)
@@ -228,13 +240,13 @@ namespace Apex.Serialization.Internal
                 return writeStruct;
             }
 
-            var writeArray = WriteArray(type, stream, output, actualSource, settings, visitedTypes);
+            var writeArray = WriteArray(type, stream, output, actualSource, settings, visitedTypes, depth);
             if(writeArray != null)
             {
                 return writeArray;
             }
 
-            return WriteCollection(type, output, actualSource, stream, source, settings, visitedTypes);
+            return WriteCollection(type, output, actualSource, stream, source, settings, visitedTypes, depth);
         }
 
         private static Expression? WriteStructExpression(Type type, Expression source, ParameterExpression stream,
@@ -262,23 +274,35 @@ namespace Apex.Serialization.Internal
 
         internal static Expression? WriteCollection(Type type, ParameterExpression output,
             Expression actualSource, ParameterExpression stream, Expression source, ImmutableSettings
-                settings, ImmutableHashSet<Type> visitedTypes)
+                settings, ImmutableHashSet<Type> visitedTypes, int depth)
         {
-            return WriteDictionary(type, output, actualSource, stream, source, settings, visitedTypes)
-                ?? WriteList(type, output, actualSource, stream, source, settings, visitedTypes);
+            return WriteDictionary(type, output, actualSource, stream, source, settings, visitedTypes, depth)
+                ?? WriteList(type, output, actualSource, stream, source, settings, visitedTypes, depth);
         }
 
-        internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo, Expression source,
-            ParameterExpression stream, ParameterExpression output, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
+        internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo,
+            Expression source,
+            ParameterExpression stream,
+            ParameterExpression output,
+            ImmutableSettings settings,
+            ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             var declaredType = fieldInfo.FieldType;
             var valueAccessExpression = Expression.MakeMemberAccess(source, fieldInfo);
 
-            return WriteValue(stream, output, declaredType, valueAccessExpression, settings, visitedTypes, out _);
+            return WriteValue(stream, output, declaredType, valueAccessExpression, settings, visitedTypes, depth, out _);
         }
 
-        private static Expression WriteValue(ParameterExpression stream, ParameterExpression output, Type declaredType,
-            Expression valueAccessExpression, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes, out bool inlineWrite)
+        private static Expression WriteValue(
+            ParameterExpression stream,
+            ParameterExpression output,
+            Type declaredType,
+            Expression valueAccessExpression,
+            ImmutableSettings settings,
+            ImmutableHashSet<Type> visitedTypes,
+            int depth,
+            out bool inlineWrite)
         {
             var primitiveExpression = HandlePrimitiveWrite(stream, output, declaredType, valueAccessExpression);
             if(primitiveExpression != null)
@@ -287,7 +311,7 @@ namespace Apex.Serialization.Internal
                 return primitiveExpression;
             }
 
-            var nullableExpression = HandleNullableWrite(stream, output, declaredType, settings, visitedTypes, valueAccessExpression);
+            var nullableExpression = HandleNullableWrite(stream, output, declaredType, settings, visitedTypes, depth, valueAccessExpression);
             if (nullableExpression != null)
             {
                 inlineWrite = true;
@@ -319,15 +343,21 @@ namespace Apex.Serialization.Internal
 
             if (declaredType.IsValueType)
             {
+                if(depth > settings.InliningMaxDepth)
+                {
+                    inlineWrite = false;
+                    return Expression.Call(output, "WriteValueInternal", new[] { declaredType }, valueAccessExpression, Expression.Constant(false));
+                }
+
                 inlineWrite = true;
                 var writeStatements = GetWriteStatementsForType(declaredType, settings, stream, output,
                     valueAccessExpression, false, valueAccessExpression,
-                    visitedTypes, writeSize: !TypeFields.IsPrimitive(declaredType));
+                    visitedTypes, depth, writeSize: !TypeFields.IsPrimitive(declaredType));
                 return Expression.Block(writeStatements);
             }
             else
             {
-                if (visitedTypes.Contains(declaredType) || !settings.EnableInlining)
+                if (visitedTypes.Contains(declaredType) || depth > settings.InliningMaxDepth)
                 {
                     inlineWrite = false;
                     return Expression.Call(output, "WriteSealedInternal", new[] { declaredType }, valueAccessExpression, Expression.Constant(false));
@@ -343,7 +373,7 @@ namespace Apex.Serialization.Internal
                 };
                 writeStatements.AddRange(GetWriteStatementsForType(declaredType, settings, stream, output,
                     temporaryVar, false, temporaryVar,
-                    visitedTypes, writeNullByte: true));
+                    visitedTypes, depth, writeNullByte: true));
                 return Expression.Block(new[] { temporaryVar },
                     writeStatements
                     );
@@ -352,6 +382,7 @@ namespace Apex.Serialization.Internal
 
         private static Expression? HandleNullableWrite(ParameterExpression stream, ParameterExpression output,
             Type declaredType, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes,
+            int depth,
             Expression valueAccessExpression)
         {
             if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
@@ -374,7 +405,7 @@ namespace Apex.Serialization.Internal
                         .Concat(
                     GetWriteStatementsForType(nullableType, settings, stream, output,
                         Expression.Call(valueAccessExpression, valueMethod), false, Expression.Call(valueAccessExpression, valueMethod),
-                        visitedTypes, writeSize: !isPrimitive))
+                        visitedTypes, depth, writeSize: !isPrimitive))
                     ),
                 Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)0))
                 );
@@ -505,7 +536,7 @@ namespace Apex.Serialization.Internal
 
             var visitedTypes = ImmutableHashSet<Type>.Empty;
 
-            readStatements.AddRange(GetReadStatementsForType(type, settings, stream, output, result, localVariables, visitedTypes));
+            readStatements.AddRange(GetReadStatementsForType(type, settings, stream, output, result, localVariables, visitedTypes, 0));
 
             if (isBoxed)
             {
@@ -524,7 +555,7 @@ namespace Apex.Serialization.Internal
 
         private static List<Expression> GetReadStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
             ParameterExpression output, Expression result, List<ParameterExpression> localVariables,
-            ImmutableHashSet<Type> visitedTypes, bool readMetadata = false,
+            ImmutableHashSet<Type> visitedTypes, int depth, bool readMetadata = false,
             bool reserveNeededSize = true)
         {
             if (!settings.IsTypeSerializable(type))
@@ -585,7 +616,7 @@ namespace Apex.Serialization.Internal
             }
 
             // write fields for normal types, some things are special like collections
-            var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings, localVariables, visitedTypes, out var created);
+            var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings, localVariables, visitedTypes, depth, out var created);
 
             if(specialExpression == null)
             {
@@ -634,7 +665,7 @@ namespace Apex.Serialization.Internal
                             var variableExpression = Expression.Variable(field.FieldType, field.Name);
                             constructorLocalVariables.Add(variableExpression);
                             constructorLocalFieldVariables.Add(variableExpression);
-                            var readValueExpression = ReadValue(stream, output, settings, field.FieldType, localVariables, visitedTypes, out _);
+                            var readValueExpression = ReadValue(stream, output, settings, field.FieldType, localVariables, visitedTypes, depth, out _);
                             constructorLocalStatements.Add(Expression.Assign(variableExpression, readValueExpression));
                         }
 
@@ -715,11 +746,11 @@ namespace Apex.Serialization.Internal
 
                         if (fieldIsBoxed)
                         {
-                            readStatements.Add(GetReadFieldExpression(field, boxedResult, stream, output, settings, localVariables, visitedTypes));
+                            readStatements.Add(GetReadFieldExpression(field, boxedResult, stream, output, settings, localVariables, visitedTypes, depth + 1));
                         }
                         else
                         {
-                            readStatements.Add(GetReadFieldExpression(field, result, stream, output, settings, localVariables, visitedTypes));
+                            readStatements.Add(GetReadFieldExpression(field, result, stream, output, settings, localVariables, visitedTypes, depth + 1));
                         }
                     }
 
@@ -730,7 +761,7 @@ namespace Apex.Serialization.Internal
                 }
                 else
                 {
-                    readStatements.AddRange(fields.Select(x => GetReadFieldExpression(x, result, stream, output, settings, localVariables, visitedTypes)));
+                    readStatements.AddRange(fields.Select(x => GetReadFieldExpression(x, result, stream, output, settings, localVariables, visitedTypes, depth + 1)));
                 }
             }
 
@@ -797,6 +828,7 @@ namespace Apex.Serialization.Internal
         internal static Expression? HandleSpecialRead(Type type, ParameterExpression output, Expression result, ParameterExpression stream,
             List<FieldInfo> fields, ImmutableSettings settings, List<ParameterExpression> localVariables,
             ImmutableHashSet<Type> visitedTypes,
+            int depth,
             out bool created)
         {
             var primitive = HandlePrimitiveRead(stream, output, type);
@@ -846,14 +878,14 @@ namespace Apex.Serialization.Internal
                 return Expression.Assign(result, readStructExpression);
             }
 
-            var array = ReadArray(type, stream, output, result, settings, visitedTypes);
+            var array = ReadArray(type, stream, output, result, settings, visitedTypes, depth);
             if (array != null)
             {
                 created = true;
                 return array;
             }
 
-            var collection = ReadCollection(type, output, result, stream, settings, localVariables, visitedTypes);
+            var collection = ReadCollection(type, output, result, stream, settings, localVariables, visitedTypes, depth);
             if (collection != null)
             {
                 created = true;
@@ -952,22 +984,23 @@ namespace Apex.Serialization.Internal
 
         internal static Expression? ReadCollection(Type type, ParameterExpression output, Expression result,
             ParameterExpression stream, ImmutableSettings settings, List<ParameterExpression> localVariables,
-            ImmutableHashSet<Type> visitedTypes)
+            ImmutableHashSet<Type> visitedTypes, int depth)
         {
-            return ReadDictionary(type, output, result, stream, settings, localVariables, visitedTypes)
-                ?? ReadList(type, output, result, stream, settings, localVariables, visitedTypes);
+            return ReadDictionary(type, output, result, stream, settings, localVariables, visitedTypes, depth)
+                ?? ReadList(type, output, result, stream, settings, localVariables, visitedTypes, depth);
         }
 
         internal static Expression GetReadFieldExpression(FieldInfo fieldInfo, Expression result,
             ParameterExpression stream, ParameterExpression output,
             ImmutableSettings settings, List<ParameterExpression> localVariables,
-            ImmutableHashSet<Type> visitedTypes)
+            ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             var declaredType = fieldInfo.FieldType;
             var tempValueResult = Expression.Variable(declaredType, "tempResult");
             var statements = new List<Expression>
             {
-                Expression.Assign(tempValueResult, ReadValue(stream, output, settings, declaredType, localVariables, visitedTypes, out _))
+                Expression.Assign(tempValueResult, ReadValue(stream, output, settings, declaredType, localVariables, visitedTypes, depth, out _))
             };
 
 
@@ -1008,6 +1041,7 @@ namespace Apex.Serialization.Internal
 
         private static Expression ReadValue(ParameterExpression stream, ParameterExpression output, ImmutableSettings settings, Type declaredType, List<ParameterExpression> localVariables,
             ImmutableHashSet<Type> visitedTypes,
+            int depth,
             out bool isInlineRead)
         {
             var primitiveExpression = HandlePrimitiveRead(stream, output, declaredType);
@@ -1017,7 +1051,7 @@ namespace Apex.Serialization.Internal
                 return primitiveExpression;
             }
 
-            var nullableExpression = HandleNullableRead(stream, output, declaredType, settings, localVariables, visitedTypes);
+            var nullableExpression = HandleNullableRead(stream, output, declaredType, settings, localVariables, visitedTypes, depth);
             if (nullableExpression != null)
             {
                 isInlineRead = true;
@@ -1042,6 +1076,12 @@ namespace Apex.Serialization.Internal
 
             if (declaredType.IsValueType)
             {
+                if (depth > settings.InliningMaxDepth)
+                {
+                    isInlineRead = false;
+                    return Expression.Call(output, "ReadValueInternal", new[] { declaredType }, Expression.Constant(false));
+                }
+
                 isInlineRead = true;
                 var result = Expression.Variable(declaredType, "tempResult");
                 localVariables.Add(result);
@@ -1049,13 +1089,13 @@ namespace Apex.Serialization.Internal
                     Expression.Assign(result, Expression.Default(declaredType))
                 };
                 readStatements.AddRange(GetReadStatementsForType(declaredType, settings, stream, output,
-                    result, localVariables, visitedTypes, reserveNeededSize: !TypeFields.IsPrimitive(declaredType)));
+                    result, localVariables, visitedTypes, depth, reserveNeededSize: !TypeFields.IsPrimitive(declaredType)));
                 readStatements.Add(result);
                 return Expression.Block(readStatements);
             }
             else
             {
-                if(visitedTypes.Contains(declaredType) || !settings.EnableInlining)
+                if(visitedTypes.Contains(declaredType) || depth > settings.InliningMaxDepth)
                 {
                     isInlineRead = false;
                     return Expression.Call(output, "ReadSealedInternal", new[] { declaredType }, Expression.Constant(false));
@@ -1070,7 +1110,7 @@ namespace Apex.Serialization.Internal
                         Expression.Assign(result, Expression.Default(declaredType))
                     };
                 readStatements.AddRange(GetReadStatementsForType(declaredType, settings, stream, output,
-                        result, localVariables, visitedTypes, readMetadata: true));
+                        result, localVariables, visitedTypes, depth, readMetadata: true));
                 readStatements.Add(result);
                 return Expression.Block(readStatements);
             }
@@ -1094,7 +1134,8 @@ namespace Apex.Serialization.Internal
         }
 
         private static Expression? HandleNullableRead(ParameterExpression stream, ParameterExpression output, Type declaredType,
-            ImmutableSettings settings, List<ParameterExpression> localVariables, ImmutableHashSet<Type> visitedTypes)
+            ImmutableSettings settings, List<ParameterExpression> localVariables, ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
             {
@@ -1114,7 +1155,7 @@ namespace Apex.Serialization.Internal
                         Expression.Convert(
                             Expression.Block(new[] { tempResult },
                                 GetReadStatementsForType(nullableType, settings, stream, output, tempResult, localVariables,
-                                    visitedTypes, reserveNeededSize: !isPrimitive)
+                                    visitedTypes, depth, reserveNeededSize: !isPrimitive)
                                 .Concat(new[] { tempResult })),
                             declaredType)
                         )

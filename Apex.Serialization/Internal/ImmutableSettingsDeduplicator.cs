@@ -10,7 +10,7 @@ namespace Apex.Serialization
         {
             return
                 x.AllowFunctionSerialization == y.AllowFunctionSerialization
-                && x.EnableInlining == y.EnableInlining
+                && x.InliningMaxDepth == y.InliningMaxDepth
                 && x.SerializationMode == y.SerializationMode
                 && x.SupportSerializationHooks == y.SupportSerializationHooks
                 && x.UseConstructors == x.UseConstructors;

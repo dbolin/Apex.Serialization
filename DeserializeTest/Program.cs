@@ -38,6 +38,8 @@ namespace DeserializeTest
                     {
                         return 2;
                     }
+                    fs.Close();
+                    File.Delete(file);
                 }
                 else
                 {

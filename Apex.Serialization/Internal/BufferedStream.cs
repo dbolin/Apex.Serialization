@@ -1,7 +1,9 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -353,9 +355,11 @@ namespace Apex.Serialization.Internal
             return (byte*)result;
         }
 
+        private static readonly ConcurrentDictionary<string, Type> _knownTypes = new ConcurrentDictionary<string, Type>();
+
         public Type RestoreTypeFromId(ref byte* typeId, int typeLen1, int typeLen2)
         {
-            if(_typeIdLengthRemaining < typeLen1 + typeLen2 + 2)
+            if (_typeIdLengthRemaining < typeLen1 + typeLen2 + 2)
             {
                 CreateNewTypeIdBuffer();
             }
@@ -372,7 +376,30 @@ namespace Apex.Serialization.Internal
             var totalLen = typeLen1 + typeLen2 + 2;
             _typeIdBufferPtr += totalLen;
             _typeIdLengthRemaining -= totalLen;
-            return Type.GetType(typeName, true)!;
+            return _knownTypes.GetOrAdd(typeName, FindType);
+        }
+
+        private static Type FindType(string name)
+        {
+            var result = Type.GetType(name, false);
+            if(result != null)
+            {
+                return result;
+            }
+
+            // Fallback and search loaded assemblies
+            var shortName = name.Substring(0, name.IndexOf(','));
+            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
+            foreach (var asm in assemblies)
+            {
+                result = asm.GetType(shortName, false);
+                if(result != null)
+                {
+                    return result;
+                }
+            }
+
+            throw new InvalidOperationException($"Unable to resolve type: {name}");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

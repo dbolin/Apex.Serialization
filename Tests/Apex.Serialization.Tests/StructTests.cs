@@ -42,7 +42,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void ExplicitLayoutInt()
         {
-            var x = new Value {IntValue = 4};
+            var x = new Value { IntValue = 4 };
 
             RoundTrip(x);
         }
@@ -87,7 +87,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void Single()
         {
-            var x = new TestSingle {Value = 1};
+            var x = new TestSingle { Value = 1 };
 
             RoundTrip(x);
         }
@@ -95,7 +95,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void Nested()
         {
-            var x = new TestNested {A4 = new TestSingle {Value = 4}};
+            var x = new TestNested { A4 = new TestSingle { Value = 4 } };
 
             RoundTrip(x);
         }

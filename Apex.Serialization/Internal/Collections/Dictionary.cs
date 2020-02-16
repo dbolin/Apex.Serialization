@@ -14,7 +14,11 @@ namespace Apex.Serialization.Internal
         where TBinary : ISerializer
     {
         internal static Expression? WriteDictionary(Type type, ParameterExpression output, Expression actualSource,
-            ParameterExpression stream, Expression source, ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes)
+            ParameterExpression stream,
+            Expression source,
+            ImmutableSettings settings,
+            ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
             var collectionType = type;
@@ -74,9 +78,9 @@ namespace Apex.Serialization.Internal
                         Expression.Block(new[] { loopVar },
                             Expression.Assign(loopVar, Expression.Property(enumeratorVar, "Current")),
                             Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(keySize)),
-                            WriteValue(stream, output, keyType, Expression.Property(loopVar, "Key"), settings, visitedTypes, out _),
+                            WriteValue(stream, output, keyType, Expression.Property(loopVar, "Key"), settings, visitedTypes, depth, out _),
                             Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(valueSize)),
-                            WriteValue(stream, output, valueType, Expression.Property(loopVar, "Value"), settings, visitedTypes, out _)
+                            WriteValue(stream, output, valueType, Expression.Property(loopVar, "Value"), settings, visitedTypes, depth, out _)
                         ),
                         Expression.Break(breakLabel)
                     )
@@ -88,7 +92,8 @@ namespace Apex.Serialization.Internal
 
         internal static Expression? ReadDictionary(Type type, ParameterExpression output, Expression result,
             ParameterExpression stream, ImmutableSettings settings,
-            List<ParameterExpression> localVariables, ImmutableHashSet<Type> visitedTypes)
+            List<ParameterExpression> localVariables, ImmutableHashSet<Type> visitedTypes,
+            int depth)
         {
             //var collectionType = TypeFields.GetCustomCollectionBaseCollection(type);
             var collectionType = type;
@@ -174,9 +179,9 @@ namespace Apex.Serialization.Internal
                         Expression.Break(breakLabel),
                         Expression.Block( new [] {keyVar, valueVar},
                             Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(keySize)),
-                            Expression.Assign(keyVar, ReadValue(stream, output, settings, keyType, localVariables, visitedTypes, out _)),
+                            Expression.Assign(keyVar, ReadValue(stream, output, settings, keyType, localVariables, visitedTypes, depth, out _)),
                             Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(valueSize)),
-                            Expression.Assign(valueVar, ReadValue(stream, output, settings, valueType, localVariables, visitedTypes, out _)),
+                            Expression.Assign(valueVar, ReadValue(stream, output, settings, valueType, localVariables, visitedTypes, depth, out _)),
                             Expression.Call(result, collectionType.GetMethod(addMethod, collectionType.GenericTypeArguments), keyVar, valueVar),
                             Expression.AddAssign(countVar, Expression.Constant(-1))
                             )
