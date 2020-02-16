@@ -20,7 +20,7 @@ For performance reasons, the serializer and deserializer make use of pointers an
 NEVER deserialize data from an untrusted source.
 
 Some types aren't supported:
-- Objects that use randomized hashing or other runtime specific data to determine their behavior (including HashSet<>, Dictionary<,> and their immutable counterparts)
+- Objects that use randomized hashing or other runtime specific data to determine their behavior (including HashSet<>, Dictionary<,> and their immutable counterparts) unless you specifically use a comparer/objects that don't have that randomization
 - Objects containing pointers or handles to unmanaged resources
 - BlockingCollection\<> and types in System.Collections.Concurrent
 - Non-generic standard collections
