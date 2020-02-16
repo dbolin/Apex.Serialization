@@ -12,34 +12,6 @@ namespace Apex.Serialization.Tests
     public class SerializedVersionUniqueIdTests
     {
         [Fact]
-        public void TestConsistentId()
-        {
-            var m = new MemoryStream();
-            var v = new CustomProperty("a", new Value { _primitive = new PrimitiveValue { Number = 2 } });
-            var settings = new Settings { InliningMaxDepth = 0 }.MarkSerializable(x => true);
-
-            using var sut0 = Binary.Create(settings);
-            sut0.Write(v, m);
-            DynamicCodeMethods._virtualWriteMethods.Clear();
-
-            using var sut1 = Binary.Create(settings);
-            sut1.Write(v, m);
-            var ids = DynamicCodeMethods._virtualWriteMethods.ToDictionary(x => x.Key, x => x.Value.SerializedVersionUniqueId);
-
-            DynamicCodeMethods._virtualWriteMethods.Clear();
-            using var sut2 = Binary.Create(settings);
-            sut2.Write(v, m);
-            var ids2 = DynamicCodeMethods._virtualWriteMethods.ToDictionary(x => x.Key, x => x.Value.SerializedVersionUniqueId);
-
-            ids2.Count.Should().Be(ids.Count);
-
-            foreach(var kvp in ids)
-            {
-                ids2[kvp.Key].Should().Be(kvp.Value);
-            }
-        }
-
-        [Fact]
         public void MismatchingIds()
         {
             var m = new MemoryStream();
@@ -53,43 +25,25 @@ namespace Apex.Serialization.Tests
             Assert.Throws<InvalidOperationException>(() => sut.Read<KeyValuePair<int, int>>(m));
         }
 
-        [Fact]
-        public void TestHardCoded1()
+        public static readonly IEnumerable<object[]> HardCodedTypeIds = new[] {
+            new object[] {typeof(int), 494594721},
+            new object[] {typeof(PrimitiveValue), 1938464263},
+            new object[] {typeof(Value), 1399811549},
+            new object[] {typeof(CustomProperty), 797909415},
+        };
+
+        [Theory]
+        [MemberData(nameof(HardCodedTypeIds))]
+        public void TestHardCoded(Type type, int expectedValue)
         {
-            var settings = new Settings { InliningMaxDepth = 0 }.MarkSerializable(x => true);
+            var settings = new Settings { InliningMaxDepth = -1 }.MarkSerializable(x => true);
 
             using var sut0 = Binary.Create(settings);
-            sut0.Precompile<int>();
+            sut0.Precompile(type);
 
-            var id = DynamicCodeMethods._virtualWriteMethods.Single(x => x.Key.Type == typeof(int) && x.Key.IncludesTypeInfo == false).Value.SerializedVersionUniqueId;
+            var id = DynamicCodeMethods._virtualWriteMethods.Single(x => x.Key.Type == type && x.Key.IncludesTypeInfo == true && x.Key.Settings.InliningMaxDepth == -1).Value.SerializedVersionUniqueId;
 
-            id.Should().Be(1680343910);
-        }
-
-        [Fact]
-        public void TestHardCoded2()
-        {
-            var settings = new Settings { InliningMaxDepth = 0 }.MarkSerializable(x => true);
-
-            using var sut0 = Binary.Create(settings);
-            sut0.Precompile<PrimitiveValue>();
-
-            var id = DynamicCodeMethods._virtualWriteMethods.Single(x => x.Key.Type == typeof(PrimitiveValue) && x.Key.IncludesTypeInfo == false).Value.SerializedVersionUniqueId;
-
-            id.Should().Be(-466265527);
-        }
-
-        [Fact]
-        public void TestHardCoded3()
-        {
-            var settings = new Settings { InliningMaxDepth = 0 }.MarkSerializable(x => true);
-
-            using var sut0 = Binary.Create(settings);
-            sut0.Precompile<Value>();
-
-            var id = DynamicCodeMethods._virtualWriteMethods.Single(x => x.Key.Type == typeof(Value) && x.Key.IncludesTypeInfo == false).Value.SerializedVersionUniqueId;
-
-            id.Should().Be(-97059527);
+            id.Should().Be(expectedValue);
         }
     }
 }

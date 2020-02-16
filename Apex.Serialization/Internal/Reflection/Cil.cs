@@ -10,7 +10,8 @@ namespace Apex.Serialization.Internal.Reflection
 {
     internal static class Cil
     {
-        private static readonly ConcurrentDictionary<string, ModuleDefinition> _moduleDefinitions = new ConcurrentDictionary<string, ModuleDefinition>();
+        private static readonly Dictionary<string, ModuleDefinition> _moduleDefinitions = new Dictionary<string, ModuleDefinition>();
+        private static readonly object _moduleSync = new object();
 
         public static ConstructorInfo? FindEmptyDeserializationConstructor(Type type)
         {
@@ -21,9 +22,18 @@ namespace Apex.Serialization.Internal.Reflection
 
             try
             {
-                var module = _moduleDefinitions.GetOrAdd(type.Assembly.Location, k => ModuleDefinition.ReadModule(k));
-                var typeRef = module.ImportReference(type);
-                var typeDef = typeRef.Resolve();
+                TypeDefinition typeDef;
+                var loc = type.Assembly.Location;
+                lock (_moduleSync)
+                {
+                    if(!_moduleDefinitions.TryGetValue(loc, out var moduleDefinition))
+                    {
+                        moduleDefinition = ModuleDefinition.ReadModule(loc);
+                        _moduleDefinitions.Add(loc, moduleDefinition);
+                    }
+                    var typeRef = moduleDefinition.ImportReference(type);
+                    typeDef = typeRef.Resolve();
+                }
                 var defaultCtor = typeDef.Methods.FirstOrDefault(x => x.IsConstructor && x.Parameters.Count == 0 && !x.IsStatic);
                 if (defaultCtor == null)
                 {
@@ -70,9 +80,19 @@ namespace Apex.Serialization.Internal.Reflection
 
             try
             {
-                var module = _moduleDefinitions.GetOrAdd(type.Assembly.Location, k => ModuleDefinition.ReadModule(k));
-                var typeRef = module.ImportReference(type);
-                var typeDef = typeRef.Resolve();
+                TypeReference typeRef;
+                TypeDefinition typeDef;
+                var loc = type.Assembly.Location;
+                lock (_moduleSync)
+                {
+                    if(!_moduleDefinitions.TryGetValue(loc, out var module))
+                    {
+                        module = ModuleDefinition.ReadModule(loc);
+                        _moduleDefinitions.Add(loc, module);
+                    }
+                    typeRef = module.ImportReference(type);
+                    typeDef = typeRef.Resolve();
+                }
                 var constructors = typeDef.Methods.Where(x => x.IsConstructor && !x.IsStatic);
 
                 foreach (var method in constructors)
