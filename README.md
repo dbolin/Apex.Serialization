@@ -22,7 +22,7 @@ NEVER deserialize data from an untrusted source.
 Some types aren't supported:
 - Objects that use randomized hashing or other runtime specific data to determine their behavior (including HashSet<>, Dictionary<,> and their immutable counterparts)
 - Objects containing pointers or handles to unmanaged resources
-- BlockingCollection\<>
+- BlockingCollection\<> and types in System.Collections.Concurrent
 - Non-generic standard collections
 
 Requires code generation capabilities

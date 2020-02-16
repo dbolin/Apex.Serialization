@@ -246,7 +246,7 @@ namespace Apex.Serialization.Internal
                 return writeArray;
             }
 
-            return WriteCollection(type, output, actualSource, stream, source, settings, visitedTypes, depth);
+            return null;
         }
 
         private static Expression? WriteStructExpression(Type type, Expression source, ParameterExpression stream,
@@ -270,14 +270,6 @@ namespace Apex.Serialization.Internal
             }
 
             return null;
-        }
-
-        internal static Expression? WriteCollection(Type type, ParameterExpression output,
-            Expression actualSource, ParameterExpression stream, Expression source, ImmutableSettings
-                settings, ImmutableHashSet<Type> visitedTypes, int depth)
-        {
-            return WriteDictionary(type, output, actualSource, stream, source, settings, visitedTypes, depth)
-                ?? WriteList(type, output, actualSource, stream, source, settings, visitedTypes, depth);
         }
 
         internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo,
@@ -885,17 +877,8 @@ namespace Apex.Serialization.Internal
                 return array;
             }
 
-            var collection = ReadCollection(type, output, result, stream, settings, localVariables, visitedTypes, depth);
-            if (collection != null)
-            {
-                created = true;
-            }
-            else
-            {
-                created = false;
-            }
-
-            return collection;
+            created = false;
+            return null;
         }
 
         private static Expression? HandleCustomRead(Type type, ParameterExpression output, ParameterExpression stream, Expression result, ImmutableSettings settings)
@@ -980,14 +963,6 @@ namespace Apex.Serialization.Internal
             }
 
             return null;
-        }
-
-        internal static Expression? ReadCollection(Type type, ParameterExpression output, Expression result,
-            ParameterExpression stream, ImmutableSettings settings, List<ParameterExpression> localVariables,
-            ImmutableHashSet<Type> visitedTypes, int depth)
-        {
-            return ReadDictionary(type, output, result, stream, settings, localVariables, visitedTypes, depth)
-                ?? ReadList(type, output, result, stream, settings, localVariables, visitedTypes, depth);
         }
 
         internal static Expression GetReadFieldExpression(FieldInfo fieldInfo, Expression result,

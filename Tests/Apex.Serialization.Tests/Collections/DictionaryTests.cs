@@ -45,7 +45,7 @@ namespace Apex.Serialization.Tests.Collections
         {
             var x = new Dictionary<int, int> {{1, 1}, {2, 2}};
 
-            RoundTrip(x, s => s.SerializationMode == Mode.Graph);
+            RoundTrip(x);
         }
 
         [Fact]
@@ -94,7 +94,7 @@ namespace Apex.Serialization.Tests.Collections
             var x = new InheritedDictionary {OwnField = 4};
             x.Add("test", "test2");
 
-            x = RoundTrip(x, s => s.SerializationMode == Mode.Graph);
+            x = RoundTrip(x);
 
             x.ContainsKey("test").Should().Be(true);
             x.OwnField.Should().Be(4);

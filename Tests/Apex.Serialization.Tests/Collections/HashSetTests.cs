@@ -39,7 +39,7 @@ namespace Apex.Serialization.Tests.Collections
         }
 
         [Fact]
-        public void RandomHashcodes()
+        public void RandomHashcodesNotSupported()
         {
             var element = new RandomHashcode {Value = 10};
             var x = new HashSet<RandomHashcode> {element};
@@ -48,7 +48,7 @@ namespace Apex.Serialization.Tests.Collections
 
             var y = RoundTrip(x);
 
-            y.Contains(element).Should().Be(true);
+            y.Contains(element).Should().Be(false);
         }
     }
 }

@@ -23,7 +23,7 @@ namespace Apex.Serialization.Tests.Collections
             x.AddLast(2);
             x.AddLast(3);
 
-            RoundTrip(x);
+            RoundTrip(x, s => s.SerializationMode == Mode.Graph);
         }
     }
 }

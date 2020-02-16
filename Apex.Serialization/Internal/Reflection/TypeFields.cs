@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -134,18 +133,6 @@ namespace Apex.Serialization.Internal.Reflection
             return false;
         }
 
-        private static DictionarySlim<Type, Type> _collections = new DictionarySlim<Type, Type>();
-
-        internal static Type? GetCustomCollectionBaseCollection(Type type)
-        {
-            if (_collections.TryGetValue(type, out var result))
-            {
-                return result;
-            }
-
-            return null;
-        }
-
         internal static List<FieldInfo> GetOrderedFields(Type type)
         {
             lock (_cacheLock)
@@ -183,12 +170,6 @@ namespace Apex.Serialization.Internal.Reflection
                 var start = Enumerable.Empty<FieldInfo>();
                 while (type != null)
                 {
-                    if (IsKnownCollection(type))
-                    {
-                        _collections.GetOrAddValueRef(originalType) = type;
-                        //break;
-                    }
-
                     if (type.Module.ScopeName == "CommonLanguageRuntimeLibrary")
                     {
                         start = start.Concat(type.GetFields(BindingFlags.Instance | BindingFlags.Public |
@@ -204,35 +185,17 @@ namespace Apex.Serialization.Internal.Reflection
                                 a.AttributeType != typeof(NonSerializedAttribute))));
                     }
 
+                    if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+                    {
+                        start = start.Where(x => x.Name != "_keys" && x.Name != "_values");
+                    }
+
                     type = type.BaseType!;
                 }
 
                 fields = start.ToList();
                 return fields;
             }
-        }
-
-        private static HashSet<Type> _knownCollections = new HashSet<Type>
-        {
-            typeof(Dictionary<,>),
-            typeof(SortedDictionary<,>),
-            typeof(ConcurrentDictionary<,>),
-            typeof(SortedList<,>),
-            typeof(LinkedList<>),
-            typeof(SortedSet<>),
-            typeof(HashSet<>),
-            typeof(ConcurrentQueue<>),
-            typeof(ConcurrentBag<>),
-        };
-
-        internal static bool IsKnownCollection(Type type)
-        {
-            if (type.IsGenericType)
-            {
-                type = type.GetGenericTypeDefinition();
-            }
-
-            return _knownCollections.Contains(type);
         }
     }
 }
