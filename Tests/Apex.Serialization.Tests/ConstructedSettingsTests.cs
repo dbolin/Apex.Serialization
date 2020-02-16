@@ -14,13 +14,12 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void Duplicates()
         {
-            int initialCount = Settings._constructedSettings.Count;
             var settings = new Settings { InliningMaxDepth = 0, SupportSerializationHooks = true }.MarkSerializable(typeof(List<>));
-            _ = settings.ToImmutable();
-            Settings._constructedSettings.Count.Should().Be(initialCount + 1);
+            var imm1 = settings.ToImmutable();
             settings = new Settings { InliningMaxDepth = 0, SupportSerializationHooks = true }.MarkSerializable(typeof(List<>));
-            _ = settings.ToImmutable();
-            Settings._constructedSettings.Count.Should().Be(initialCount + 1);
+            var imm2 = settings.ToImmutable();
+            imm1.GetHashCode().Should().Be(imm2.GetHashCode());
+            imm1.Equals(imm2).Should().BeTrue();
         }
 
         public class Test
@@ -42,47 +41,44 @@ namespace Apex.Serialization.Tests
         public void CustomSerializationActions()
         {
             var settings1 = new Settings().RegisterCustomSerializer<Test>(Test.Serialize, Test.Deserialize);
-            using var b1 = Binary.Create(settings1);
-            var count = Settings._constructedSettings.Count;
+            var imm1 = settings1.ToImmutable();
             var settings2 = new Settings().RegisterCustomSerializer<Test>(Test.Serialize, Test.Deserialize);
-            using var b2 = Binary.Create(settings1);
-            var count2 = Settings._constructedSettings.Count;
+            var imm2 = settings2.ToImmutable();
 
-            count2.Should().Be(count);
+            imm1.GetHashCode().Should().Be(imm2.GetHashCode());
+            imm1.Equals(imm2).Should().BeTrue();
         }
 
         [Fact]
         public void CustomSerializationActionsLambdaNoClosure()
         {
-            TestLambda();
-            var count = Settings._constructedSettings.Count;
-            TestLambda();
-            var count2 = Settings._constructedSettings.Count;
+            var imm1 = TestLambda();
+            var imm2 = TestLambda();
 
-            count2.Should().Be(count);
+            imm1.GetHashCode().Should().Be(imm2.GetHashCode());
+            imm1.Equals(imm2).Should().BeTrue();
         }
 
-        private void TestLambda()
+        private ImmutableSettings TestLambda()
         {
             var settings = new Settings().RegisterCustomSerializer<Test>((t,w) => w.Write(t.Value), Test.Deserialize);
-            using var b = Binary.Create(settings);
+            return settings.ToImmutable();
         }
 
         [Fact]
         public void CustomSerializationActionsLambdaWithClosure()
         {
-            TestLambdaWithClosure(1);
-            var count = Settings._constructedSettings.Count;
-            TestLambdaWithClosure(2);
-            var count2 = Settings._constructedSettings.Count;
+            var imm1 = TestLambdaWithClosure(1);
+            var imm2 = TestLambdaWithClosure(2);
 
-            count2.Should().Be(count + 1);
+            imm1.GetHashCode().Should().NotBe(imm2.GetHashCode());
+            imm1.Equals(imm2).Should().BeFalse();
         }
 
-        private void TestLambdaWithClosure(int a)
+        private ImmutableSettings TestLambdaWithClosure(int a)
         {
             var settings = new Settings().RegisterCustomSerializer<Test>((t, w) => w.Write(t.Value + a), Test.Deserialize);
-            using var b = Binary.Create(settings);
+            return settings.ToImmutable();
         }
     }
 }

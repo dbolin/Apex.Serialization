@@ -98,7 +98,7 @@ namespace Apex.Serialization
             return this;
         }
 
-        internal static readonly Dictionary<ImmutableSettings, ImmutableSettings> _constructedSettings
+        private static readonly Dictionary<ImmutableSettings, ImmutableSettings> _constructedSettings
             = new Dictionary<ImmutableSettings, ImmutableSettings>(new ImmutableSettingsDeduplicator());
         private static readonly object _constructedSettingsLock = new object();
 
