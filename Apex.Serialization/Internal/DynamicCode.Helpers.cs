@@ -92,12 +92,6 @@ namespace Apex.Serialization.Internal
         private static readonly PropertyInfo SavedReferencesListIndexer =
             typeof(List<object>).GetProperty("Item", new[] { typeof(int) })!;
 
-        private static readonly MethodInfo LoadedTypeReferencesGetter =
-            typeof(TBinary).GetProperty("LoadedTypeRefs", InstanceFlags)!.GetMethod!;
-
-        private static readonly PropertyInfo LoadedTypeListIndexer =
-            typeof(List<Type>).GetProperty("Item", new[] { typeof(int) })!;
-
         private static readonly MethodInfo BinaryWriterGetter =
             typeof(TBinary).GetProperty("BinaryWriter", InstanceFlags)!.GetMethod!;
 
