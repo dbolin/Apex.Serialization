@@ -391,7 +391,7 @@ namespace Apex.Serialization.Internal
                 Expression.Call(valueAccessExpression, hasValueMethod),
                 Expression.Block(
                     new[] {
-                        !isPrimitive ? (Expression)Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(1)) : Expression.Empty(),
+                        !isPrimitive ? ReserveConstantSize(stream, 1) : Expression.Empty(),
                         Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)1)),
                     }
                         .Concat(
@@ -1123,7 +1123,7 @@ namespace Apex.Serialization.Internal
 
             return 
                 Expression.Block(
-                    !isPrimitive ? (Expression)Expression.Call(stream, BinaryStreamMethods<TStream>.ReserveSizeMethodInfo, Expression.Constant(1)) : Expression.Empty(),
+                    !isPrimitive ? ReserveConstantSize(stream, 1) : Expression.Empty(),
                     Expression.Condition(
                         Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
                         Expression.Default(declaredType),

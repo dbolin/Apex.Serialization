@@ -5,6 +5,7 @@
       "progress",
       "html"
     ],
+    "exluded-mutations": ["string"],
     "log-level": "info",
     "timeout-ms": 25000,
     "threshold-high": 100,
