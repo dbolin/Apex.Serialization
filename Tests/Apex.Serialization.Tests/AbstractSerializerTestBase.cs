@@ -33,7 +33,15 @@ namespace Apex.Serialization.Tests
                 new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0 },
                 new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0 },
                 new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0 },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0 }
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0 },
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, ForceReflectionToSetReadonlyFields = true },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, ForceReflectionToSetReadonlyFields = true },
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, ForceReflectionToSetReadonlyFields = true },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, ForceReflectionToSetReadonlyFields = true },
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0, ForceReflectionToSetReadonlyFields = true },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0, ForceReflectionToSetReadonlyFields = true },
+                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0, ForceReflectionToSetReadonlyFields = true },
+                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0, ForceReflectionToSetReadonlyFields = true }
             };
 
             foreach(var s in settings)

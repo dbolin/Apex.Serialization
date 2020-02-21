@@ -98,7 +98,7 @@ namespace Apex.Serialization.Internal
                 throw new InvalidOperationException($"Type {type.FullName} was encountered during serialization but was not marked as serializable. Use Binary.MarkSerializable before creating any serializers if this type is intended to be serialized.");
             }
 
-            var fields = TypeFields.GetOrderedFields(type);
+            var fields = TypeFields.GetOrderedFields(type, settings);
             var maxSizeNeeded = writeSize ? (IsBlittable(type) ? TypeFields.GetSizeForType(type).size : fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size)) : 0;
             int metaBytes = 0;
 
@@ -317,7 +317,7 @@ namespace Apex.Serialization.Internal
                 return customExpression;
             }
 
-            var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, TypeFields.GetOrderedFields(declaredType));
+            var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, TypeFields.GetOrderedFields(declaredType, settings));
             if (writeStruct != null)
             {
                 inlineWrite = true;
@@ -501,7 +501,7 @@ namespace Apex.Serialization.Internal
                     {
                         if (DynamicCodeMethods._allFieldsToRestoreInitOnly[fieldInfo]-- == 0)
                         {
-                            FieldInfoModifier.setFieldInfoReadonly!(fieldInfo);
+                            FieldInfoModifier.SetFieldInfoReadonly!(fieldInfo);
                         }
                     }
                 }
@@ -555,7 +555,7 @@ namespace Apex.Serialization.Internal
                 throw new InvalidOperationException($"Type {type.FullName} was encountered during deserialization but was not marked as serializable. Use Binary.MarkSerializable before creating any serializers if this type is intended to be serialized.");
             }
 
-            var fields = TypeFields.GetOrderedFields(type);
+            var fields = TypeFields.GetOrderedFields(type, settings);
             var readStatements = new List<Expression>();
 
             var skipReadLabel = readMetadata ? Expression.Label("skipRead") : null;
@@ -707,7 +707,7 @@ namespace Apex.Serialization.Internal
             }
             else if (specialExpression == null && !specificConstructorDeserialization)
             {
-                if (type.IsValueType && FieldInfoModifier.MustUseReflectionToSetReadonly)
+                if (type.IsValueType && FieldInfoModifier.MustUseReflectionToSetReadonly(settings))
                 {
                     var boxedResult = Expression.Variable(typeof(object), "boxedResult");
                     bool shouldUnbox = false;
@@ -789,7 +789,7 @@ namespace Apex.Serialization.Internal
                 && (
                     settings.SerializationMode == Mode.Tree
                     || (Attribute.GetCustomAttribute(type, typeof(ImmutableAttribute)) as ImmutableAttribute)?.OnFaith == false
-                    || StaticTypeInfo.CannotReferenceSelf(type)
+                    || StaticTypeInfo.CannotReferenceSelf(type, settings)
                     );
         }
 
@@ -981,11 +981,11 @@ namespace Apex.Serialization.Internal
 
             if (fieldInfo.Attributes.HasFlag(FieldAttributes.InitOnly))
             {
-                if(FieldInfoModifier.setFieldInfoNotReadonly != null)
+                if(FieldInfoModifier.SetFieldInfoNotReadonly != null)
                 {
                     lock (DynamicCodeMethods._fieldInfoModifierLock)
                     {
-                        FieldInfoModifier.setFieldInfoNotReadonly(fieldInfo);
+                        FieldInfoModifier.SetFieldInfoNotReadonly(fieldInfo);
                         DynamicCodeMethods._fieldsToRestoreInitOnly.Value!.Add(fieldInfo);
                         if(DynamicCodeMethods._allFieldsToRestoreInitOnly.TryGetValue(fieldInfo, out var v))
                         {
@@ -1033,7 +1033,7 @@ namespace Apex.Serialization.Internal
                 return nullableExpression;
             }
 
-            var readStructExpression = ReadStructExpression(declaredType, stream, TypeFields.GetOrderedFields(declaredType));
+            var readStructExpression = ReadStructExpression(declaredType, stream, TypeFields.GetOrderedFields(declaredType, settings));
             if (readStructExpression != null)
             {
                 isInlineRead = true;

@@ -23,10 +23,10 @@ namespace Apex.Serialization.Internal.Reflection
             public readonly int Value;
         }
 
-        internal static Action<FieldInfo>? setFieldInfoNotReadonly;
-        internal static Action<FieldInfo>? setFieldInfoReadonly;
+        internal static Action<FieldInfo>? SetFieldInfoNotReadonly { get; }
+        internal static Action<FieldInfo>? SetFieldInfoReadonly { get; }
 
-        internal static bool MustUseReflectionToSetReadonly => setFieldInfoNotReadonly == null;
+        internal static bool MustUseReflectionToSetReadonly(ImmutableSettings settings) => SetFieldInfoNotReadonly == null || settings.ForceReflectionToSetReadonlyFields;
 
         static FieldInfoModifier()
         {
@@ -37,7 +37,7 @@ namespace Apex.Serialization.Internal.Reflection
                 var fieldInfoParam = Expression.Parameter(typeof(FieldInfo));
                 var castedType = Expression.Convert(fieldInfoParam, type);
                 var returnLabel = Expression.Label();
-                setFieldInfoNotReadonly = (Action<FieldInfo>)Expression.Lambda(
+                SetFieldInfoNotReadonly = (Action<FieldInfo>)Expression.Lambda(
                     Expression.Block(
                         Expression.Assign(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes),
                             Expression.Convert(Expression.And(Expression.Convert(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes), typeof(int)), Expression.Constant((int)(~FieldAttributes.InitOnly)))
@@ -48,7 +48,7 @@ namespace Apex.Serialization.Internal.Reflection
                         )
                     , fieldInfoParam
                     ).Compile();
-                setFieldInfoReadonly = (Action<FieldInfo>)Expression.Lambda(
+                SetFieldInfoReadonly = (Action<FieldInfo>)Expression.Lambda(
                     Expression.Block(
                         Expression.Assign(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes),
                             Expression.Convert(Expression.Or(Expression.Convert(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes), typeof(int)), Expression.Constant((int)(FieldAttributes.InitOnly)))
@@ -70,14 +70,14 @@ namespace Apex.Serialization.Internal.Reflection
                     test = s.Read<TestReadonly>(m);
                     if (test.Value != 5)
                     {
-                        setFieldInfoNotReadonly = null;
-                        setFieldInfoReadonly = null;
+                        SetFieldInfoNotReadonly = null;
+                        SetFieldInfoReadonly = null;
                     }
                 }
                 catch (VerificationException)
                 {
-                    setFieldInfoNotReadonly = null;
-                    setFieldInfoReadonly = null;
+                    SetFieldInfoNotReadonly = null;
+                    SetFieldInfoReadonly = null;
                 }
                 finally
                 {

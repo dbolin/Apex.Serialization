@@ -216,7 +216,7 @@ namespace Apex.Serialization.Internal
                 && !typeof(Type).IsAssignableFrom(elementType)
                 && !typeof(Delegate).IsAssignableFrom(elementType))
             {
-                var fields = TypeFields.GetOrderedFields(elementType);
+                var fields = TypeFields.GetOrderedFields(elementType, settings);
                 if (fields.Count > 2)
                 {
                     var tempVar = Expression.Variable(elementType, "tempElement");

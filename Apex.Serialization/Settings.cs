@@ -31,6 +31,8 @@ namespace Apex.Serialization
 
         public bool UseSerializedVersionId { get; set; } = true;
 
+        internal bool ForceReflectionToSetReadonlyFields { get; set; }
+
         private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>();
         private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionDeserializers = new Dictionary<Type, CustomSerializerDelegate>();
 
@@ -110,6 +112,7 @@ namespace Apex.Serialization
                 SupportSerializationHooks,
                 InliningMaxDepth,
                 UseSerializedVersionId,
+                ForceReflectionToSetReadonlyFields,
                 CustomActionSerializers,
                 CustomActionDeserializers,
                 WhitelistedTypes,
@@ -139,6 +142,8 @@ namespace Apex.Serialization
         public List<Func<Type, bool>> WhitelistFuncs { get; }
         public bool UseConstructors { get; } = true;
         public int InliningMaxDepth { get; }
+
+        internal bool ForceReflectionToSetReadonlyFields { get; }
 
         private static HashSet<Type> _autoWhitelistedTypes = new HashSet<Type>
         {
@@ -277,6 +282,7 @@ namespace Apex.Serialization
             bool supportSerializationHooks,
             int inliningMaxDepth,
             bool useSerializedVersionId,
+            bool forceReflectionToSetReadonlyFields,
             Dictionary<Type, CustomSerializerDelegate> customActionSerializers,
             Dictionary<Type, CustomSerializerDelegate> customActionDeserializers,
             HashSet<Type> whitelistedTypes,
@@ -286,6 +292,7 @@ namespace Apex.Serialization
             AllowFunctionSerialization = allowFunctionSerialization;
             SupportSerializationHooks = supportSerializationHooks;
             UseSerializedVersionId = useSerializedVersionId;
+            ForceReflectionToSetReadonlyFields = forceReflectionToSetReadonlyFields;
             InliningMaxDepth = inliningMaxDepth;
 
             CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>(customActionSerializers);
@@ -299,7 +306,8 @@ namespace Apex.Serialization
                     SupportSerializationHooks,
                     UseConstructors,
                     InliningMaxDepth,
-                    UseSerializedVersionId),
+                    UseSerializedVersionId,
+                    ForceReflectionToSetReadonlyFields),
                 HashCode.Combine(CustomActionSerializers.Select(x => HashCode.Combine(x.Key, x.Value.GetHashCode())).Aggregate(0, (a,b) => HashCode.Combine(a,b))),
                 HashCode.Combine(CustomActionDeserializers.Select(x => HashCode.Combine(x.Key, x.Value.GetHashCode())).Aggregate(0, (a, b) => HashCode.Combine(a, b))),
                 HashCode.Combine(WhitelistedTypes.Select(x => x.GetHashCode()).Aggregate(0, (a, b) => HashCode.Combine(a, b))),

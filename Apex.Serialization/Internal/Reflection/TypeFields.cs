@@ -133,9 +133,9 @@ namespace Apex.Serialization.Internal.Reflection
             return false;
         }
 
-        internal static List<FieldInfo> GetOrderedFields(Type type)
+        internal static List<FieldInfo> GetOrderedFields(Type type, ImmutableSettings settings)
         {
-            var mustUseReflectionToSetReadonly = FieldInfoModifier.MustUseReflectionToSetReadonly;
+            var mustUseReflectionToSetReadonly = FieldInfoModifier.MustUseReflectionToSetReadonly(settings);
             lock (_cacheLock)
             {
                 ref var fields = ref _orderedCache.GetOrAddValueRef(type);

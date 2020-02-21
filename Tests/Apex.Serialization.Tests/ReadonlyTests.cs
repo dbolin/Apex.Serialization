@@ -64,29 +64,24 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void BoxedStruct()
         {
-            var t = FieldInfoModifier.setFieldInfoNotReadonly;
-            FieldInfoModifier.setFieldInfoNotReadonly = null;
             var x = (object) new Test2(5, 1, 3);
 
             RoundTrip(x);
-            FieldInfoModifier.setFieldInfoNotReadonly = t;
         }
 
         [Fact]
         public void Struct()
         {
-            var t = FieldInfoModifier.setFieldInfoNotReadonly;
-            FieldInfoModifier.setFieldInfoNotReadonly = null;
             var x = new Test2(5, 1, 3);
 
             RoundTrip(x);
-            FieldInfoModifier.setFieldInfoNotReadonly = t;
         }
 
         [Fact]
         public void ShouldBeAbleToSetReadonlyFieldsDirectly()
         {
-            FieldInfoModifier.MustUseReflectionToSetReadonly.Should().BeFalse();
+            var s = new Settings().ToImmutable();
+            FieldInfoModifier.MustUseReflectionToSetReadonly(s).Should().BeFalse();
         }
     }
 }

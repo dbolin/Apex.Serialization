@@ -158,20 +158,20 @@ namespace Apex.Serialization.Internal.Reflection
             }
         }
 
-        internal static bool CannotReferenceSelf(Type type)
+        internal static bool CannotReferenceSelf(Type type, ImmutableSettings settings)
         {
             var testedTypes = new HashSet<Type>();
-            return CannotReference(type, type, testedTypes);
+            return CannotReference(type, type, testedTypes, settings);
         }
 
-        private static bool CannotReference(Type originalType, Type currentType, HashSet<Type> testedTypes)
+        private static bool CannotReference(Type originalType, Type currentType, HashSet<Type> testedTypes, ImmutableSettings settings)
         {
             if (!testedTypes.Add(currentType))
             {
                 return true;
             }
 
-            var fields = TypeFields.GetOrderedFields(currentType);
+            var fields = TypeFields.GetOrderedFields(currentType, settings);
 
             foreach (var field in fields)
             {
@@ -197,7 +197,7 @@ namespace Apex.Serialization.Internal.Reflection
                     return false;
                 }
 
-                if (!CannotReference(originalType, fieldType, testedTypes))
+                if (!CannotReference(originalType, fieldType, testedTypes, settings))
                 {
                     return false;
                 }
