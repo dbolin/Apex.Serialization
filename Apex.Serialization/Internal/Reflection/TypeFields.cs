@@ -135,13 +135,14 @@ namespace Apex.Serialization.Internal.Reflection
 
         internal static List<FieldInfo> GetOrderedFields(Type type)
         {
+            var mustUseReflectionToSetReadonly = FieldInfoModifier.MustUseReflectionToSetReadonly;
             lock (_cacheLock)
             {
                 ref var fields = ref _orderedCache.GetOrAddValueRef(type);
                 if (fields == null)
                 {
                     var unorderedFields = GetFields(type);
-                    if (FieldInfoModifier.MustUseReflectionToSetReadonly)
+                    if (mustUseReflectionToSetReadonly)
                     {
                         fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType) ? 0 : 1)
                             .ThenBy(x => x.IsInitOnly ? 0 : 1)
