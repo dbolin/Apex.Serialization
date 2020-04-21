@@ -6,7 +6,7 @@ namespace DeserializeTest
 {
     public class TestA
     {
-        public int A;
+        public int B;
     }
 
     public class TestB : TestA { }

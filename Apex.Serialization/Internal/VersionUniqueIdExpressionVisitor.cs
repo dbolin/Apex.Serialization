@@ -337,5 +337,12 @@ namespace Apex.Serialization.Internal
             Combine(node.Type);
             return base.VisitUnary(node);
         }
+
+        protected override Expression VisitDebugInfo(DebugInfoExpression node)
+        {
+            Combine(node.Document.FileName);
+
+            return base.VisitDebugInfo(node);
+        }
     }
 }

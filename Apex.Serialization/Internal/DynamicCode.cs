@@ -5,9 +5,6 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Reflection.Emit;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Threading;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal.Reflection;
@@ -220,6 +217,12 @@ namespace Apex.Serialization.Internal
                             .MakeGenericMethod(writeMethod);
                         var method = generateWriteMethod.Invoke(null, new object[] { baseType, settings, false, true });
                         writeStatements.Add(Expression.Invoke(Expression.Constant(method), actualSource, stream, output));
+
+                        DynamicCodeMethods._virtualWriteMethods.TryGetValue(
+                            new TypeKey(baseType, settings, false, true),
+                            out var gd);
+                        var doc = Expression.SymbolDocument(gd.SerializedVersionUniqueId.ToString());
+                        writeStatements.Add(Expression.DebugInfo(doc, 1, 1, 1, 1));
                         baseType = baseType.BaseType;
                     }
                 }

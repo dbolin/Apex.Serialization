@@ -32,9 +32,9 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
-        public void SimpleTest()
+        public void RoundTripSucceeds()
         {
-            var args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest")} -- " + GetTestFilePath("persistence_test_1");
+            var args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest")} --no-build -v q";
             var p = new Process
             {
                 StartInfo = new ProcessStartInfo("dotnet", args)
@@ -49,7 +49,14 @@ namespace Apex.Serialization.Tests
             p.WaitForExit(30000);
             p.HasExited.Should().BeTrue();
 
-            args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest")} -- " + GetTestFilePath("persistence_test_1");
+            var output = p.StandardOutput.ReadToEnd();
+            var error = p.StandardError.ReadToEnd();
+            _output.WriteLine(output);
+            _output.WriteLine(error);
+
+            p.ExitCode.Should().Be(0);
+
+            args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest")} --no-build -v q -- {output}";
             p = new Process
             {
                 StartInfo = new ProcessStartInfo("dotnet", args) 
@@ -64,13 +71,62 @@ namespace Apex.Serialization.Tests
             p.WaitForExit(30000);
             p.HasExited.Should().BeTrue();
 
-            var output = p.StandardOutput.ReadToEnd();
-            var error = p.StandardError.ReadToEnd();
+            output = p.StandardOutput.ReadToEnd();
+            error = p.StandardError.ReadToEnd();
 
             _output.WriteLine(output);
             _output.WriteLine(error);
 
             p.ExitCode.Should().Be(0);
+        }
+
+        [Fact]
+        public void ChangeOfFieldInBaseTypeFails()
+        {
+            var args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest")} --no-build -v q";
+            var p = new Process
+            {
+                StartInfo = new ProcessStartInfo("dotnet", args)
+                {
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                },
+            };
+            p.Start();
+            p.WaitForExit(30000);
+            p.HasExited.Should().BeTrue();
+
+            var output = p.StandardOutput.ReadToEnd();
+            var error = p.StandardError.ReadToEnd();
+            _output.WriteLine(output);
+            _output.WriteLine(error);
+
+            p.ExitCode.Should().Be(0);
+
+            args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest2")} --no-build -v q -- {output}";
+            p = new Process
+            {
+                StartInfo = new ProcessStartInfo("dotnet", args)
+                {
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                },
+            };
+            p.Start();
+            p.WaitForExit(30000);
+            p.HasExited.Should().BeTrue();
+
+            output = p.StandardOutput.ReadToEnd();
+            error = p.StandardError.ReadToEnd();
+
+            _output.WriteLine(output);
+            _output.WriteLine(error);
+
+            p.ExitCode.Should().Be(1);
         }
     }
 }
