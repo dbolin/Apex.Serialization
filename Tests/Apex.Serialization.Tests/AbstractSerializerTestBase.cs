@@ -22,27 +22,31 @@ namespace Apex.Serialization.Tests
         {
         }
 
+        private Action<Settings>[] _settingsConfigurations = new Action<Settings>[]
+        {
+            s => s.SerializationMode = Mode.Graph,
+            s => s.UseSerializedVersionId = true,
+            s => s.InliningMaxDepth = 0,
+            s => s.ForceReflectionToSetReadonlyFields = true,
+            s => s.FlattenClassHierarchy = false
+        };
+
         private ISerializer[] ConstructSerializers(Func<Settings, bool>? filter)
         {
-            var settings = new[]
+            var settings = new Settings[1 << (_settingsConfigurations.Length)];
+            for(int i=0;i<settings.Length;++i)
             {
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true },
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false },
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0 },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0 },
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0 },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0 },
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, ForceReflectionToSetReadonlyFields = true },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, ForceReflectionToSetReadonlyFields = true },
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, ForceReflectionToSetReadonlyFields = true },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, ForceReflectionToSetReadonlyFields = true },
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0, ForceReflectionToSetReadonlyFields = true },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = true, InliningMaxDepth = 0, ForceReflectionToSetReadonlyFields = true },
-                new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0, ForceReflectionToSetReadonlyFields = true },
-                new Settings { SerializationMode = Mode.Graph, AllowFunctionSerialization = true, SupportSerializationHooks = true, UseSerializedVersionId = false, InliningMaxDepth = 0, ForceReflectionToSetReadonlyFields = true }
-            };
+                var s = new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true };
+                for (int j = 0; j < _settingsConfigurations.Length; ++j)
+                {
+                    if ((i & (1 << j)) != 0)
+                    {
+                        _settingsConfigurations[j](s);
+                    }
+                }
+
+                settings[i] = s;
+            }
 
             foreach(var s in settings)
             {

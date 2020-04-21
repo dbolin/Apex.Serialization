@@ -45,9 +45,9 @@ namespace Benchmark
         static void Main(string[] args)
         {
             /*
-            var t = new PerformanceSuite_StringList();
+            var t = new PerformanceSuite_EmptyStructList();
             while(true)
-                t.S_StringList();
+                t.S_ListEmptyFullWithVersionIds();
             */
 
             var summaries = BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(config: new Config());

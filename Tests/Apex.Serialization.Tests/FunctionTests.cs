@@ -44,17 +44,16 @@ namespace Apex.Serialization.Tests
             public object? D;
         }
 
-#pragma warning disable CS8653 // A default expression introduces a null value for a type parameter.
         public class Test3<T>
         {
             public static T F1(T value)
             {
-                return default;
+                return default!;
             }
 
             public T F2(T value)
             {
-                return default;
+                return default!;
             }
 
             public T2 F3<T2>(T value)
@@ -67,7 +66,6 @@ namespace Apex.Serialization.Tests
             {
             }
         }
-#pragma warning restore CS8653 // A default expression introduces a null value for a type parameter.
 
         [Fact]
         public void Functions()

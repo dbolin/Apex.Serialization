@@ -31,7 +31,14 @@ namespace Apex.Serialization.Internal.Reflection
         }
 
         private static DictionarySlim<Type, List<FieldInfo>> _cache = new DictionarySlim<Type, List<FieldInfo>>();
-        private static DictionarySlim<Type, List<FieldInfo>> _orderedCache = new DictionarySlim<Type, List<FieldInfo>>();
+        private static DictionarySlim<Type, List<FieldInfo>> _flattenedCache = new DictionarySlim<Type, List<FieldInfo>>();
+        private static DictionarySlim<OrderedTypeCacheKey, List<FieldInfo>> _orderedCache = new DictionarySlim<OrderedTypeCacheKey, List<FieldInfo>>();
+
+        private struct OrderedTypeCacheKey
+        {
+            public Type Type;
+            public bool Flattened;
+        }
 
         private static object _cacheLock = new object();
 
@@ -138,10 +145,10 @@ namespace Apex.Serialization.Internal.Reflection
             var mustUseReflectionToSetReadonly = FieldInfoModifier.MustUseReflectionToSetReadonly(settings);
             lock (_cacheLock)
             {
-                ref var fields = ref _orderedCache.GetOrAddValueRef(type);
+                ref var fields = ref _orderedCache.GetOrAddValueRef(new OrderedTypeCacheKey { Type = type, Flattened = settings.FlattenClassHierarchy });
                 if (fields == null)
                 {
-                    var unorderedFields = GetFields(type);
+                    var unorderedFields = settings.FlattenClassHierarchy ? GetFlattenedFields(type) : GetFields(type);
                     if (mustUseReflectionToSetReadonly)
                     {
                         fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType) ? 0 : 1)
@@ -161,12 +168,11 @@ namespace Apex.Serialization.Internal.Reflection
             }
         }
 
-        private static List<FieldInfo> GetFields(Type type)
+        private static List<FieldInfo> GetFlattenedFields(Type type)
         {
             lock (_cacheLock)
             {
-                ref var fields = ref _cache.GetOrAddValueRef(type);
-
+                ref var fields = ref _flattenedCache.GetOrAddValueRef(type);
                 var originalType = type;
                 var start = Enumerable.Empty<FieldInfo>();
                 while (type != null)
@@ -192,6 +198,37 @@ namespace Apex.Serialization.Internal.Reflection
                     }
 
                     type = type.BaseType!;
+                }
+
+                fields = start.ToList();
+                return fields;
+            }
+        }
+
+        private static List<FieldInfo> GetFields(Type type)
+        {
+            lock (_cacheLock)
+            {
+                ref var fields = ref _cache.GetOrAddValueRef(type);
+                var start = Enumerable.Empty<FieldInfo>();
+                if (type.Module.ScopeName == "CommonLanguageRuntimeLibrary")
+                {
+                    start = start.Concat(type.GetFields(BindingFlags.Instance | BindingFlags.Public |
+                                                        BindingFlags.NonPublic |
+                                                        BindingFlags.DeclaredOnly));
+                }
+                else
+                {
+                    start = start.Concat(type.GetFields(BindingFlags.Instance | BindingFlags.Public |
+                                                        BindingFlags.NonPublic |
+                                                        BindingFlags.DeclaredOnly)
+                        .Where(x => x.CustomAttributes.All(a =>
+                            a.AttributeType != typeof(NonSerializedAttribute))));
+                }
+
+                if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+                {
+                    start = start.Where(x => x.Name != "_keys" && x.Name != "_values");
                 }
 
                 fields = start.ToList();

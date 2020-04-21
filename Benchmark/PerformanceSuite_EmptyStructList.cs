@@ -16,6 +16,7 @@ namespace Benchmark
         {
             _emptyListFull.Capacity = 1024;
             S_ListEmptyFull();
+            S_ListEmptyFullWithVersionIds();
         }
 
         [Benchmark]
@@ -34,6 +35,12 @@ namespace Benchmark
         public object D_ListEmptyFull()
         {
             return Deserialize<List<Empty>>();
+        }
+
+        [Benchmark]
+        public object D_ListEmptyFullWithVersionIds()
+        {
+            return DeserializeWithVersionIds<List<Empty>>();
         }
     }
 }

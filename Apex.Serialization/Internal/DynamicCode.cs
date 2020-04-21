@@ -33,21 +33,45 @@ namespace Apex.Serialization.Internal
         where TStream : IBinaryStream
         where TBinary : ISerializer
     {
-        internal static T GenerateWriteMethod<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
+        internal static T GenerateWriteMethod<T>(Type type, ImmutableSettings settings,
+            bool shouldWriteTypeInfo,
+            bool isolated)
             where T : Delegate
         {
-            return (T)DynamicCodeMethods._virtualWriteMethods.GetOrAdd(new TypeKey {Type = type, Settings = settings, IncludesTypeInfo = shouldWriteTypeInfo}, 
-                t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo)).Delegate;
+            return (T)DynamicCodeMethods._virtualWriteMethods.GetOrAdd(
+                new TypeKey(type, settings, shouldWriteTypeInfo, isolated), 
+                t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo, isolated)).Delegate;
         }
 
-        internal static DynamicCodeMethods.GeneratedDelegate GenerateWriteMethodImpl<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo)
+        internal static DynamicCodeMethods.GeneratedDelegate GenerateWriteMethodImpl<T>(Type type,
+            ImmutableSettings settings,
+            bool shouldWriteTypeInfo,
+            bool isolated)
             where T : Delegate
         {
-            var source = Expression.Parameter(shouldWriteTypeInfo ? typeof(object) : type, "source");
             var stream = Expression.Parameter(typeof(TStream).MakeByRefType(), "stream");
             var output = Expression.Parameter(typeof(TBinary), "io");
-
+            var visitedTypes = ImmutableHashSet<Type>.Empty;
             var writeStatements = new List<Expression>();
+
+            if (isolated)
+            {
+                var isolatedSource = Expression.Parameter(type, "source");
+
+                var isolatedFields = TypeFields.GetOrderedFields(type, settings);
+                var isolatedFieldsSize = isolatedFields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size);
+                writeStatements.Add(ReserveConstantSize(stream, isolatedFieldsSize));
+                writeStatements.AddRange(isolatedFields.Select(x =>
+                                    GetWriteFieldExpression(x, isolatedSource, stream, output, settings, visitedTypes, 0)));
+
+                var isolatedBody = Expression.Block(writeStatements);
+                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Write_Isolated_{type.FullName}", new[] { isolatedSource, stream, output }).Compile();
+
+                return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody) };
+            }
+
+            var source = Expression.Parameter(shouldWriteTypeInfo ? typeof(object) : type, "source");
+
             var localVariables = new List<ParameterExpression>();
 
             var castedSourceType = (ParameterExpression?)null;
@@ -68,20 +92,26 @@ namespace Apex.Serialization.Internal
 
             var actualSource = castedSourceType ?? source;
 
-            var visitedTypes = ImmutableHashSet<Type>.Empty;
-
             writeStatements.AddRange(GetWriteStatementsForType(type, settings, stream, output, source, shouldWriteTypeInfo, actualSource, visitedTypes, 0));
 
             var finalBody = Expression.Block(localVariables, writeStatements);
 
             var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
 
-            return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(finalBody)};
+            var uniqueId = GetSerializedVersionUniqueId(type, finalBody);
+
+            if(!shouldWriteTypeInfo)
+            {
+                var containerType = typeof(WriteMethods<,,>).MakeGenericType(type, typeof(TStream), settings.GetGeneratedType());
+                containerType.GetField("VersionUniqueId", BindingFlags.Public | BindingFlags.Static)!.SetValue(null, uniqueId);
+            }
+
+            return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = uniqueId};
         }
 
-        private static int GetSerializedVersionUniqueId(Expression expr)
+        private static int GetSerializedVersionUniqueId(Type type, Expression expr)
         {
-            var visitor = new VersionUniqueIdExpressionVisitor();
+            var visitor = new VersionUniqueIdExpressionVisitor(type);
             visitor.Visit(expr);
             return visitor.GetResult();
         }
@@ -171,6 +201,28 @@ namespace Apex.Serialization.Internal
 
                 writeStatements.AddRange(fields.Select(x =>
                     GetWriteFieldExpression(x, actualSource, stream, output, settings, visitedTypes, depth + 1)));
+
+                if (!settings.FlattenClassHierarchy && !type.IsValueType)
+                {
+                    var baseType = type.BaseType;
+                    while (baseType != null && baseType != typeof(object))
+                    {
+                        if(TypeFields.GetOrderedFields(baseType, settings).Count == 0)
+                        {
+                            baseType = baseType.BaseType;
+                            continue;
+                        }
+
+                        var writeMethod = typeof(WriteMethods<,,>.WriteSealed).MakeGenericType(baseType, typeof(TStream), settings.GetGeneratedType());
+                        var generateWriteMethod = typeof(DynamicCode<,>)
+                            .MakeGenericType(typeof(TStream), typeof(TBinary))
+                            .GetMethod("GenerateWriteMethod", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!
+                            .MakeGenericMethod(writeMethod);
+                        var method = generateWriteMethod.Invoke(null, new object[] { baseType, settings, false, true });
+                        writeStatements.Add(Expression.Invoke(Expression.Constant(method), actualSource, stream, output));
+                        baseType = baseType.BaseType;
+                    }
+                }
             }
 
 
@@ -485,13 +537,13 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
-        internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed)
+        internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed, bool isolated)
             where T : Delegate
         {
             try
             {
-                return (T)DynamicCodeMethods._virtualReadMethods.GetOrAdd(new TypeKey { Type = type, Settings = settings, IncludesTypeInfo = isBoxed },
-                    t => GenerateReadMethodImpl<T>(type, settings, isBoxed)).Delegate;
+                return (T)DynamicCodeMethods._virtualReadMethods.GetOrAdd(new TypeKey(type, settings, isBoxed, isBoxed),
+                    t => GenerateReadMethodImpl<T>(type, settings, isBoxed, isolated)).Delegate;
             }
             finally
             {
@@ -509,14 +561,34 @@ namespace Apex.Serialization.Internal
             }
         }
 
-        internal static DynamicCodeMethods.GeneratedDelegate GenerateReadMethodImpl<T>(Type type, ImmutableSettings settings, bool isBoxed)
+        internal static DynamicCodeMethods.GeneratedDelegate GenerateReadMethodImpl<T>(Type type,
+            ImmutableSettings settings,
+            bool isBoxed,
+            bool isolated)
             where T : Delegate
         {
             var stream = Expression.Parameter(typeof(TStream).MakeByRefType(), "stream");
             var output = Expression.Parameter(typeof(TBinary), "io");
 
-            var readStatements = new List<Expression>();
             var localVariables = new List<ParameterExpression>();
+            var readStatements = new List<Expression>();
+            var visitedTypes = ImmutableHashSet<Type>.Empty;
+
+            if (isolated)
+            {
+                var isolatedResult = Expression.Parameter(type, "result");
+
+                var isolatedFields = TypeFields.GetOrderedFields(type, settings);
+                var isolatedFieldsSize = isolatedFields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size);
+                readStatements.Add(ReserveConstantSize(stream, isolatedFieldsSize));
+                readStatements.AddRange(isolatedFields.Select(x => GetReadFieldExpression(x, isolatedResult, stream, output, settings, localVariables, visitedTypes, 0)));
+
+                var isolatedBody = Expression.Block(localVariables, readStatements);
+                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Read_Isolated_{type.FullName}", new[] { isolatedResult, stream, output }).Compile();
+
+                return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody) };
+            }
+
 
             var result = Expression.Variable(type, "result");
             localVariables.Add(result);
@@ -525,8 +597,6 @@ namespace Apex.Serialization.Internal
             {
                 readStatements.Add(Expression.Assign(result, Expression.Default(type)));
             }
-
-            var visitedTypes = ImmutableHashSet<Type>.Empty;
 
             readStatements.AddRange(GetReadStatementsForType(type, settings, stream, output, result, localVariables, visitedTypes, 0));
 
@@ -542,7 +612,7 @@ namespace Apex.Serialization.Internal
             var finalBody = Expression.Block(localVariables, readStatements);
             var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
 
-            return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(finalBody) };
+            return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, finalBody) };
         }
 
         private static List<Expression> GetReadStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
@@ -754,6 +824,28 @@ namespace Apex.Serialization.Internal
                 else
                 {
                     readStatements.AddRange(fields.Select(x => GetReadFieldExpression(x, result, stream, output, settings, localVariables, visitedTypes, depth + 1)));
+
+                    if(!settings.FlattenClassHierarchy && !type.IsValueType)
+                    {
+                        var baseType = type.BaseType;
+                        while(baseType != null && baseType != typeof(object))
+                        {
+                            if(TypeFields.GetOrderedFields(baseType, settings).Count == 0)
+                            {
+                                baseType = baseType.BaseType;
+                                continue;
+                            }
+
+                            var readMethod = typeof(WriteMethods<,,>.WriteSealed).MakeGenericType(baseType, typeof(TStream), settings.GetGeneratedType());
+                            var generateReadMethod = typeof(DynamicCode<,>)
+                                .MakeGenericType(typeof(TStream), typeof(TBinary))
+                                .GetMethod("GenerateReadMethod", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!
+                                .MakeGenericMethod(readMethod);
+                            var method = generateReadMethod.Invoke(null, new object[] { baseType, settings, false, true });
+                            readStatements.Add(Expression.Invoke(Expression.Constant(method), result, stream, output));
+                            baseType = baseType.BaseType;
+                        }
+                    }
                 }
             }
 

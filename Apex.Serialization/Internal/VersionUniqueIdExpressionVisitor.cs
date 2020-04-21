@@ -6,7 +6,14 @@ namespace Apex.Serialization.Internal
 {
     internal class VersionUniqueIdExpressionVisitor : ExpressionVisitor
     {
+        public VersionUniqueIdExpressionVisitor(Type type)
+        {
+            Type = type;
+        }
+
         private int Result;
+
+        public Type Type { get; }
 
         public int GetResult()
         {
@@ -45,6 +52,10 @@ namespace Apex.Serialization.Internal
             else if (a is string s)
             {
                 Combine(NonRandomHashCode.Ordinal(s));
+            }
+            else if (a is Delegate d)
+            {
+                Combine(d.Method);
             }
             else
             {

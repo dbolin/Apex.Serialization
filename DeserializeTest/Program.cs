@@ -4,11 +4,18 @@ using System.IO;
 
 namespace DeserializeTest
 {
-    public sealed class Test1
+    public class TestA
+    {
+        public int A;
+    }
+
+    public class TestB : TestA { }
+
+    public class Test1 : TestA
     {
         public static IBinary CreateSerializer()
         {
-            return Binary.Create(new Settings { UseSerializedVersionId = true }.MarkSerializable(typeof(Test1)).MarkSerializable(typeof(Test2<>)));
+            return Binary.Create(new Settings { UseSerializedVersionId = true, FlattenClassHierarchy = false }.MarkSerializable(typeof(Test1)).MarkSerializable(typeof(Test2<>)));
         }
 
         public sealed class Test2<T>
@@ -26,9 +33,9 @@ namespace DeserializeTest
     {
         static int Main(string[] args)
         {
+            var file = args.Length > 0 ? args[0] : "test";
             try
             {
-                var file = args[0];
                 if (File.Exists(file))
                 {
                     using var fs = new FileStream(file, FileMode.Open);
@@ -52,6 +59,10 @@ namespace DeserializeTest
             catch(Exception e)
             {
                 Console.WriteLine(e.ToString());
+                if(File.Exists(file))
+                {
+                    File.Delete(file);
+                }
                 return 1;
             }
 

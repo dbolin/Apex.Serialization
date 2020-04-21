@@ -15,7 +15,14 @@ namespace Apex.Serialization.Tests
             };
         }
 
-        public class Base
+        public class DeepBase
+        {
+            public int DeepValue = 5;
+        }
+
+        public class MiddleBase : DeepBase { }
+
+        public class Base : MiddleBase
         {
             public Base(int v)
             {
@@ -42,6 +49,29 @@ namespace Apex.Serialization.Tests
         public void InheritedFields()
         {
             var x = new Derived(1) {DerivedValue = 3};
+
+            RoundTrip(x);
+        }
+
+        public class A1
+        {
+            public int A = 1;
+        }
+
+        public class B1 : A1
+        {
+            public int B = 2;
+        }
+
+        public class B2 : A1
+        {
+            public int B = 3;
+        }
+
+        [Fact]
+        public void InheritanceV()
+        {
+            var x = new { b1 = new B1(), b2 = new B2() };
 
             RoundTrip(x);
         }

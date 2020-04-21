@@ -71,7 +71,7 @@ namespace Apex.Serialization
 
             if (method == null)
             {
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true);
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true, false);
             }
 
             _lastReadType = type;
@@ -132,7 +132,7 @@ namespace Apex.Serialization
             ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
             if (method == null)
             {
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false, false);
             }
 
             return method(ref _stream, this);
@@ -148,7 +148,7 @@ namespace Apex.Serialization
             ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
             if (method == null)
             {
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false, false);
             }
 
             return method(ref _stream, this);
@@ -238,31 +238,35 @@ namespace Apex.Serialization
 
         private int GetSerializedVersionUniqueId(Type t)
         {
-            if(!DynamicCodeMethods._virtualWriteMethods.TryGetValue(
-                new TypeKey { IncludesTypeInfo = true, Type = t, Settings = Settings },
-                out var gd))
+            ref var result = ref VirtualVersionUniqueIds.GetOrAddValueRef(t);
+            if (result == 0)
             {
-                Precompile(t);
-                return GetSerializedVersionUniqueId(t);
+                if (!DynamicCodeMethods._virtualWriteMethods.TryGetValue(
+                    new TypeKey { IncludesTypeInfo = true, Type = t, Settings = Settings },
+                    out var gd))
+                {
+                    Precompile(t);
+                    result = GetSerializedVersionUniqueId(t);
+                }
+                else
+                {
+                    result = gd.SerializedVersionUniqueId;
+                }
             }
 
-            return gd.SerializedVersionUniqueId;
+            return result;
         }
 
         private int GetSerializedVersionUniqueId<T>()
         {
-            if (!DynamicCodeMethods._virtualWriteMethods.TryGetValue(
-                new TypeKey { IncludesTypeInfo = false, Type = typeof(T), Settings = Settings },
-                out var gd)
-                && !DynamicCodeMethods._virtualWriteMethods.TryGetValue(
-                new TypeKey { IncludesTypeInfo = true, Type = typeof(T), Settings = Settings },
-                out gd))
+            var result = WriteMethods<T, TStream, TSettingGen>.VersionUniqueId;
+            if (result == 0)
             {
                 Precompile<T>();
                 return GetSerializedVersionUniqueId<T>();
             }
 
-            return gd.SerializedVersionUniqueId;
+            return result;
         }
 
         internal void WriteInternal(object? value)
@@ -284,7 +288,7 @@ namespace Apex.Serialization
 
             if (method == null)
             {
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteObject>(type, Settings, true, false);
             }
 
             _lastWriteType = type;
@@ -589,7 +593,7 @@ namespace Apex.Serialization
             {
                 CheckTypes(value);
 
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(value!.GetType(), Settings, false);
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(value!.GetType(), Settings, false, false);
             }
 
             method(value, ref _stream, this);
@@ -618,7 +622,7 @@ namespace Apex.Serialization
             {
                 CheckTypes(value!);
 
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(value!.GetType(), Settings, false);
+                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(value!.GetType(), Settings, false, false);
             }
 
             method(value, ref _stream, this);

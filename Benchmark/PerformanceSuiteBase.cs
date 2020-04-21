@@ -11,9 +11,11 @@ namespace Benchmark
         private readonly IBinary binary = Binary.Create(new Settings { UseSerializedVersionId = false }.MarkSerializable(x => true));
         private readonly IBinary binaryGraph = Binary.Create(new Settings { SerializationMode = Mode.Graph, UseSerializedVersionId = false }.MarkSerializable(x => true));
         private readonly IBinary binaryWithVersionIds = Binary.Create(new Settings { UseSerializedVersionId = true }.MarkSerializable(x => true));
+        private readonly IBinary binaryWithoutFlatten = Binary.Create(new Settings { UseSerializedVersionId = false, FlattenClassHierarchy = false }.MarkSerializable(x => true));
         private readonly MemoryStream m1 = new MemoryStream();
         private readonly MemoryStream m2 = new MemoryStream();
         private readonly MemoryStream m3 = new MemoryStream();
+        private readonly MemoryStream m4 = new MemoryStream();
 
         private readonly CerasSerializer ceras = new CerasSerializer(new SerializerConfig { DefaultTargets = TargetMember.AllFields, PreserveReferences = false });
         private byte[] b = new byte[16];
@@ -62,6 +64,22 @@ namespace Benchmark
         {
             m3.Position = 0;
             return binaryWithVersionIds.Read<T>(m3);
+
+            //return ceras.Deserialize<T>(b);
+        }
+
+        protected void SerializeWithoutFlattenClassHierarchy<T>(T obj)
+        {
+            m4.Position = 0;
+            binaryWithoutFlatten.Write(obj, m4);
+
+            //ceras.Serialize(obj, ref b);
+        }
+
+        protected T DeserializeWithoutFlattenClassHierarchy<T>()
+        {
+            m4.Position = 0;
+            return binaryWithoutFlatten.Read<T>(m4);
 
             //return ceras.Deserialize<T>(b);
         }

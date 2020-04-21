@@ -31,6 +31,8 @@ namespace Apex.Serialization
 
         public bool UseSerializedVersionId { get; set; } = true;
 
+        public bool FlattenClassHierarchy { get; set; } = true;
+
         internal bool ForceReflectionToSetReadonlyFields { get; set; }
 
         private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>();
@@ -112,6 +114,7 @@ namespace Apex.Serialization
                 SupportSerializationHooks,
                 InliningMaxDepth,
                 UseSerializedVersionId,
+                FlattenClassHierarchy,
                 ForceReflectionToSetReadonlyFields,
                 CustomActionSerializers,
                 CustomActionDeserializers,
@@ -136,6 +139,7 @@ namespace Apex.Serialization
         public bool AllowFunctionSerialization { get; }
         public bool SupportSerializationHooks { get; }
         public bool UseSerializedVersionId { get; }
+        public bool FlattenClassHierarchy { get; }
         public Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers { get; }
         public Dictionary<Type, CustomSerializerDelegate> CustomActionDeserializers { get; }
         public HashSet<Type> WhitelistedTypes { get; }
@@ -282,6 +286,7 @@ namespace Apex.Serialization
             bool supportSerializationHooks,
             int inliningMaxDepth,
             bool useSerializedVersionId,
+            bool flattenClassHierarchy,
             bool forceReflectionToSetReadonlyFields,
             Dictionary<Type, CustomSerializerDelegate> customActionSerializers,
             Dictionary<Type, CustomSerializerDelegate> customActionDeserializers,
@@ -292,6 +297,7 @@ namespace Apex.Serialization
             AllowFunctionSerialization = allowFunctionSerialization;
             SupportSerializationHooks = supportSerializationHooks;
             UseSerializedVersionId = useSerializedVersionId;
+            FlattenClassHierarchy = flattenClassHierarchy;
             ForceReflectionToSetReadonlyFields = forceReflectionToSetReadonlyFields;
             InliningMaxDepth = inliningMaxDepth;
 
@@ -307,6 +313,7 @@ namespace Apex.Serialization
                     UseConstructors,
                     InliningMaxDepth,
                     UseSerializedVersionId,
+                    FlattenClassHierarchy,
                     ForceReflectionToSetReadonlyFields),
                 HashCode.Combine(CustomActionSerializers.Select(x => HashCode.Combine(x.Key, x.Value.GetHashCode())).Aggregate(0, (a,b) => HashCode.Combine(a,b))),
                 HashCode.Combine(CustomActionDeserializers.Select(x => HashCode.Combine(x.Key, x.Value.GetHashCode())).Aggregate(0, (a, b) => HashCode.Combine(a, b))),

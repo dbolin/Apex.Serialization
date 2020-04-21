@@ -14,6 +14,7 @@ namespace Apex.Serialization
         public delegate void WriteSealed(T obj, ref TStream stream, Binary<TStream, TSettingGen> binary);
 
         public static WriteSealed? Method;
+        public static int VersionUniqueId;
     }
 
     internal static class ReadMethods<T, TStream, TSettingGen>
@@ -46,6 +47,7 @@ namespace Apex.Serialization
 
         private readonly DictionarySlim<Type, WriteObject> VirtualWriteMethods = new DictionarySlim<Type, WriteObject>();
         private readonly DictionarySlim<Type, ReadObject> VirtualReadMethods = new DictionarySlim<Type, ReadObject>();
+        private readonly DictionarySlim<Type, int> VirtualVersionUniqueIds = new DictionarySlim<Type, int>();
 
         private Type? _lastWriteType;
         private WriteObject? _lastWriteMethod;
@@ -158,7 +160,7 @@ namespace Apex.Serialization
                 ref var readMethod = ref VirtualReadMethods.GetOrAddValueRef(type);
                 if (readMethod == null)
                 {
-                    readMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true);
+                    readMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true, false);
                 }
             }
 
@@ -167,7 +169,7 @@ namespace Apex.Serialization
                 ref var writeMethod = ref VirtualWriteMethods.GetOrAddValueRef(type);
                 if (writeMethod == null)
                 {
-                    writeMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteObject>(type, Settings, true);
+                    writeMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteObject>(type, Settings, true, false);
                 }
             }
 
@@ -181,9 +183,9 @@ namespace Apex.Serialization
         public void Precompile<T>()
         {
             ref var readMethod = ref ReadMethods<T, TStream, TSettingGen>.Method;
-            readMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false);
+            readMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false, false);
             ref var writeMethod = ref WriteMethods<T, TStream, TSettingGen>.Method;
-            writeMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(typeof(T), Settings, false);
+            writeMethod = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateWriteMethod<WriteMethods<T, TStream, TSettingGen>.WriteSealed>(typeof(T), Settings, false, false);
         }
 
         public void Intern(object o)
