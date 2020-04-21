@@ -4,7 +4,10 @@ variables:
   BuildConfiguration: 'Release'
 
 steps:
-- script: 'dotnet build Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)'
+- script: |
+   dotnet build Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)
+   dotnet build DeserializeTest/DeserializeTest.csproj -c $(BuildConfiguration)
+   dotnet build DeserializeTest2/DeserializeTest2.csproj -c $(BuildConfiguration)
   displayName: 'dotnet build'
 - task: DeleteFiles@1
   inputs:
