@@ -21,18 +21,18 @@ namespace Benchmark
     {
         public Config()
         {
-            Add(JitOptimizationsValidator.DontFailOnError);
-            Add(DefaultConfig.Instance.GetLoggers().ToArray()); // manual config has no loggers by default
-            Add(DefaultConfig.Instance.GetExporters().ToArray()); // manual config has no exporters by default
-            Add(DefaultConfig.Instance.GetColumnProviders().ToArray()); // manual config has no columns by default
+            AddValidator(JitOptimizationsValidator.DontFailOnError);
+            AddLogger(DefaultConfig.Instance.GetLoggers().ToArray()); // manual config has no loggers by default
+            AddExporter(DefaultConfig.Instance.GetExporters().ToArray()); // manual config has no exporters by default
+            AddColumnProvider(DefaultConfig.Instance.GetColumnProviders().ToArray()); // manual config has no columns by default
 
-            //Add(Job.Default.With(CsProjCoreToolchain.NetCoreApp30).WithGcServer(false));
-            Add(Job.Default.With(CsProjCoreToolchain.NetCoreApp31).WithGcServer(true));
-            //Add(Job.Clr.With(CsProjClassicNetToolchain.Net472));
-            //Add(Job.CoreRT);
+            //AddJob(Job.Default.With(CsProjCoreToolchain.NetCoreApp30).WithGcServer(false));
+            AddJob(Job.Default.With(CsProjCoreToolchain.NetCoreApp31).WithGcServer(true));
+            //AddJob(Job.Clr.With(CsProjClassicNetToolchain.Net472));
+            //AddJob(Job.CoreRT);
             //Add(HardwareCounter.BranchMispredictions, HardwareCounter.BranchInstructions);
 
-            Add(MemoryDiagnoser.Default);
+            AddDiagnoser(MemoryDiagnoser.Default);
         }
     }
 
