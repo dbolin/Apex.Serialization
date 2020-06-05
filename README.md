@@ -11,6 +11,15 @@ Suitable for realtime workloads where the serialized data will not persist for l
 
 [Nuget Package](https://www.nuget.org/packages/Apex.Serialization/)
 
+### Use Cases
+
+#### Good
+- Caching of data that can be reproduced if lost or unable to be deserialized
+- Distributed processing where all workers are using the same runtime/application versions and are hosted on the same type of hardware
+
+#### Bad
+- Any type of long term storage, such as save files or data archiving, since changes to schema, runtime, library versions, etc. could make deserialization no longer possible
+
 ### Limitations
 
 As the serialization is contract-less, the binary format produced depends on precise characteristics of the types serialized. Most changes to types, such as adding or removing fields, renaming types, or changing relationships between types will break compatibility with previously serialized data.  Serializing and deserializing between different chip architectures and .NET runtimes is not supported.
