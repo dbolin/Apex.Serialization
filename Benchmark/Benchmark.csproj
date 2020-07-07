@@ -21,7 +21,7 @@
     <PackageReference Include="MessagePack" Version="2.1.152" />
     <PackageReference Include="MessagePack.ImmutableCollection" Version="2.1.152" />
     <PackageReference Include="NetSerializer" Version="4.1.1" />
-    <PackageReference Include="protobuf-net" Version="3.0.13" />
+    <PackageReference Include="protobuf-net" Version="3.0.27" />
     <PackageReference Include="ZeroFormatter" Version="1.6.4" />
   </ItemGroup>
 
