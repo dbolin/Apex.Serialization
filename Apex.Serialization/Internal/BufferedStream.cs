@@ -109,7 +109,7 @@ namespace Apex.Serialization.Internal
             {
                 var len = (int)(_size - _bufferPosition);
                 Unsafe.CopyBlock(_bufferPtr, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), (uint)len);
-                _size = _target.Read(_buffer, len, (int)_bufferPosition);
+                _size = _target.Read(_buffer, len, (int)MaxSize - len);
                 var result = _size != 0;
                 _size += len;
                 _bufferPosition = 0;

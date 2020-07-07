@@ -49,12 +49,12 @@ namespace Apex.Serialization.Tests
         {
             public static T F1(T value)
             {
-                return default;
+                return default!;
             }
 
             public T F2(T value)
             {
-                return default;
+                return default!;
             }
 
             public T2 F3<T2>(T value)
