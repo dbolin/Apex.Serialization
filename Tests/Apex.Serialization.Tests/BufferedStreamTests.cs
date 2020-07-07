@@ -335,7 +335,7 @@ namespace Apex.Serialization.Tests
                     return 0;
                 }
 
-                return memoryStream.Read(buffer, offset, 3);
+                return memoryStream.Read(buffer, offset, count > 3 ? 3 : count);
             }
 
             public override long Seek(long offset, SeekOrigin origin) => memoryStream.Seek(offset, origin);
