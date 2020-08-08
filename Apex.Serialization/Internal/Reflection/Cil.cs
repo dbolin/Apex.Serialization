@@ -20,38 +20,38 @@ namespace Apex.Serialization.Internal.Reflection
                 return null;
             }
 
-            try
+            lock (_moduleSync)
             {
-                TypeDefinition typeDef;
-                var loc = type.Assembly.Location;
-                lock (_moduleSync)
+                try
                 {
-                    if(!_moduleDefinitions.TryGetValue(loc, out var moduleDefinition))
+                    TypeDefinition typeDef;
+                    var loc = type.Assembly.Location;
+                    if (!_moduleDefinitions.TryGetValue(loc, out var moduleDefinition))
                     {
                         moduleDefinition = ModuleDefinition.ReadModule(loc);
                         _moduleDefinitions.Add(loc, moduleDefinition);
                     }
                     var typeRef = moduleDefinition.ImportReference(type);
                     typeDef = typeRef.Resolve();
-                }
-                var defaultCtor = typeDef.Methods.FirstOrDefault(x => x.IsConstructor && x.Parameters.Count == 0 && !x.IsStatic);
-                if (defaultCtor == null)
-                {
-                    return null;
-                }
+                    var defaultCtor = typeDef.Methods.FirstOrDefault(x => x.IsConstructor && x.Parameters.Count == 0 && !x.IsStatic);
+                    if (defaultCtor == null)
+                    {
+                        return null;
+                    }
 
-                if (!IsEmptyConstructor(defaultCtor))
-                {
-                    return null;
+                    if (!IsEmptyConstructor(defaultCtor))
+                    {
+                        return null;
+                    }
                 }
-            }
-            catch
-            {
+                catch
+                {
 #if DEBUG
-                throw;
+                    throw;
 #else
-                return null;
+                    return null;
 #endif
+                }
             }
 
             var allConstructors = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
@@ -78,53 +78,53 @@ namespace Apex.Serialization.Internal.Reflection
             // we need to find a constructor that, when combined with the base constructor, assigns values to all fields
             // and does nothing else
 
-            try
+            lock (_moduleSync)
             {
-                TypeReference typeRef;
-                TypeDefinition typeDef;
-                var loc = type.Assembly.Location;
-                lock (_moduleSync)
+                try
                 {
-                    if(!_moduleDefinitions.TryGetValue(loc, out var module))
+                    TypeReference typeRef;
+                    TypeDefinition typeDef;
+                    var loc = type.Assembly.Location;
+                    if (!_moduleDefinitions.TryGetValue(loc, out var module))
                     {
                         module = ModuleDefinition.ReadModule(loc);
                         _moduleDefinitions.Add(loc, module);
                     }
                     typeRef = module.ImportReference(type);
                     typeDef = typeRef.Resolve();
-                }
-                var constructors = typeDef.Methods.Where(x => x.IsConstructor && !x.IsStatic);
+                    var constructors = typeDef.Methods.Where(x => x.IsConstructor && !x.IsStatic);
 
-                foreach (var method in constructors)
-                {
-                    var fieldOrder = ConstructorMatchesFields(typeRef, method, fields);
-                    if (fieldOrder != null)
+                    foreach (var method in constructors)
                     {
-                        var allConstructors = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                        foreach (var constructor in allConstructors)
+                        var fieldOrder = ConstructorMatchesFields(typeRef, method, fields);
+                        if (fieldOrder != null)
                         {
-                            if (Matches(typeRef, constructor, method))
+                            var allConstructors = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                            foreach (var constructor in allConstructors)
                             {
+                                if (Matches(typeRef, constructor, method))
+                                {
 #if DEBUG
-                                TypesUsingConstructor.TryAdd(type, true);
+                                    TypesUsingConstructor.TryAdd(type, true);
 #endif
-                                return (constructor, fieldOrder);
+                                    return (constructor, fieldOrder);
+                                }
                             }
+
+                            return null;
                         }
-
-                        return null;
                     }
-                }
 
-                return null;
-            }
-            catch
-            {
+                    return null;
+                }
+                catch
+                {
 #if DEBUG
-                throw;
+                    throw;
 #else
-                return null;
+                    return null;
 #endif
+                }
             }
         }
 
