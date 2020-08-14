@@ -18,7 +18,7 @@
     <PackageReference Include="Ceras.ImmutableCollections" Version="1.0.0" />
     <PackageReference Include="FluentAssertions" Version="5.10.3" />
     <PackageReference Include="Hyperion" Version="0.9.16" />
-    <PackageReference Include="MessagePack" Version="2.1.152" />
+    <PackageReference Include="MessagePack" Version="2.1.165" />
     <PackageReference Include="MessagePack.ImmutableCollection" Version="2.1.152" />
     <PackageReference Include="NetSerializer" Version="4.1.1" />
     <PackageReference Include="protobuf-net" Version="2.4.6" />
