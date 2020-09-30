@@ -1,6 +1,6 @@
 ﻿using System;
 using System.IO;
-using System.Linq.Expressions;
+using FastExpressionCompiler.LightExpression;
 using System.Reflection;
 using System.Security;
 
@@ -47,7 +47,7 @@ namespace Apex.Serialization.Internal.Reflection
                         Expression.Label(returnLabel)
                         )
                     , fieldInfoParam
-                    ).Compile();
+                    ).CompileFast(true);
                 SetFieldInfoReadonly = (Action<FieldInfo>)Expression.Lambda(
                     Expression.Block(
                         Expression.Assign(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes),
@@ -58,7 +58,7 @@ namespace Apex.Serialization.Internal.Reflection
                         Expression.Label(returnLabel)
                         )
                     , fieldInfoParam
-                    ).Compile();
+                    ).CompileFast(true);
 
                 var s = Binary.Create(new Settings());
                 try

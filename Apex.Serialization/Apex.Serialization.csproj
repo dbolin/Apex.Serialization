@@ -15,10 +15,11 @@
     <Nullable>enable</Nullable>
     <NullableContextOptions>enable</NullableContextOptions>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <DefineConstants>$(DefineConstants);LIGHT_EXPRESSION</DefineConstants>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
-    <DefineConstants>TRACE;DEV</DefineConstants>
+    <DefineConstants>$(DefineConstants);TRACE;DEV</DefineConstants>
   </PropertyGroup>
 
    <PropertyGroup>
@@ -37,6 +38,9 @@
   <ItemGroup>
     <Compile Remove="Benchmark\**" />
     <Compile Remove="Tests\**" />
+    <Compile Include="..\..\FastExpressionCompiler\src\FastExpressionCompiler\FastExpressionCompiler.cs" />
+    <Compile Include="..\..\FastExpressionCompiler\src\FastExpressionCompiler.LightExpression\Expression.cs" />
+    <Compile Include="..\..\FastExpressionCompiler\src\FastExpressionCompiler.LightExpression\ExpressionVisitor.cs" />
     <EmbeddedResource Remove="Benchmark\**" />
     <EmbeddedResource Remove="Tests\**" />
     <None Remove="Benchmark\**" />

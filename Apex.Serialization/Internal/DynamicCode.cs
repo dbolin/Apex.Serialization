@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Linq.Expressions;
+using FastExpressionCompiler.LightExpression;
 using System.Reflection;
 using System.Threading;
 using Apex.Serialization.Extensions;
@@ -62,7 +62,7 @@ namespace Apex.Serialization.Internal
                                     GetWriteFieldExpression(x, isolatedSource, stream, output, settings, visitedTypes, 0)));
 
                 var isolatedBody = Expression.Block(writeStatements);
-                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Write_Isolated_{type.FullName}", new[] { isolatedSource, stream, output }).Compile();
+                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Write_Isolated_{type.FullName}", new[] { isolatedSource, stream, output }).CompileFast(true);
 
                 return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody) };
             }
@@ -93,7 +93,7 @@ namespace Apex.Serialization.Internal
 
             var finalBody = Expression.Block(localVariables, writeStatements);
 
-            var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
+            var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).CompileFast(ifFastFailedReturnNull: false); // todo: @perf may contain the DebugInfo which is not yet supported by FEC - that's why we are fallback for the System Compile if failed
 
             var uniqueId = GetSerializedVersionUniqueId(type, finalBody);
 
@@ -587,7 +587,7 @@ namespace Apex.Serialization.Internal
                 readStatements.AddRange(isolatedFields.Select(x => GetReadFieldExpression(x, isolatedResult, stream, output, settings, localVariables, visitedTypes, 0)));
 
                 var isolatedBody = Expression.Block(localVariables, readStatements);
-                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Read_Isolated_{type.FullName}", new[] { isolatedResult, stream, output }).Compile();
+                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Read_Isolated_{type.FullName}", new[] { isolatedResult, stream, output }).CompileFast(true);
 
                 return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody) };
             }
@@ -613,7 +613,16 @@ namespace Apex.Serialization.Internal
             }
 
             var finalBody = Expression.Block(localVariables, readStatements);
-            var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
+            var lambdaExpr = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output});
+#if DEBUG
+            var ep = lambdaExpr.ToExpressionString(out var ps, out var exprs, out var labelTargets,
+                stripNamespace: true, printType: (_, x) => x.Replace("-", "_"));
+            if (exprs.Count > 40)
+            {
+                var cs = lambdaExpr.ToCSharpString();
+            }
+#endif
+            var lambda = lambdaExpr.CompileFast(true);
 
             return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, finalBody) };
         }
@@ -863,7 +872,7 @@ namespace Apex.Serialization.Internal
                         Expression.Block(
                             methods.Select(m => AfterDeserializeCallExpression(type, m, objectParameter, contextParameter))
                         )
-                        , $"AfterDeserialize_{type.FullName}", new[] {objectParameter, contextParameter}).Compile();
+                        , $"AfterDeserialize_{type.FullName}", new[] {objectParameter, contextParameter}).CompileFast(true);
 
                     readStatements.Add(Expression.Call(output, QueueAfterDeserializationHook,
                         Expression.Constant(action), result));

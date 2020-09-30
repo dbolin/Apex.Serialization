@@ -3,8 +3,7 @@ using BenchmarkDotNet.Attributes;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq.Expressions;
-using System.Text;
+using FastExpressionCompiler.LightExpression;
 using BufferedStream = Apex.Serialization.Internal.BufferedStream;
 
 namespace Benchmark
@@ -22,8 +21,8 @@ namespace Benchmark
             var p = Expression.Parameter(typeof(BufferedStream).MakeByRefType(), "stream");
             var b = Expression.Parameter(typeof(byte), "b");
             var lambda = Expression.Lambda<writeSig>(Expression.Call(p, BinaryStreamMethods<BufferedStream>.GenericMethods<byte>.WriteValueMethodInfo, b), p, b);
-            var compiledLamda = lambda.Compile();
-            return (writeSig)compiledLamda;
+            var compiledLambda = lambda.CompileFast(true);
+            return (writeSig)compiledLambda;
         }
 
         [Benchmark]
