@@ -62,7 +62,8 @@ namespace Apex.Serialization.Internal
                                     GetWriteFieldExpression(x, isolatedSource, stream, output, settings, visitedTypes, 0)));
 
                 var isolatedBody = Expression.Block(writeStatements);
-                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Write_Isolated_{type.FullName}", new[] { isolatedSource, stream, output }).CompileFast(true);
+                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Write_Isolated_{type.FullName}", new[] { isolatedSource, stream, output })
+                    .CompileFast(true);
 
                 return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody) };
             }
@@ -93,7 +94,18 @@ namespace Apex.Serialization.Internal
 
             var finalBody = Expression.Block(localVariables, writeStatements);
 
-            var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).CompileFast(ifFastFailedReturnNull: false); // todo: @perf may contain the DebugInfo which is not yet supported by FEC - that's why we are fallback for the System Compile if failed
+            var lambdaExpr = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output });
+
+#if DEBUG
+            var ep = lambdaExpr.ToExpressionString(out var ps, out var exprs, out var labelTargets,
+                stripNamespace: true, printType: (_, x) => x.Replace("-", "_"));
+            if (exprs.Count > 10)
+            {
+                var cs = lambdaExpr.ToCSharpString();
+            }
+#endif
+
+            var lambda = lambdaExpr.CompileFast(true);
 
             var uniqueId = GetSerializedVersionUniqueId(type, finalBody);
 
@@ -587,7 +599,8 @@ namespace Apex.Serialization.Internal
                 readStatements.AddRange(isolatedFields.Select(x => GetReadFieldExpression(x, isolatedResult, stream, output, settings, localVariables, visitedTypes, 0)));
 
                 var isolatedBody = Expression.Block(localVariables, readStatements);
-                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Read_Isolated_{type.FullName}", new[] { isolatedResult, stream, output }).CompileFast(true);
+                var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Read_Isolated_{type.FullName}", new[] { isolatedResult, stream, output })
+                    .CompileFast(true);
 
                 return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody) };
             }
