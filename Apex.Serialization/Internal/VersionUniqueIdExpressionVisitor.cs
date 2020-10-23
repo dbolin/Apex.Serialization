@@ -86,7 +86,7 @@ namespace Apex.Serialization.Internal
             }
         }
 
-        protected internal override Expression VisitBinary(BinaryExpression node)
+        protected override Expression VisitBinary(BinaryExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -94,27 +94,27 @@ namespace Apex.Serialization.Internal
             return base.VisitBinary(node);
         }
 
-        protected internal override Expression VisitBlock(BlockExpression node)
+        protected override Expression VisitBlock(BlockExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitBlock(node);
         }
 
-        protected internal override CatchBlock VisitCatchBlock(CatchBlock node)
+        protected override CatchBlock VisitCatchBlock(CatchBlock node)
         {
             Combine(node.Test.FullName);
             return base.VisitCatchBlock(node);
         }
 
-        protected internal override Expression VisitConditional(ConditionalExpression node)
+        protected override Expression VisitConditional(ConditionalExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitConditional(node);
         }
 
-        protected internal override Expression VisitConstant(ConstantExpression node)
+        protected override Expression VisitConstant(ConstantExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -122,14 +122,14 @@ namespace Apex.Serialization.Internal
             return base.VisitConstant(node);
         }
 
-        protected internal override Expression VisitDefault(DefaultExpression node)
+        protected override Expression VisitDefault(DefaultExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitDefault(node);
         }
 
-        protected internal override Expression VisitDynamic(DynamicExpression node)
+        protected override Expression VisitDynamic(DynamicExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -137,20 +137,20 @@ namespace Apex.Serialization.Internal
             return base.VisitDynamic(node);
         }
 
-        protected internal override ElementInit VisitElementInit(ElementInit node)
+        protected override ElementInit VisitElementInit(ElementInit node)
         {
             Combine(node.AddMethod);
             return base.VisitElementInit(node);
         }
 
-        protected internal override Expression VisitExtension(Expression node)
+        protected override Expression VisitExtension(Expression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitExtension(node);
         }
 
-        protected internal override Expression VisitGoto(GotoExpression node)
+        protected override Expression VisitGoto(GotoExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -158,7 +158,7 @@ namespace Apex.Serialization.Internal
             return base.VisitGoto(node);
         }
 
-        protected internal override Expression VisitIndex(IndexExpression node)
+        protected override Expression VisitIndex(IndexExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -175,21 +175,21 @@ namespace Apex.Serialization.Internal
             return base.VisitIndex(node);
         }
 
-        protected internal override Expression VisitInvocation(InvocationExpression node)
+        protected override Expression VisitInvocation(InvocationExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitInvocation(node);
         }
 
-        protected internal override Expression VisitLabel(LabelExpression node)
+        protected override Expression VisitLabel(LabelExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitLabel(node);
         }
 
-        protected internal override LabelTarget VisitLabelTarget(LabelTarget? node)
+        protected override LabelTarget VisitLabelTarget(LabelTarget? node)
         {
             if (node != null)
             {
@@ -199,7 +199,7 @@ namespace Apex.Serialization.Internal
             return base.VisitLabelTarget(node!);
         }
 
-        protected internal override Expression VisitLambda<T>(Expression<T> node)
+        protected override Expression VisitLambda<T>(Expression<T> node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -207,21 +207,21 @@ namespace Apex.Serialization.Internal
             return base.VisitLambda(node);
         }
 
-        protected internal override Expression VisitListInit(ListInitExpression node)
+        protected override Expression VisitListInit(ListInitExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitListInit(node);
         }
 
-        protected internal override Expression VisitLoop(LoopExpression node)
+        protected override Expression VisitLoop(LoopExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitLoop(node);
         }
 
-        protected internal override Expression VisitMember(MemberExpression node)
+        protected override Expression VisitMember(MemberExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -229,20 +229,20 @@ namespace Apex.Serialization.Internal
             return base.VisitMember(node);
         }
 
-        protected internal override MemberAssignment VisitMemberAssignment(MemberAssignment node)
+        protected override MemberAssignment VisitMemberAssignment(MemberAssignment node)
         {            Combine(node.BindingType);
             Combine(node.Member);
             return base.VisitMemberAssignment(node);
         }
 
-        protected internal override MemberBinding VisitMemberBinding(MemberBinding node)
+        protected override MemberBinding VisitMemberBinding(MemberBinding node)
         {
             Combine(node.BindingType);
             Combine(node.Member);
             return base.VisitMemberBinding(node);
         }
 
-        protected internal override Expression VisitMemberInit(MemberInitExpression node)
+        protected override Expression VisitMemberInit(MemberInitExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -250,21 +250,21 @@ namespace Apex.Serialization.Internal
             return base.VisitMemberInit(node);
         }
 
-        protected internal override MemberListBinding VisitMemberListBinding(MemberListBinding node)
+        protected override MemberListBinding VisitMemberListBinding(MemberListBinding node)
         {
             Combine(node.BindingType);
             Combine(node.Member);
             return base.VisitMemberListBinding(node);
         }
 
-        protected internal override MemberMemberBinding VisitMemberMemberBinding(MemberMemberBinding node)
+        protected override MemberMemberBinding VisitMemberMemberBinding(MemberMemberBinding node)
         {
             Combine(node.BindingType);
             Combine(node.Member);
             return base.VisitMemberMemberBinding(node);
         }
 
-        protected internal override Expression VisitMethodCall(MethodCallExpression node)
+        protected override Expression VisitMethodCall(MethodCallExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -272,7 +272,7 @@ namespace Apex.Serialization.Internal
             return base.VisitMethodCall(node);
         }
 
-        protected internal override Expression VisitNew(NewExpression node)
+        protected override Expression VisitNew(NewExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -280,14 +280,14 @@ namespace Apex.Serialization.Internal
             return base.VisitNew(node);
         }
 
-        protected internal override Expression VisitNewArray(NewArrayExpression node)
+        protected override Expression VisitNewArray(NewArrayExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitNewArray(node);
         }
 
-        protected internal override Expression VisitParameter(ParameterExpression node)
+        protected override Expression VisitParameter(ParameterExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -296,14 +296,14 @@ namespace Apex.Serialization.Internal
             return base.VisitParameter(node);
         }
 
-        protected internal override Expression VisitRuntimeVariables(RuntimeVariablesExpression node)
+        protected override Expression VisitRuntimeVariables(RuntimeVariablesExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitRuntimeVariables(node);
         }
 
-        protected internal override Expression VisitSwitch(SwitchExpression node)
+        protected override Expression VisitSwitch(SwitchExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -311,19 +311,19 @@ namespace Apex.Serialization.Internal
             return base.VisitSwitch(node);
         }
 
-        protected internal override SwitchCase VisitSwitchCase(SwitchCase node)
+        protected override SwitchCase VisitSwitchCase(SwitchCase node)
         {
             Combine(1);
             return base.VisitSwitchCase(node);
         }
 
-        protected internal override Expression VisitTry(TryExpression node)
+        protected override Expression VisitTry(TryExpression node)
         {
             Combine(node.NodeType);
             return base.VisitTry(node);
         }
 
-        protected internal override Expression VisitTypeBinary(TypeBinaryExpression node)
+        protected override Expression VisitTypeBinary(TypeBinaryExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
@@ -331,14 +331,14 @@ namespace Apex.Serialization.Internal
             return base.VisitTypeBinary(node);
         }
 
-        protected internal override Expression VisitUnary(UnaryExpression node)
+        protected override Expression VisitUnary(UnaryExpression node)
         {
             Combine(node.NodeType);
             Combine(node.Type);
             return base.VisitUnary(node);
         }
 
-        protected internal override Expression VisitDebugInfo(DebugInfoExpression node)
+        protected override Expression VisitDebugInfo(DebugInfoExpression node)
         {
             Combine(node.Document.FileName);
             return base.VisitDebugInfo(node);

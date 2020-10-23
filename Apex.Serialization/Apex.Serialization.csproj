@@ -38,9 +38,6 @@
   <ItemGroup>
     <Compile Remove="Benchmark\**" />
     <Compile Remove="Tests\**" />
-    <Compile Include="..\..\FastExpressionCompiler\src\FastExpressionCompiler\FastExpressionCompiler.cs" />
-    <Compile Include="..\..\FastExpressionCompiler\src\FastExpressionCompiler.LightExpression\Expression.cs" />
-    <Compile Include="..\..\FastExpressionCompiler\src\FastExpressionCompiler.LightExpression\ExpressionVisitor.cs" />
     <EmbeddedResource Remove="Benchmark\**" />
     <EmbeddedResource Remove="Tests\**" />
     <None Remove="Benchmark\**" />
@@ -52,6 +49,7 @@
     <PackageReference Include="System.Collections.Immutable" Version="1.7.1" />
     <PackageReference Include="System.Memory" Version="4.5.4" />
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="4.7.1" />
+    <PackageReference Include="FastExpressionCompiler.LightExpression" Version="3.0.0-preview-02" />
   </ItemGroup>
 
 </Project>
