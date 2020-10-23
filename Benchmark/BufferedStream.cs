@@ -21,7 +21,7 @@ namespace Benchmark
             var p = Expression.Parameter(typeof(BufferedStream).MakeByRefType(), "stream");
             var b = Expression.Parameter(typeof(byte), "b");
             var lambda = Expression.Lambda<writeSig>(Expression.Call(p, BinaryStreamMethods<BufferedStream>.GenericMethods<byte>.WriteValueMethodInfo, b), p, b);
-            var compiledLambda = lambda.CompileFast(true);
+            var compiledLambda = lambda.CompileFast();
             return (writeSig)compiledLambda;
         }
 

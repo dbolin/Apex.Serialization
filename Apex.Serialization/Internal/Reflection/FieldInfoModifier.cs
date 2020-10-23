@@ -47,7 +47,7 @@ namespace Apex.Serialization.Internal.Reflection
                         Expression.Label(returnLabel)
                         )
                     , fieldInfoParam
-                    ).CompileFast(true);
+                    ).CompileFast();
                 SetFieldInfoReadonly = (Action<FieldInfo>)Expression.Lambda(
                     Expression.Block(
                         Expression.Assign(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes),
@@ -58,7 +58,7 @@ namespace Apex.Serialization.Internal.Reflection
                         Expression.Label(returnLabel)
                         )
                     , fieldInfoParam
-                    ).CompileFast(true);
+                    ).CompileFast();
 
                 var s = Binary.Create(new Settings());
                 try

@@ -459,7 +459,7 @@ namespace Apex.Serialization
             var f = Expression.Lambda<Func<object, object>>(
                 Expression.Call(p, typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
                 , p
-            ).CompileFast(true);
+            ).CompileFast();
             return f;
         }
 
@@ -472,7 +472,7 @@ namespace Apex.Serialization
                     Expression.MakeMemberAccess(p,
                         typeof(Delegate).GetField("_target", BindingFlags.Instance | BindingFlags.DeclaredOnly | BindingFlags.NonPublic)), t)
                 , p, t
-            ).CompileFast(true);
+            ).CompileFast();
             return f;
         }
 
