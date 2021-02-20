@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netcoreapp3.1</TargetFrameworks>
+    <TargetFrameworks>net5</TargetFrameworks>
     <IsPackable>false</IsPackable>
     <LangVersion>8.0</LangVersion>
     <SignAssembly>true</SignAssembly>
@@ -12,10 +12,6 @@
     <NoWarn>CS8605;CS8602;CS0649;CS8002</NoWarn>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)|$(Framework)'=='netcoreapp3.1'">
-    <DefineConstants>NETCOREAPP</DefineConstants>
-  </PropertyGroup>
-  
   <ItemGroup>
     <PackageReference Include="coverlet.msbuild" Version="2.9.0">
       <PrivateAssets>all</PrivateAssets>

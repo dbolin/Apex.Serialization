@@ -189,7 +189,7 @@ namespace Apex.Serialization.Internal
             return base.VisitLabel(node);
         }
 
-        protected override LabelTarget VisitLabelTarget(LabelTarget? node)
+        protected override LabelTarget? VisitLabelTarget(LabelTarget? node)
         {
             if (node != null)
             {
