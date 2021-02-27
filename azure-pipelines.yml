@@ -19,10 +19,10 @@ steps:
   inputs:
     Contents: '**/*.cobertura.xml'
 - script: |
-   dotnet clean Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Debug
-   dotnet clean Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Release
-   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
-   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Release --logger "trx;LogFileName=results.trx"
+   dotnet clean Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f -c Debug
+   dotnet clean Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f -c Release
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f -c Release --logger "trx;LogFileName=results.trx"
   displayName: 'dotnet test'
 
 - task: PublishCodeCoverageResults@1
