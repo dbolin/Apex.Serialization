@@ -26,8 +26,7 @@ namespace Benchmark
             AddExporter(DefaultConfig.Instance.GetExporters().ToArray()); // manual config has no exporters by default
             AddColumnProvider(DefaultConfig.Instance.GetColumnProviders().ToArray()); // manual config has no columns by default
 
-            //AddJob(Job.Default.With(CsProjCoreToolchain.NetCoreApp30).WithGcServer(false));
-            AddJob(Job.Default.With(CsProjCoreToolchain.NetCoreApp31).WithGcServer(true));
+            AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.NetCoreApp50).WithGcServer(true));
             //AddJob(Job.Clr.With(CsProjClassicNetToolchain.Net472));
             //AddJob(Job.CoreRT);
             //Add(HardwareCounter.BranchMispredictions, HardwareCounter.BranchInstructions);

@@ -654,7 +654,7 @@ namespace Apex.Serialization.Internal
                 readStatements.Add(
                     Expression.IfThen(
                             Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),
-                            Expression.Goto(skipReadLabel)
+                            Expression.Goto(skipReadLabel!)
                         )
                     );
 
@@ -676,7 +676,7 @@ namespace Apex.Serialization.Internal
                                                 SavedReferencesListIndexer, Expression.Decrement(refIndex)),
                                             type)
                                         ),
-                                        Expression.Goto(skipReadLabel)
+                                        Expression.Goto(skipReadLabel!)
                                     )
                                 )
                             )

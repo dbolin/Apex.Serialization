@@ -5,8 +5,11 @@ variables:
 
 steps:
 - script: |
+   dotnet clean Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)
    dotnet build Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)
+   dotnet clean DeserializeTest/DeserializeTest.csproj
    dotnet build DeserializeTest/DeserializeTest.csproj
+   dotnet clean DeserializeTest2/DeserializeTest2.csproj
    dotnet build DeserializeTest2/DeserializeTest2.csproj
   displayName: 'dotnet build'
 - task: DeleteFiles@1
@@ -16,8 +19,10 @@ steps:
   inputs:
     Contents: '**/*.cobertura.xml'
 - script: |
-   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
-   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -f netcoreapp3.1 -c Release --logger "trx;LogFileName=results.trx"
+   dotnet clean Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -c Debug
+   dotnet clean Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -c Release
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
+   dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -c Release --logger "trx;LogFileName=results.trx"
   displayName: 'dotnet test'
 
 - task: PublishCodeCoverageResults@1

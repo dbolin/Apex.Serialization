@@ -35,7 +35,7 @@ namespace Apex.Serialization.Internal.Reflection
             if (fieldInfo_m_Attributes != null)
             {
                 var fieldInfoParam = Expression.Parameter(typeof(FieldInfo));
-                var castedType = Expression.Convert(fieldInfoParam, type);
+                var castedType = Expression.Convert(fieldInfoParam, type!);
                 var returnLabel = Expression.Label();
                 SetFieldInfoNotReadonly = (Action<FieldInfo>)Expression.Lambda(
                     Expression.Block(
