@@ -1,0 +1,15 @@
+version: 2
+updates:
+- package-ecosystem: nuget
+  directory: "/"
+  schedule:
+    interval: daily
+  open-pull-requests-limit: 10
+  ignore:
+  - dependency-name: Hyperion
+    versions:
+    - 0.10.0
+    - 0.9.17
+  - dependency-name: protobuf-net
+    versions:
+    - 3.0.73
