@@ -11,6 +11,8 @@ Suitable for realtime workloads where the serialized data will not persist for l
 
 [Nuget Package](https://www.nuget.org/packages/Apex.Serialization/)
 
+Using the latest package version is recommended, but 1.3.4 is the latest version that supportes netstandard or .NET framework targets.
+
 ### Use Cases
 
 #### Good
