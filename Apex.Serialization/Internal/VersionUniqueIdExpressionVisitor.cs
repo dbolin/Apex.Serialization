@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Linq.Expressions;
+using FastExpressionCompiler.LightExpression;
 using System.Reflection;
 
 namespace Apex.Serialization.Internal
@@ -196,7 +196,7 @@ namespace Apex.Serialization.Internal
                 Combine(node.Name);
                 Combine(node.Type);
             }
-            return base.VisitLabelTarget(node);
+            return base.VisitLabelTarget(node!);
         }
 
         protected override Expression VisitLambda<T>(Expression<T> node)
@@ -341,7 +341,6 @@ namespace Apex.Serialization.Internal
         protected override Expression VisitDebugInfo(DebugInfoExpression node)
         {
             Combine(node.Document.FileName);
-
             return base.VisitDebugInfo(node);
         }
     }
