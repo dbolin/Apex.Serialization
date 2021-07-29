@@ -19,7 +19,7 @@
     <PackageReference Include="FluentAssertions" Version="5.10.3" />
     <PackageReference Include="Hyperion" Version="0.9.16" />
     <PackageReference Include="MessagePack" Version="2.2.85" />
-    <PackageReference Include="MessagePack.ImmutableCollection" Version="2.2.85" />
+    <PackageReference Include="MessagePack.ImmutableCollection" Version="2.3.75" />
     <PackageReference Include="NetSerializer" Version="4.1.1" />
     <PackageReference Include="protobuf-net" Version="2.4.6" />
     <PackageReference Include="ZeroFormatter" Version="1.6.4" />
