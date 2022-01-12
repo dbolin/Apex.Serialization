@@ -17,7 +17,7 @@
     <PackageReference Include="Ceras" Version="4.1.7" />
     <PackageReference Include="Ceras.ImmutableCollections" Version="1.0.0" />
     <PackageReference Include="FluentAssertions" Version="5.10.3" />
-    <PackageReference Include="Hyperion" Version="0.9.16" />
+    <PackageReference Include="Hyperion" Version="0.12.0" />
     <PackageReference Include="MessagePack" Version="2.2.85" />
     <PackageReference Include="MessagePack.ImmutableCollection" Version="2.2.85" />
     <PackageReference Include="NetSerializer" Version="4.1.1" />
