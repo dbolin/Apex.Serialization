@@ -4,7 +4,8 @@ using Apex.Serialization.Internal.Reflection;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq.Expressions;
+// using System.Linq.Expressions;
+using FastExpressionCompiler.LightExpression;
 using System.Reflection;
 
 namespace Apex.Serialization
@@ -455,22 +456,24 @@ namespace Apex.Serialization
         private static Func<object, object> CreateCloneFunc()
         {
             var p = Expression.Parameter(typeof(object));
-            return Expression.Lambda<Func<object, object>>(
+            var f = Expression.Lambda<Func<object, object>>(
                 Expression.Call(p, typeof(object).GetMethod("MemberwiseClone", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly)!)
                 , p
-            ).Compile();
+            ).CompileFast();
+            return f;
         }
 
         private static Action<Delegate, object> CreateSetTargetAction()
         {
             var p = Expression.Parameter(typeof(Delegate));
             var t = Expression.Parameter(typeof(object));
-            return Expression.Lambda<Action<Delegate, object>>(
+            var f = Expression.Lambda<Action<Delegate, object>>(
                 Expression.Assign(
                     Expression.MakeMemberAccess(p,
                         typeof(Delegate).GetField("_target", BindingFlags.Instance | BindingFlags.DeclaredOnly | BindingFlags.NonPublic)!), t)
                 , p, t
-            ).Compile();
+            ).CompileFast();
+            return f;
         }
 
         internal Delegate ReadFunction()

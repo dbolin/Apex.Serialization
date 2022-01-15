@@ -3,7 +3,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Linq.Expressions;
+using static System.Linq.Expressions.ExpressionType;
+using FastExpressionCompiler.LightExpression;
 
 namespace Apex.Serialization.Internal
 {
@@ -44,7 +45,7 @@ namespace Apex.Serialization.Internal
                 var skipLabel = Expression.Label("skipWrite");
                 statements.Add(
                     Expression.IfThen(
-                        Expression.Equal(Expression.Constant(0), lengths.Aggregate((Expression)Expression.Empty(), (a,b) => a.NodeType == ExpressionType.Default ? (Expression)b : Expression.Or(a,b))),
+                        Expression.Equal(Expression.Constant(0), lengths.Aggregate((Expression)Expression.Empty(), (a,b) => a.NodeType == Default ? (Expression)b : Expression.Or(a,b))),
                         Expression.Goto(skipLabel)
                         )
                     );
