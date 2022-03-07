@@ -8,17 +8,17 @@ namespace Apex.Serialization.Tests
     {
         public sealed class TestB
         {
-            internal int Value = 1;
+            public int Value = 1;
         }
 
         public class TestC
         {
-            internal int Value = 2;
+            public int Value = 2;
         }
 
         public class TestD : TestC
         {
-            internal new int Value = 3;
+            public new int Value = 3;
         }
 
         public sealed class TestObject
@@ -161,7 +161,7 @@ namespace Apex.Serialization.Tests
 
             RoundTrip(x, (a, b) =>
             {
-                a.Ref.Should().BeEquivalentTo(b.Ref);
+                (a.Ref).Should().BeEquivalentTo(b.Ref);
                 ((TestStruct1) a.Struct).Ref.Should().BeEquivalentTo(((TestStruct1) b.Struct).Ref);
             });
         }

@@ -34,7 +34,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void RoundTripSucceeds()
         {
-            var args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest")} --no-build -v q";
+            var args = $"run --project {Path.Combine(GetBasePath(), "DeserializeTest")} --no-build -v q";
             var p = new Process
             {
                 StartInfo = new ProcessStartInfo("dotnet", args)
@@ -56,7 +56,7 @@ namespace Apex.Serialization.Tests
 
             p.ExitCode.Should().Be(0);
 
-            args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest")} --no-build -v q -- {output}";
+            args = $"run --project {Path.Combine(GetBasePath(), "DeserializeTest")} --no-build -v q -- {output}";
             p = new Process
             {
                 StartInfo = new ProcessStartInfo("dotnet", args) 
@@ -83,7 +83,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void ChangeOfFieldInBaseTypeFails()
         {
-            var args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest")} --no-build -v q";
+            var args = $"run --project {Path.Combine(GetBasePath(), "DeserializeTest")} --no-build -v q";
             var p = new Process
             {
                 StartInfo = new ProcessStartInfo("dotnet", args)
@@ -105,7 +105,7 @@ namespace Apex.Serialization.Tests
 
             p.ExitCode.Should().Be(0);
 
-            args = $"run -p {Path.Combine(GetBasePath(), "DeserializeTest2")} --no-build -v q -- {output}";
+            args = $"run --project {Path.Combine(GetBasePath(), "DeserializeTest2")} --no-build -v q -- {output}";
             p = new Process
             {
                 StartInfo = new ProcessStartInfo("dotnet", args)
