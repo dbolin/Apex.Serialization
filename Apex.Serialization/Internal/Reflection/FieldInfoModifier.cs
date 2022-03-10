@@ -9,7 +9,7 @@ namespace Apex.Serialization.Internal.Reflection
     // If I didn't do it, then someone else would
     internal static class FieldInfoModifier
     {
-        internal class TestReadonly
+        internal sealed class TestReadonly
         {
             public TestReadonly()
             {
@@ -60,7 +60,7 @@ namespace Apex.Serialization.Internal.Reflection
                     , fieldInfoParam
                     ).Compile();
 
-                var s = Binary.Create(new Settings());
+                var s = Binary.Create(new Settings { UseSerializedVersionId = false });
                 try
                 {
                     var test = new TestReadonly(5);
