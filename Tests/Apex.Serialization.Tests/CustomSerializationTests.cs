@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Apex.Serialization.Extensions;
 using FluentAssertions;
 using Xunit;
@@ -11,16 +12,30 @@ namespace Apex.Serialization.Tests
     {
         public class Test
         {
+            public Test? Nested;
             public int Value;
 
             public static void Serialize(Test t, IBinaryWriter writer)
             {
                 writer.Write(t.Value - 1);
+                if (t.Nested != null)
+                {
+                    writer.Write<byte>(1);
+                    writer.WriteObject(t.Nested);
+                } else
+                {
+                    writer.Write<byte>(0);
+                }
             }
 
             public static void Deserialize(Test t, IBinaryReader reader)
             {
                 t.Value = reader.Read<int>();
+                var isNotNullByte = reader.Read<byte>();
+                if (isNotNullByte == 1)
+                {
+                    t.Nested = reader.ReadObject<Test>();
+                }
             }
         }
 
@@ -44,6 +59,11 @@ namespace Apex.Serialization.Tests
             }
         }
 
+        public class TestWithHashSet
+        {
+            public readonly HashSet<Test> values = new HashSet<Test>();
+        }
+
         [Fact]
         public void SimpleTest()
         {
@@ -54,7 +74,7 @@ namespace Apex.Serialization.Tests
             var binary = Binary.Create(settings);
             var m = new MemoryStream();
 
-            var x = new Test {Value = 10};
+            var x = new Test {Value = 10, Nested = new Test { Value = 9 } };
 
             binary.Write(x, m);
 
@@ -63,6 +83,46 @@ namespace Apex.Serialization.Tests
             var y = binary.Read<Test>(m);
 
             y.Value.Should().Be(x.Value - 1);
+            y.Nested.Value.Should().Be(x.Nested.Value - 1);
+        }
+
+        [Fact]
+        public void HashSetTest()
+        {
+            var settings = new Settings { SupportSerializationHooks = true }
+                .RegisterCustomSerializer<HashSet<Test>>((o, s) =>
+                {
+                    s.Write(o.Count);
+                    foreach (var i in o)
+                    {
+                        s.WriteObject(i);
+                    }
+                }, (o, s) =>
+                {
+                    var count = s.Read<int>();
+                    o.EnsureCapacity(count);
+                    for (int i = 0; i < count; ++i)
+                    {
+                        o.Add(s.ReadObject<Test>());
+                    }
+                })
+                .MarkSerializable(typeof(TestWithHashSet))
+                .MarkSerializable(typeof(HashSet<Test>))
+                .MarkSerializable(typeof(Test));
+
+            var binary = Binary.Create(settings);
+            var m = new MemoryStream();
+
+            var x = new TestWithHashSet();
+            x.values.Add(new Test { Value = 123 });
+
+            binary.Write(x, m);
+
+            m.Seek(0, SeekOrigin.Begin);
+
+            var y = binary.Read<TestWithHashSet>(m);
+
+            y.values.First().Value.Should().Be(123);
         }
 
         [Fact]

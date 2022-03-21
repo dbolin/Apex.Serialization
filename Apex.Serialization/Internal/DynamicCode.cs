@@ -681,7 +681,8 @@ namespace Apex.Serialization.Internal
             }
 
             // write fields for normal types, some things are special like collections
-            var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings, localVariables, visitedTypes, depth, out var created);
+            // if readMetadata is true, the statements to handle null/existing ref have already been generated, so skip them in this method if necessary
+            var specialExpression = HandleSpecialRead(type, output, result, stream, fields, settings, localVariables, visitedTypes, depth, !readMetadata, out var created);
 
             if(specialExpression == null)
             {
@@ -915,7 +916,7 @@ namespace Apex.Serialization.Internal
         internal static Expression? HandleSpecialRead(Type type, ParameterExpression output, Expression result, ParameterExpression stream,
             List<FieldInfo> fields, ImmutableSettings settings, List<ParameterExpression> localVariables,
             ImmutableHashSet<Type> visitedTypes,
-            int depth,
+            int depth, bool readMetadata,
             out bool created)
         {
             var primitive = HandlePrimitiveRead(stream, output, type);
@@ -951,7 +952,7 @@ namespace Apex.Serialization.Internal
                 return Expression.Assign(result, Expression.Convert(Expression.Call(output, ReadFunctionMethod), type));
             }
 
-            var custom = HandleCustomRead(type, output, stream, result, settings);
+            var custom = HandleCustomRead(type, output, stream, result, settings, readMetadata);
             if (custom != null)
             {
                 created = false;
@@ -976,7 +977,8 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
-        private static Expression? HandleCustomRead(Type type, ParameterExpression output, ParameterExpression stream, Expression result, ImmutableSettings settings)
+        private static Expression? HandleCustomRead(Type type, ParameterExpression output, ParameterExpression stream, Expression result, ImmutableSettings settings,
+            bool readMetadata)
         {
             if (!settings.SupportSerializationHooks)
             {
@@ -1019,7 +1021,7 @@ namespace Apex.Serialization.Internal
                 return null;
             }
 
-            if (!type.IsValueType)
+            if (!type.IsValueType && readMetadata)
             {
                 statements.Add(ReserveConstantSize(stream, 1));
                 statements.Add(Expression.IfThenElse(
