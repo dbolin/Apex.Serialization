@@ -25,7 +25,7 @@ namespace Apex.Serialization.Tests
         private Action<Settings>[] _settingsConfigurations = new Action<Settings>[]
         {
             s => s.SerializationMode = Mode.Graph,
-            s => s.UseSerializedVersionId = true,
+            s => s.UseSerializedVersionId = false,
             s => s.InliningMaxDepth = 0,
             s => s.ForceReflectionToSetReadonlyFields = true,
             s => s.FlattenClassHierarchy = false

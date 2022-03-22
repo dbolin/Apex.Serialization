@@ -8,7 +8,7 @@ using Xunit;
 
 namespace Apex.Serialization.Tests
 {
-    public class CustomSerializationTests
+    public class CustomSerializationTests : AbstractSerializerTestBase
     {
         public class Test
         {
@@ -64,33 +64,12 @@ namespace Apex.Serialization.Tests
             public readonly HashSet<Test> values = new HashSet<Test>();
         }
 
-        [Fact]
-        public void SimpleTest()
+        public CustomSerializationTests()
         {
-            var settings = new Settings { SupportSerializationHooks = true }
-                .RegisterCustomSerializer<Test>(Test.Serialize, Test.Deserialize)
-                .MarkSerializable(typeof(Test));
-
-            var binary = Binary.Create(settings);
-            var m = new MemoryStream();
-
-            var x = new Test {Value = 10, Nested = new Test { Value = 9 } };
-
-            binary.Write(x, m);
-
-            m.Seek(0, SeekOrigin.Begin);
-
-            var y = binary.Read<Test>(m);
-
-            y.Value.Should().Be(x.Value - 1);
-            y.Nested.Value.Should().Be(x.Nested.Value - 1);
-        }
-
-        [Fact]
-        public void HashSetTest()
-        {
-            var settings = new Settings { SupportSerializationHooks = true }
-                .RegisterCustomSerializer<HashSet<Test>>((o, s) =>
+            _modifySettings = s =>
+            {
+                s.RegisterCustomSerializer<Test>(Test.Serialize, Test.Deserialize);
+                s.RegisterCustomSerializer<HashSet<Test>>((o, s) =>
                 {
                     s.Write(o.Count);
                     foreach (var i in o)
@@ -105,24 +84,29 @@ namespace Apex.Serialization.Tests
                     {
                         o.Add(s.ReadObject<Test>());
                     }
-                })
-                .MarkSerializable(typeof(TestWithHashSet))
-                .MarkSerializable(typeof(HashSet<Test>))
-                .MarkSerializable(typeof(Test));
+                });
+            };
+        }
 
-            var binary = Binary.Create(settings);
-            var m = new MemoryStream();
+        [Fact]
+        public void SimpleTest()
+        {
+            var x = new Test {Value = 10 };
 
+            RoundTrip(x, (a, b) => a.Value == b.Value + 1);
+
+            x = new Test { Value = 10, Nested = new Test { Value = 9 } };
+
+            RoundTrip(x, (a, b) => a.Value == b.Value + 1 && a.Nested.Value == b.Nested.Value + 1);
+        }
+
+        [Fact]
+        public void HashSetTest()
+        {
             var x = new TestWithHashSet();
             x.values.Add(new Test { Value = 123 });
 
-            binary.Write(x, m);
-
-            m.Seek(0, SeekOrigin.Begin);
-
-            var y = binary.Read<TestWithHashSet>(m);
-
-            y.values.First().Value.Should().Be(123);
+            RoundTrip(x, (a, b) => a.values.First().Value == b.values.First().Value + 1);
         }
 
         [Fact]
@@ -152,7 +136,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void Precompile()
         {
-            var settings = new Settings { SupportSerializationHooks = true }
+            var settings = new Settings { SupportSerializationHooks = true, AllowFunctionSerialization = true }
                 .MarkSerializable(typeof(CustomSerializationTests));
             var binary = Binary.Create(settings);
 
@@ -165,7 +149,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void PrecompileOpenGeneric()
         {
-            var settings = new Settings { SupportSerializationHooks = true }
+            var settings = new Settings { SupportSerializationHooks = true, AllowFunctionSerialization = true }
                 .MarkSerializable(typeof(OpenGeneric<>));
             var binary = Binary.Create(settings);
 
