@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Text;
 using Xunit;
 
@@ -7,6 +8,14 @@ namespace Apex.Serialization.Tests
 {
     public class NullableTests : AbstractSerializerTestBase
     {
+        public static Type[] SerializableTypes()
+        {
+            return new[]
+            {
+                typeof(ImmutableArray<>)
+            };
+        }
+
         public struct Test2
         {
             public int Value;
@@ -18,6 +27,8 @@ namespace Apex.Serialization.Tests
             public decimal? Value2;
             public DateTime? Value3;
             public Test2? Value4;
+            // non-primtive struct
+            public ImmutableArray<int> Value5;
         }
 
         [Fact]

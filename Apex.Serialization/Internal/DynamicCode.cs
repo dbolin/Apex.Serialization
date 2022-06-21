@@ -435,19 +435,22 @@ namespace Apex.Serialization.Internal
             var nullableType = declaredType.GenericTypeArguments[0];
             var isPrimitive = TypeFields.IsPrimitive(nullableType);
 
-            return Expression.IfThenElse(
-                Expression.Call(valueAccessExpression, hasValueMethod),
+            return
                 Expression.Block(
-                    new[] {
-                        !isPrimitive ? ReserveConstantSize(stream, 1) : Expression.Empty(),
-                        Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)1)),
-                    }
-                        .Concat(
-                    GetWriteStatementsForType(nullableType, settings, stream, output,
-                        Expression.Call(valueAccessExpression, valueMethod), false, Expression.Call(valueAccessExpression, valueMethod),
-                        visitedTypes, depth, writeSize: !isPrimitive))
-                    ),
-                Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)0))
+                    !isPrimitive ? ReserveConstantSize(stream, 1) : Expression.Empty(),
+                    Expression.IfThenElse(
+                    Expression.Call(valueAccessExpression, hasValueMethod),
+                    Expression.Block(
+                        new[] {
+                            Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)1)),
+                        }
+                            .Concat(
+                        GetWriteStatementsForType(nullableType, settings, stream, output,
+                            Expression.Call(valueAccessExpression, valueMethod), false, Expression.Call(valueAccessExpression, valueMethod),
+                            visitedTypes, depth, writeSize: !isPrimitive))
+                        ),
+                    Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.WriteValueMethodInfo, Expression.Constant((byte)0))
+                    )
                 );
         }
 

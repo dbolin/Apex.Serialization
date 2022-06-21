@@ -28,7 +28,7 @@ namespace Apex.Serialization.Tests
         public static readonly IEnumerable<object[]> HardCodedTypeIds = new[] {
             new object[] {typeof(int), 494594721},
             new object[] {typeof(PrimitiveValue), 1938464263},
-            new object[] {typeof(Value), 1399811549},
+            new object[] {typeof(Value), 1445229640},
             new object[] {typeof(CustomProperty), 797909415},
         };
 

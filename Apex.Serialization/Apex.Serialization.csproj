@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net6</TargetFrameworks>
-    <Version>4.0.2</Version>
+    <Version>4.0.3</Version>
     <Authors>Dominic Bolin</Authors>
     <Description>A high performance contract-less binary serializer</Description>
     <PackageProjectUrl>https://github.com/dbolin/Apex.Serialization</PackageProjectUrl>

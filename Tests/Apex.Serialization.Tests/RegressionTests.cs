@@ -17,7 +17,8 @@ namespace Apex.Serialization.Tests
                 typeof(ImmutableArray<>),
                 typeof(CustomProperty),
                 typeof(Value),
-                typeof(PrimitiveValue)
+                typeof(PrimitiveValue),
+                typeof(Option)
             };
         }
 
@@ -55,6 +56,16 @@ namespace Apex.Serialization.Tests
             var x = new[] { o, o, o };
 
             RoundTrip(x);
+        }
+
+        [Fact]
+        public void NullableGenericValueType()
+        {
+            var x = new Option(Guid.Empty, null);
+            RoundTrip(x);
+
+            var y = new Option(Guid.Empty, ImmutableArray<string>.Empty);
+            RoundTrip(y);
         }
     }
 
@@ -124,5 +135,17 @@ namespace Apex.Serialization.Tests
         public Guid C;
         public Guid D;
         public Guid E;
+    }
+
+    public sealed class Option
+    {
+        public Guid Id { get; }
+        public ImmutableArray<string>? SelectedValues { get; }
+
+        public Option(Guid id, ImmutableArray<string>? selectedValues)
+        {
+            Id = id;
+            SelectedValues = selectedValues;
+        }
     }
 }
