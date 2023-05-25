@@ -204,14 +204,16 @@ namespace Apex.Serialization.Internal
                     var baseType = type.BaseType;
                     while (baseType != null && baseType != typeof(object))
                     {
-                        if(TypeFields.GetOrderedFields(baseType, settings).Count == 0)
+                        if (TypeFields.GetOrderedFields(baseType, settings).Count == 0)
                         {
                             baseType = baseType.BaseType;
                             continue;
                         }
 
-                        var writeSerializedIdMethod = WriteSerializedVersionUniqueIdMethod.MakeGenericMethod(baseType);
-                        writeStatements.Add(Expression.Call(output, writeSerializedIdMethod));
+                        if (settings.UseSerializedVersionId) {
+                            var writeSerializedIdMethod = WriteSerializedVersionUniqueIdMethod.MakeGenericMethod(baseType);
+                            writeStatements.Add(Expression.Call(output, writeSerializedIdMethod));
+                        }
 
                         var writeMethod = typeof(WriteMethods<,,>.WriteSealed).MakeGenericType(baseType, typeof(TStream), settings.GetGeneratedType());
                         var generateWriteMethod = typeof(DynamicCode<,>)
@@ -220,12 +222,6 @@ namespace Apex.Serialization.Internal
                             .MakeGenericMethod(writeMethod);
                         var method = Expression.Call(generateWriteMethod, Expression.Constant(baseType), Expression.Constant(settings), Expression.Constant(false), Expression.Constant(true));
                         writeStatements.Add(Expression.Invoke(method, actualSource, stream, output));
-
-                        DynamicCodeMethods._virtualWriteMethods.TryGetValue(
-                            new TypeKey(baseType, settings, false, true),
-                            out var gd);
-                        var doc = Expression.SymbolDocument(gd.SerializedVersionUniqueId.ToString());
-                        writeStatements.Add(Expression.DebugInfo(doc, 1, 1, 1, 1));
                         baseType = baseType.BaseType;
                     }
                 }
@@ -675,7 +671,7 @@ namespace Apex.Serialization.Internal
 
             bool specificConstructorDeserialization = false;
 
-            if (!created && !type.IsValueType)
+            if (!created && !type.IsValueType && !type.IsAbstract)
             {
                 var ctor = Cil.FindEmptyDeserializationConstructor(type);
                 if (ctor != null)
@@ -819,8 +815,11 @@ namespace Apex.Serialization.Internal
                                 continue;
                             }
 
-                            var checkSerializedIdMethod = CheckSerializedVersionUniqueIdMethod.MakeGenericMethod(baseType);
-                            readStatements.Add(Expression.Call(output, checkSerializedIdMethod));
+                            if (settings.UseSerializedVersionId)
+                            {
+                                var checkSerializedIdMethod = CheckSerializedVersionUniqueIdMethod.MakeGenericMethod(baseType);
+                                readStatements.Add(Expression.Call(output, checkSerializedIdMethod));
+                            }
 
                             var readMethod = typeof(WriteMethods<,,>.WriteSealed).MakeGenericType(baseType, typeof(TStream), settings.GetGeneratedType());
                             var generateReadMethod = typeof(DynamicCode<,>)

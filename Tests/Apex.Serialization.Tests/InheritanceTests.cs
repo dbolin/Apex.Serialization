@@ -79,6 +79,16 @@ namespace Apex.Serialization.Tests
             public int B = 3;
         }
 
+        public abstract class AB1
+        {
+            public int A;
+        }
+
+        public class BB2 : AB1
+        {
+            public int B;
+        }
+
         [Fact]
         public void InheritanceV()
         {
@@ -110,6 +120,14 @@ namespace Apex.Serialization.Tests
             x.a = x;
 
             RoundTrip(x, (x, y) => { (x == x.a).Should().BeTrue(); }, filter: s => s.SerializationMode == Mode.Graph);
+        }
+
+        [Fact]
+        public void AbstractBaseClass()
+        {
+            var x = new BB2();
+
+            RoundTrip(x);
         }
     }
 }
