@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FluentAssertions;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Xunit;
@@ -43,6 +44,16 @@ namespace Apex.Serialization.Tests
         public class DerivedFromList : List<int>
         {
             public int Value;
+        }
+
+        public class BaseClassThatReferencesDerived
+        {
+            public DerivedClassReferencedFromBase? a;
+        }
+
+        public class DerivedClassReferencedFromBase : BaseClassThatReferencesDerived
+        {
+
         }
 
         [Fact]
@@ -90,6 +101,15 @@ namespace Apex.Serialization.Tests
             y.Add(3);
 
             RoundTrip(y);
+        }
+
+        [Fact]
+        public void BaseClassThatReferencesDerivedClass()
+        {
+            var x = new DerivedClassReferencedFromBase();
+            x.a = x;
+
+            RoundTrip(x, (x, y) => { (x == x.a).Should().BeTrue(); }, filter: s => s.SerializationMode == Mode.Graph);
         }
     }
 }

@@ -215,8 +215,8 @@ namespace Apex.Serialization.Internal
                             .MakeGenericType(typeof(TStream), typeof(TBinary))
                             .GetMethod("GenerateWriteMethod", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!
                             .MakeGenericMethod(writeMethod);
-                        var method = generateWriteMethod.Invoke(null, new object[] { baseType, settings, false, true });
-                        writeStatements.Add(Expression.Invoke(Expression.Constant(method), actualSource, stream, output));
+                        var method = Expression.Call(generateWriteMethod, Expression.Constant(baseType), Expression.Constant(settings), Expression.Constant(false), Expression.Constant(true));
+                        writeStatements.Add(Expression.Invoke(method, actualSource, stream, output));
 
                         DynamicCodeMethods._virtualWriteMethods.TryGetValue(
                             new TypeKey(baseType, settings, false, true),
@@ -821,8 +821,8 @@ namespace Apex.Serialization.Internal
                                 .MakeGenericType(typeof(TStream), typeof(TBinary))
                                 .GetMethod("GenerateReadMethod", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!
                                 .MakeGenericMethod(readMethod);
-                            var method = generateReadMethod.Invoke(null, new object[] { baseType, settings, false, true });
-                            readStatements.Add(Expression.Invoke(Expression.Constant(method), result, stream, output));
+                            var method = Expression.Call(generateReadMethod, Expression.Constant(baseType), Expression.Constant(settings), Expression.Constant(false), Expression.Constant(true));
+                            readStatements.Add(Expression.Invoke(method, result, stream, output));
                             baseType = baseType.BaseType;
                         }
                     }
