@@ -101,6 +101,11 @@ namespace Apex.Serialization.Internal
         private static readonly MethodInfo CustomContextGetter =
             typeof(TBinary).GetMethod("GetCustomContext", InstanceFlags)!;
 
+        private static readonly MethodInfo CheckSerializedVersionUniqueIdMethod =
+            typeof(TBinary).GetMethod("CheckSerializedVersionUniqueId", InstanceFlags, new Type[] { })!;
+        private static readonly MethodInfo WriteSerializedVersionUniqueIdMethod =
+            typeof(TBinary).GetMethod("WriteSerializedVersionUniqueId", InstanceFlags, new Type[] { })!;
+
         private static readonly MethodInfo WriteFunctionMethod = typeof(TBinary).GetMethod("WriteFunction", InstanceFlags)!;
         private static readonly MethodInfo ReadFunctionMethod = typeof(TBinary).GetMethod("ReadFunction", InstanceFlags)!;
 

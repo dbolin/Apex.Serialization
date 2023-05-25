@@ -210,6 +210,9 @@ namespace Apex.Serialization.Internal
                             continue;
                         }
 
+                        var writeSerializedIdMethod = WriteSerializedVersionUniqueIdMethod.MakeGenericMethod(baseType);
+                        writeStatements.Add(Expression.Call(output, writeSerializedIdMethod));
+
                         var writeMethod = typeof(WriteMethods<,,>.WriteSealed).MakeGenericType(baseType, typeof(TStream), settings.GetGeneratedType());
                         var generateWriteMethod = typeof(DynamicCode<,>)
                             .MakeGenericType(typeof(TStream), typeof(TBinary))
@@ -521,7 +524,7 @@ namespace Apex.Serialization.Internal
         {
             try
             {
-                return (T)DynamicCodeMethods._virtualReadMethods.GetOrAdd(new TypeKey(type, settings, isBoxed, isBoxed),
+                return (T)DynamicCodeMethods._virtualReadMethods.GetOrAdd(new TypeKey(type, settings, isBoxed, isolated),
                     t => GenerateReadMethodImpl<T>(type, settings, isBoxed, isolated)).Delegate;
             }
             finally
@@ -815,6 +818,9 @@ namespace Apex.Serialization.Internal
                                 baseType = baseType.BaseType;
                                 continue;
                             }
+
+                            var checkSerializedIdMethod = CheckSerializedVersionUniqueIdMethod.MakeGenericMethod(baseType);
+                            readStatements.Add(Expression.Call(output, checkSerializedIdMethod));
 
                             var readMethod = typeof(WriteMethods<,,>.WriteSealed).MakeGenericType(baseType, typeof(TStream), settings.GetGeneratedType());
                             var generateReadMethod = typeof(DynamicCode<,>)

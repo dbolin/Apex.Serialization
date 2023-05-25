@@ -89,6 +89,10 @@ namespace Apex.Serialization
         public Settings MarkSerializable(Type type)
         {
             WhitelistedTypes.Add(type);
+            if (!FlattenClassHierarchy && type.BaseType != null)
+            {
+                MarkSerializable(type.BaseType);
+            }
             return this;
         }
 
