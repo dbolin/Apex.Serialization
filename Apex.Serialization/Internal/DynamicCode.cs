@@ -936,7 +936,16 @@ namespace Apex.Serialization.Internal
             var custom = HandleCustomRead(type, output, stream, result, settings, readMetadata);
             if (custom != null)
             {
-                created = false;
+                created = true;
+                if (!type.IsValueType && settings.SerializationMode == Mode.Graph)
+                {
+                    return Expression.Block(
+                        custom,
+                        Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                        SavedReferencesListAdd, result),
+                        result
+                        );
+                }
                 return custom;
             }
 
@@ -976,22 +985,26 @@ namespace Apex.Serialization.Internal
                     if (customContextType != null)
                     {
                         var customContext = Expression.Call(output, CustomContextGetter.MakeGenericMethod(customContextType));
-                        customReadStatements.Add(Expression.Call(
+                        customReadStatements.Add(
+                            Expression.Assign(result,
+                            Expression.Call(
                             Expression.Convert(
                                 Expression.Constant(entry.Value.Action),
-                                typeof(Action<,,>).MakeGenericType(type, typeof(IBinaryReader), customContextType)),
-                            entry.Value.InvokeMethodInfo, result,
+                                typeof(Func<,,>).MakeGenericType(typeof(IBinaryReader), customContextType, type)),
+                            entry.Value.InvokeMethodInfo,
                             Expression.Call(output, BinaryReaderGetter),
-                            customContext));
+                            customContext)));
                     }
                     else
                     {
-                        customReadStatements.Add(Expression.Call(
+                        customReadStatements.Add(
+                            Expression.Assign(result,
+                            Expression.Call(
                             Expression.Convert(
                                 Expression.Constant(entry.Value.Action),
-                                typeof(Action<,>).MakeGenericType(type, typeof(IBinaryReader))),
-                            entry.Value.InvokeMethodInfo, result,
-                            Expression.Call(output, BinaryReaderGetter)));
+                                typeof(Func<,>).MakeGenericType(typeof(IBinaryReader), type)),
+                            entry.Value.InvokeMethodInfo,
+                            Expression.Call(output, BinaryReaderGetter))));
                     }
                 }
             }

@@ -1,15 +1,14 @@
 ﻿{
   "stryker-config": {
-    "test-runner": "vstest",
     "reporters": [
       "progress",
       "html"
     ],
-    "exluded-mutations": ["string"],
-    "log-level": "info",
-    "timeout-ms": 25000,
-    "threshold-high": 100,
-    "threshold-low": 100,
-    "threshold-break": 99
+    "ignore-mutations": [ "string" ],
+    "thresholds": {
+      "high": 100,
+      "low": 100,
+      "break": 99
+    }
   }
 }

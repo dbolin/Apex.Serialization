@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 
@@ -14,7 +15,7 @@ namespace Apex.Serialization.Internal
        where TStream : IBinaryStream
        where TBinary : ISerializer
     {
-        internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject")!;
+        internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(RuntimeHelpers).GetMethod("GetUninitializedObject")!;
         private static MethodInfo fieldInfoSetValueMethod = typeof(FieldInfo).GetMethod("SetValue", new[] { typeof(object), typeof(object) })!;
 
         private static Expression ReserveConstantSize(ParameterExpression stream, int size)

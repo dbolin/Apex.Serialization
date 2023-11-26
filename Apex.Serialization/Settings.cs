@@ -46,7 +46,8 @@ namespace Apex.Serialization
         /// </summary>
         /// <typeparam name="T">Type to which the custom serialization will apply.  Does not support primitives.</typeparam>
         /// <param name="writeMethod">Method to be called when a type matching T is to be serialized.</param>
-        public Settings RegisterCustomSerializer<T>(Action<T, IBinaryWriter> writeMethod, Action<T, IBinaryReader> readMethod)
+        /// <param name="readMethod">Method to be called when a type matching T is to be deserialized.</param>
+        public Settings RegisterCustomSerializer<T>(Action<T, IBinaryWriter> writeMethod, Func<IBinaryReader, T> readMethod)
         {
             CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
                 writeMethod,
@@ -55,7 +56,7 @@ namespace Apex.Serialization
                 ));
             CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate(
                 readMethod,
-                typeof(Action<T, IBinaryReader>).GetMethod("Invoke")!,
+                typeof(Func<IBinaryReader, T>).GetMethod("Invoke")!,
                 null));
             return this;
         }
@@ -66,7 +67,8 @@ namespace Apex.Serialization
         /// <typeparam name="T">Type to which the custom serialization will apply.  Does not support primitives.</typeparam>
         /// <typeparam name="TContext">Type of custom serialization context.  Will be null if the current context is not set or cannot be cast to this type.</typeparam>
         /// <param name="writeMethod">Method to be called when a type matching T is to be serialized.</param>
-        public Settings RegisterCustomSerializer<T, TContext>(Action<T, IBinaryWriter, TContext> writeMethod, Action<T, IBinaryReader, TContext> readMethod)
+        /// <param name="readMethod">Method to be called when a type matching T is to be deserialized.</param>
+        public Settings RegisterCustomSerializer<T, TContext>(Action<T, IBinaryWriter, TContext> writeMethod, Func<IBinaryReader, TContext, T> readMethod)
             where TContext : class
         {
             CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
@@ -76,7 +78,7 @@ namespace Apex.Serialization
                 ));
             CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate(
                 readMethod,
-                typeof(Action<T, IBinaryReader, TContext>).GetMethod("Invoke")!,
+                typeof(Func<IBinaryReader, TContext, T>).GetMethod("Invoke")!,
                 typeof(TContext)
                 ));
             return this;

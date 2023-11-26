@@ -28,14 +28,17 @@ namespace Apex.Serialization.Tests
                 }
             }
 
-            public static void Deserialize(Test t, IBinaryReader reader)
+            public static Test Deserialize(IBinaryReader reader)
             {
+                var t = new Test();
                 t.Value = reader.Read<int>();
                 var isNotNullByte = reader.Read<byte>();
                 if (isNotNullByte == 1)
                 {
                     t.Nested = reader.ReadObject<Test>();
                 }
+
+                return t;
             }
         }
 
@@ -53,9 +56,9 @@ namespace Apex.Serialization.Tests
                 writer.Write(context.ValueOverride);
             }
 
-            public static void Deserialize(TestCustomContext t, IBinaryReader reader, CustomContext context)
+            public static TestCustomContext Deserialize(IBinaryReader reader, CustomContext context)
             {
-                t.Value = context.ValueOverride;
+                return new TestCustomContext { Value = context.ValueOverride };
             }
         }
 
@@ -76,14 +79,16 @@ namespace Apex.Serialization.Tests
                     {
                         s.WriteObject(i);
                     }
-                }, (o, s) =>
+                }, (s) =>
                 {
+                    var o = new HashSet<Test>();
                     var count = s.Read<int>();
                     o.EnsureCapacity(count);
                     for (int i = 0; i < count; ++i)
                     {
                         o.Add(s.ReadObject<Test>());
                     }
+                    return o;
                 });
             };
         }
@@ -170,10 +175,9 @@ namespace Apex.Serialization.Tests
                 writer.Write(t.Value - 1);
             }
 
-            public static void Deserialize(TestWithConstructor t, IBinaryReader reader)
+            public static TestWithConstructor Deserialize(IBinaryReader reader)
             {
-                t.Value.Should().Be(0);
-                t.Value = reader.Read<int>();
+                return new TestWithConstructor(reader.Read<int>());
             }
         }
 
