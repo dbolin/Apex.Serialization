@@ -37,6 +37,7 @@ namespace Apex.Serialization
 
         private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>();
         private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionDeserializers = new Dictionary<Type, CustomSerializerDelegate>();
+        private readonly Dictionary<Type, CustomSerializerDelegate> CustomActionInstantiators = new Dictionary<Type, CustomSerializerDelegate>();
 
         private readonly HashSet<Type> WhitelistedTypes = new HashSet<Type>();
         private readonly List<Func<Type, bool>> WhitelistFuncs = new List<Func<Type, bool>>();
@@ -47,17 +48,58 @@ namespace Apex.Serialization
         /// <typeparam name="T">Type to which the custom serialization will apply.  Does not support primitives.</typeparam>
         /// <param name="writeMethod">Method to be called when a type matching T is to be serialized.</param>
         /// <param name="readMethod">Method to be called when a type matching T is to be deserialized.</param>
-        public Settings RegisterCustomSerializer<T>(Action<T, IBinaryWriter> writeMethod, Func<IBinaryReader, T> readMethod)
+        public Settings RegisterCustomSerializer<T>(Action<T, IBinaryWriter> writeMethod, Action<T, IBinaryReader> readMethod)
         {
             CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
                 writeMethod,
-                typeof(Action<T, IBinaryWriter>).GetMethod("Invoke")!,
                 null
                 ));
             CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate(
                 readMethod,
-                typeof(Func<IBinaryReader, T>).GetMethod("Invoke")!,
                 null));
+            return this;
+        }
+
+        /// <summary>
+        /// Registers a custom serializer action that applies to an open generic type.
+        /// </summary>
+        /// <param name="type">The open generic type to be directed to the custom serialization functions.</param>
+        /// <param name="serializerClass">The type of the class which declares the serialization functions. The methods must static.</param>
+        /// <param name="writeMethod">The name of the generic method to be used to write the objects.</param>
+        /// <param name="readMethod">The name of the generic method to be used to read the objects.</param>
+        /// <param name="customContextType">The type of the custom context, if any.</param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        public Settings RegisterCustomSerializer(Type type, Type serializerClass, string writeMethod, string readMethod, Type? customContextType = null)
+        {
+            var expectedLength = customContextType != null ? 3 : 2;
+
+            var writeMethodInfo = serializerClass.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                .SingleOrDefault(x => x.Name == writeMethod
+                && x.IsGenericMethodDefinition && x.GetParameters().Length == expectedLength
+                && (expectedLength == 2 || x.GetParameters()[2].ParameterType == customContextType)
+                && x.GetParameters()[1].ParameterType == typeof(IBinaryWriter)
+                && x.GetParameters()[0].ParameterType == type.MakeGenericType(x.GetGenericArguments()));
+
+            if (writeMethodInfo == null)
+            {
+                throw new ArgumentException($"Unable to find method '{writeMethod}' on type '{serializerClass.Name}' with appropriate parameter types");
+            }
+
+            var readMethodInfo = serializerClass.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                .SingleOrDefault(x => x.Name == readMethod
+                && x.IsGenericMethodDefinition && x.GetParameters().Length == expectedLength
+                && (expectedLength == 2 || x.GetParameters()[2].ParameterType == customContextType)
+                && x.GetParameters()[1].ParameterType == typeof(IBinaryReader)
+                && x.GetParameters()[0].ParameterType == type.MakeGenericType(x.GetGenericArguments()));
+
+            if (readMethodInfo == null)
+            {
+                throw new ArgumentException($"Unable to find method '{readMethod}' on type '{serializerClass.Name}' with appropriate parameter types");
+            }
+
+            CustomActionSerializers.Add(type, new CustomSerializerDelegate(writeMethodInfo, customContextType));
+            CustomActionDeserializers.Add(type, new CustomSerializerDelegate(readMethodInfo, customContextType));
             return this;
         }
 
@@ -68,19 +110,55 @@ namespace Apex.Serialization
         /// <typeparam name="TContext">Type of custom serialization context.  Will be null if the current context is not set or cannot be cast to this type.</typeparam>
         /// <param name="writeMethod">Method to be called when a type matching T is to be serialized.</param>
         /// <param name="readMethod">Method to be called when a type matching T is to be deserialized.</param>
-        public Settings RegisterCustomSerializer<T, TContext>(Action<T, IBinaryWriter, TContext> writeMethod, Func<IBinaryReader, TContext, T> readMethod)
+        public Settings RegisterCustomSerializer<T, TContext>(Action<T, IBinaryWriter, TContext> writeMethod, Action<T, IBinaryReader, TContext> readMethod)
             where TContext : class
         {
             CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
                 writeMethod,
-                typeof(Action<T, IBinaryWriter, TContext>).GetMethod("Invoke")!,
                 typeof(TContext)
                 ));
             CustomActionDeserializers.Add(typeof(T), new CustomSerializerDelegate(
                 readMethod,
-                typeof(Func<IBinaryReader, TContext, T>).GetMethod("Invoke")!,
                 typeof(TContext)
                 ));
+            return this;
+        }
+
+        /// <summary>
+        /// Registers a custom function to instantiate objects prior to deserialization. Reading a non-value type within this function in graph mode will throw an InvalidOperationException as this could result in corrupting the object graph.
+        /// </summary>
+        /// <typeparam name="T">Type to which the custom instantiation will apply.  Does not support primitives.</typeparam>
+        /// <param name="instantiationFunc">Method to be called when a type matching T is to be instantiated.</param>
+        /// <returns></returns>
+        public Settings RegisterCustomInstantiator<T>(Func<IBinaryReader, T> instantiationFunc)
+        {
+            CustomActionInstantiators.Add(typeof(T), new CustomSerializerDelegate(instantiationFunc, null));
+            return this;
+        }
+
+        /// <summary>
+        /// Registers a custom function to instantiate objects prior to deserialization. Reading a non-value type within this function in graph mode will throw an InvalidOperationException as this could result in corrupting the object graph.
+        /// </summary>
+        /// <param name="type">The open generic type to be directed to the custom instantiation function.</param>
+        /// <param name="serializerClass">The type of the class which declares the instantiation function. The methods must static.</param>
+        /// <param name="methodName">The name of the generic method to be used to instantiate the objects.</param>
+        /// <param name="customContextType">The type of the custom context, if any.</param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException"></exception>
+        public Settings RegisterCustomInstantiator(Type type, Type serializerClass, string methodName, Type? customContextType = null)
+        {
+            var methodInfo = serializerClass.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                .SingleOrDefault(x => x.Name == methodName
+                && x.IsGenericMethodDefinition && x.GetParameters().Length == 1
+                && x.GetParameters()[0].ParameterType == typeof(IBinaryReader)
+                && x.ReturnType == type.MakeGenericType(x.GetGenericArguments()));
+
+            if (methodInfo == null)
+            {
+                throw new ArgumentException($"Unable to find method '{methodName}' on type '{serializerClass.Name}' with appropriate parameter types");
+            }
+
+            CustomActionInstantiators.Add(type, new CustomSerializerDelegate(methodInfo, customContextType));
             return this;
         }
 
@@ -124,6 +202,7 @@ namespace Apex.Serialization
                 ForceReflectionToSetReadonlyFields,
                 CustomActionSerializers,
                 CustomActionDeserializers,
+                CustomActionInstantiators,
                 WhitelistedTypes,
                 WhitelistFuncs);
             lock (_constructedSettingsLock)
@@ -148,6 +227,7 @@ namespace Apex.Serialization
         public bool FlattenClassHierarchy { get; }
         public Dictionary<Type, CustomSerializerDelegate> CustomActionSerializers { get; }
         public Dictionary<Type, CustomSerializerDelegate> CustomActionDeserializers { get; }
+        public Dictionary<Type, CustomSerializerDelegate> CustomActionInstantiators { get; }
         public HashSet<Type> WhitelistedTypes { get; }
         public List<Func<Type, bool>> WhitelistFuncs { get; }
         public bool UseConstructors { get; } = true;
@@ -296,6 +376,7 @@ namespace Apex.Serialization
             bool forceReflectionToSetReadonlyFields,
             Dictionary<Type, CustomSerializerDelegate> customActionSerializers,
             Dictionary<Type, CustomSerializerDelegate> customActionDeserializers,
+            Dictionary<Type, CustomSerializerDelegate> customActionInstatiators,
             HashSet<Type> whitelistedTypes,
             List<Func<Type, bool>> whitelistFuncs)
         {
@@ -309,6 +390,7 @@ namespace Apex.Serialization
 
             CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>(customActionSerializers);
             CustomActionDeserializers = new Dictionary<Type, CustomSerializerDelegate>(customActionDeserializers);
+            CustomActionInstantiators = new Dictionary<Type, CustomSerializerDelegate>(customActionInstatiators);
             WhitelistedTypes = new HashSet<Type>(whitelistedTypes);
             WhitelistFuncs = new List<Func<Type, bool>>(whitelistFuncs);
 

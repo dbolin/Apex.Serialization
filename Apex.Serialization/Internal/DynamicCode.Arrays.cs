@@ -237,6 +237,7 @@ namespace Apex.Serialization.Internal
                     {
                         var refIndex = Expression.Variable(typeof(int), "refIndex");
                         readValue = Expression.Block(
+                            Expression.Call(output, CheckReadingObjectReference),
                             ReserveConstantSize(stream, 5),
                             Expression.IfThenElse(
                                 Expression.Equal(Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<byte>.ReadValueMethodInfo), Expression.Constant((byte)0)),

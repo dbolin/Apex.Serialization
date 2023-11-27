@@ -6,6 +6,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading;
+using System.Transactions;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal.Reflection;
 
@@ -465,30 +466,8 @@ namespace Apex.Serialization.Internal
 
             foreach (var entry in settings.CustomActionSerializers)
             {
-                if (entry.Key.IsAssignableFrom(declaredType))
-                {
-                    var customContextType = entry.Value.CustomContextType;
-                    if (customContextType != null)
-                    {
-                        var customContext = Expression.Call(output, CustomContextGetter.MakeGenericMethod(customContextType));
-                        customWriteStatements.Add(Expression.Call(
-                            Expression.Convert(
-                                Expression.Constant(entry.Value.Action),
-                                typeof(Action<,,>).MakeGenericType(declaredType, typeof(IBinaryWriter), customContextType)),
-                            entry.Value.InvokeMethodInfo, valueAccessExpression,
-                            Expression.Call(output, BinaryWriterGetter),
-                            customContext));
-                    }
-                    else
-                    {
-                        customWriteStatements.Add(Expression.Call(
-                            Expression.Convert(
-                                Expression.Constant(entry.Value.Action),
-                                typeof(Action<,>).MakeGenericType(declaredType, typeof(IBinaryWriter))),
-                            entry.Value.InvokeMethodInfo, valueAccessExpression,
-                            Expression.Call(output, BinaryWriterGetter)));
-                    }
-                }
+                CustomSerializationAction<IBinaryWriter>(output, declaredType, valueAccessExpression, customWriteStatements, settings, entry,
+                    BinaryWriterGetter, typeof(Action<,>), typeof(Action<,,>));
             }
 
             if (customWriteStatements.Count == 0)
@@ -496,6 +475,79 @@ namespace Apex.Serialization.Internal
                 return null;
             }
             return Expression.Block(customWriteStatements);
+        }
+
+        private static bool CustomSerializationAction<BinaryT>(ParameterExpression output, Type type, Expression result, List<Expression> statements, ImmutableSettings settings, KeyValuePair<Type, Binary.CustomSerializerDelegate> entry,
+            MethodInfo binaryGetter, Type delegateTypeWithoutContext, Type delegateTypeWithContext)
+        {
+            var matchingType = entry.Key == type;
+            var matchingGeneric = type.IsConstructedGenericType && entry.Key == type.GetGenericTypeDefinition();
+            if (matchingType || matchingGeneric)
+            {
+                var customContextType = entry.Value.CustomContextType;
+                var callArgList = new List<Expression>();
+                Type concreteType;
+                var isFunc = delegateTypeWithoutContext.GetGenericTypeDefinition() == typeof(Func<,>);
+
+                if (isFunc && settings.SerializationMode == Mode.Graph)
+                {
+                    statements.Add(Expression.Call(output, DisallowReadingObjectReference));
+                }
+
+                if (!isFunc)
+                {
+                    // First parameter is the object for Actions
+                    callArgList.Add(result);
+                }
+                // Next is the Binary instance
+                callArgList.Add(Expression.Call(output, binaryGetter));
+                // And finally Context if required
+                if (customContextType != null)
+                {
+                    callArgList.Add(Expression.Call(output, CustomContextGetter.MakeGenericMethod(customContextType)));
+                    if (isFunc)
+                    {
+                        concreteType = delegateTypeWithContext.MakeGenericType(typeof(BinaryT), customContextType, type);
+                    }
+                    else
+                    {
+                        concreteType = delegateTypeWithContext.MakeGenericType(type, typeof(BinaryT), customContextType);
+                    }
+                } else
+                {
+                    if (isFunc)
+                    {
+                        concreteType = delegateTypeWithoutContext.MakeGenericType(typeof(BinaryT), type);
+                    }
+                    else
+                    {
+                        concreteType = delegateTypeWithoutContext.MakeGenericType(type, typeof(BinaryT));
+                    }
+                }
+                Expression methodDelegate = matchingGeneric
+                    ? Expression.Constant(entry.Value.MethodInfo!.MakeGenericMethod(type.GenericTypeArguments).CreateDelegate(concreteType))
+                    : Expression.Convert(Expression.Constant(entry.Value.Action), concreteType);
+
+                Expression statement = Expression.Call(
+                    methodDelegate,
+                    concreteType.GetMethod("Invoke")!,
+                    callArgList);
+                if (isFunc)
+                {
+                    statement = Expression.Assign(result, statement);
+                }
+
+                statements.Add(statement);
+
+                if (isFunc && settings.SerializationMode == Mode.Graph)
+                {
+                    statements.Add(Expression.Call(output, AllowReadingObjectReference));
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         private static Expression? HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
@@ -636,6 +688,7 @@ namespace Apex.Serialization.Internal
                     readStatements.Add(
                         Expression.Block(
                             new[] { refIndex },
+                            Expression.Call(output, CheckReadingObjectReference),
                             Expression.Assign(refIndex, Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo)),
                                 Expression.IfThen(
                                     Expression.NotEqual(refIndex, Expression.Constant(-1)),
@@ -673,70 +726,83 @@ namespace Apex.Serialization.Internal
 
             if (!created && !type.IsValueType && !type.IsAbstract)
             {
-                var ctor = Cil.FindEmptyDeserializationConstructor(type);
-                if (ctor != null)
+                bool customInstantiation = false;
+                foreach (var entry in settings.CustomActionInstantiators)
                 {
-                    readStatements.Add(Expression.Assign(result, Expression.New(ctor)));
-                }
-                else
-                {
-                    var useConstructorDeserialization = ShouldCheckForSpecificConstructor(type, settings) ? Cil.FindSpecificDeserializationConstructor(type, fields) : null;
-                    if (useConstructorDeserialization.HasValue)
+                    if (CustomSerializationAction<IBinaryReader>(output, type, result, readStatements, settings, entry,
+                        BinaryReaderGetter, typeof(Func<,>), typeof(Func<,,>)))
                     {
-                        specificConstructorDeserialization = true;
-                        var constructor = useConstructorDeserialization.Value.constructor;
-                        var fieldOrder = useConstructorDeserialization.Value.fieldOrder;
+                        customInstantiation = true;
+                    }
+                }
 
-                        var constructorLocalVariables = new List<ParameterExpression>();
-                        var constructorLocalFieldVariables = new List<ParameterExpression>();
-                        var constructorLocalStatements = new List<Expression>();
-
-                        var currentSavedReferencesIndexVariable = Expression.Variable(typeof(int), "currentSavedRefIndex");
-
-                        if (settings.SerializationMode == Mode.Graph && !type.IsValueType)
-                        {
-                            constructorLocalVariables.Add(currentSavedReferencesIndexVariable);
-                            constructorLocalStatements.Add(Expression.Assign(currentSavedReferencesIndexVariable, Expression.Call(Expression.Call(output, SavedReferencesGetter), SavedReferencesListCountGetter)));
-                            constructorLocalStatements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                            SavedReferencesListAdd, Expression.Constant(null)));
-                        }
-
-                        foreach (var field in fields)
-                        {
-                            var variableExpression = Expression.Variable(field.FieldType, field.Name);
-                            constructorLocalVariables.Add(variableExpression);
-                            constructorLocalFieldVariables.Add(variableExpression);
-                            var readValueExpression = ReadValue(stream, output, settings, field.FieldType, localVariables, visitedTypes, depth, out _);
-                            constructorLocalStatements.Add(Expression.Assign(variableExpression, readValueExpression));
-                        }
-
-                        var constructorParams = new Expression[fieldOrder.Count];
-                        for (int i = 0; i < fieldOrder.Count; ++i)
-                        {
-                            constructorParams[i] = constructorLocalFieldVariables[fieldOrder[i]];
-                        }
-
-                        constructorLocalStatements.Add(Expression.Assign(result, Expression.New(constructor, constructorParams)));
-
-                        if (settings.SerializationMode == Mode.Graph && !type.IsValueType)
-                        {
-                            constructorLocalStatements.Add(
-                                Expression.Assign(
-                                    Expression.Property(Expression.Call(output, SavedReferencesGetter),
-                                        SavedReferencesListIndexer, currentSavedReferencesIndexVariable),
-                                result)
-                            );
-                        }
-
-                        readStatements.Add(Expression.Block(constructorLocalVariables, constructorLocalStatements));
-
-                        created = true;
+                if (!customInstantiation)
+                {
+                    var ctor = Cil.FindEmptyDeserializationConstructor(type);
+                    if (ctor != null)
+                    {
+                        readStatements.Add(Expression.Assign(result, Expression.New(ctor)));
                     }
                     else
                     {
-                        readStatements.Add(Expression.Assign(result,
-                            Expression.Convert(
-                                Expression.Call(null, GetUnitializedObjectMethodInfo, Expression.Constant(type)), type)));
+                        var useConstructorDeserialization = ShouldCheckForSpecificConstructor(type, settings) ? Cil.FindSpecificDeserializationConstructor(type, fields) : null;
+                        if (useConstructorDeserialization.HasValue)
+                        {
+                            specificConstructorDeserialization = true;
+                            var constructor = useConstructorDeserialization.Value.constructor;
+                            var fieldOrder = useConstructorDeserialization.Value.fieldOrder;
+
+                            var constructorLocalVariables = new List<ParameterExpression>();
+                            var constructorLocalFieldVariables = new List<ParameterExpression>();
+                            var constructorLocalStatements = new List<Expression>();
+
+                            var currentSavedReferencesIndexVariable = Expression.Variable(typeof(int), "currentSavedRefIndex");
+
+                            if (settings.SerializationMode == Mode.Graph && !type.IsValueType)
+                            {
+                                constructorLocalVariables.Add(currentSavedReferencesIndexVariable);
+                                constructorLocalStatements.Add(Expression.Assign(currentSavedReferencesIndexVariable, Expression.Call(Expression.Call(output, SavedReferencesGetter), SavedReferencesListCountGetter)));
+                                constructorLocalStatements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                                SavedReferencesListAdd, Expression.Constant(null)));
+                            }
+
+                            foreach (var field in fields)
+                            {
+                                var variableExpression = Expression.Variable(field.FieldType, field.Name);
+                                constructorLocalVariables.Add(variableExpression);
+                                constructorLocalFieldVariables.Add(variableExpression);
+                                var readValueExpression = ReadValue(stream, output, settings, field.FieldType, localVariables, visitedTypes, depth, out _);
+                                constructorLocalStatements.Add(Expression.Assign(variableExpression, readValueExpression));
+                            }
+
+                            var constructorParams = new Expression[fieldOrder.Count];
+                            for (int i = 0; i < fieldOrder.Count; ++i)
+                            {
+                                constructorParams[i] = constructorLocalFieldVariables[fieldOrder[i]];
+                            }
+
+                            constructorLocalStatements.Add(Expression.Assign(result, Expression.New(constructor, constructorParams)));
+
+                            if (settings.SerializationMode == Mode.Graph && !type.IsValueType)
+                            {
+                                constructorLocalStatements.Add(
+                                    Expression.Assign(
+                                        Expression.Property(Expression.Call(output, SavedReferencesGetter),
+                                            SavedReferencesListIndexer, currentSavedReferencesIndexVariable),
+                                    result)
+                                );
+                            }
+
+                            readStatements.Add(Expression.Block(constructorLocalVariables, constructorLocalStatements));
+
+                            created = true;
+                        }
+                        else
+                        {
+                            readStatements.Add(Expression.Assign(result,
+                                Expression.Convert(
+                                    Expression.Call(null, GetUnitializedObjectMethodInfo, Expression.Constant(type)), type)));
+                        }
                     }
                 }
             }
@@ -936,16 +1002,7 @@ namespace Apex.Serialization.Internal
             var custom = HandleCustomRead(type, output, stream, result, settings, readMetadata);
             if (custom != null)
             {
-                created = true;
-                if (!type.IsValueType && settings.SerializationMode == Mode.Graph)
-                {
-                    return Expression.Block(
-                        custom,
-                        Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                        SavedReferencesListAdd, result),
-                        result
-                        );
-                }
+                created = false;
                 return custom;
             }
 
@@ -979,37 +1036,11 @@ namespace Apex.Serialization.Internal
 
             foreach (var entry in settings.CustomActionDeserializers)
             {
-                if (entry.Key.IsAssignableFrom(type))
-                {
-                    var customContextType = entry.Value.CustomContextType;
-                    if (customContextType != null)
-                    {
-                        var customContext = Expression.Call(output, CustomContextGetter.MakeGenericMethod(customContextType));
-                        customReadStatements.Add(
-                            Expression.Assign(result,
-                            Expression.Call(
-                            Expression.Convert(
-                                Expression.Constant(entry.Value.Action),
-                                typeof(Func<,,>).MakeGenericType(typeof(IBinaryReader), customContextType, type)),
-                            entry.Value.InvokeMethodInfo,
-                            Expression.Call(output, BinaryReaderGetter),
-                            customContext)));
-                    }
-                    else
-                    {
-                        customReadStatements.Add(
-                            Expression.Assign(result,
-                            Expression.Call(
-                            Expression.Convert(
-                                Expression.Constant(entry.Value.Action),
-                                typeof(Func<,>).MakeGenericType(typeof(IBinaryReader), type)),
-                            entry.Value.InvokeMethodInfo,
-                            Expression.Call(output, BinaryReaderGetter))));
-                    }
-                }
+                CustomSerializationAction<IBinaryReader>(output, type, result, customReadStatements, settings, entry,
+                    BinaryReaderGetter, typeof(Action<,>), typeof(Action<,,>));
             }
 
-            if(customReadStatements.Count == 0)
+            if (customReadStatements.Count == 0)
             {
                 return null;
             }

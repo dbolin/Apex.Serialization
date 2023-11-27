@@ -31,9 +31,9 @@ namespace Apex.Serialization.Tests
                 writer.Write(t.Value - 1);
             }
 
-            public static Test Deserialize(IBinaryReader reader)
+            public static void Deserialize(Test t, IBinaryReader reader)
             {
-                return new Test { Value = reader.Read<int>() };
+                t.Value = reader.Read<int>();
             }
         }
 

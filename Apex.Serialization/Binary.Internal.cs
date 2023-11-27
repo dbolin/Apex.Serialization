@@ -164,6 +164,16 @@ namespace Apex.Serialization
             return method(ref _stream, this);
         }
 
+        private void DisallowReadingObjectReference()
+        {
+            _allowReadingObjectReference = false;
+        }
+
+        private void AllowReadingObjectReference()
+        {
+            _allowReadingObjectReference = true;
+        }
+
         private bool ReadObjectRefHeader<T>(bool checkSerializedVersionId, out T result)
         {
             result = default!;
@@ -186,6 +196,8 @@ namespace Apex.Serialization
 
             if (Settings.SerializationMode == Mode.Graph)
             {
+                CheckReadingObjectReference();
+
                 var refNo = _stream.Read<int>();
                 if (refNo != -1)
                 {
@@ -197,6 +209,14 @@ namespace Apex.Serialization
 
             }
             return false;
+        }
+
+        private void CheckReadingObjectReference()
+        {
+            if (!_allowReadingObjectReference)
+            {
+                throw new InvalidOperationException("Unable to read an object reference in graph mode during custom instantiation");
+            }
         }
 
         internal bool WriteObjectRef(object value)
