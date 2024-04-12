@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 
@@ -14,7 +15,7 @@ namespace Apex.Serialization.Internal
        where TStream : IBinaryStream
        where TBinary : ISerializer
     {
-        internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(FormatterServices).GetMethod("GetUninitializedObject")!;
+        internal static MethodInfo GetUnitializedObjectMethodInfo = typeof(RuntimeHelpers).GetMethod("GetUninitializedObject")!;
         private static MethodInfo fieldInfoSetValueMethod = typeof(FieldInfo).GetMethod("SetValue", new[] { typeof(object), typeof(object) })!;
 
         private static Expression ReserveConstantSize(ParameterExpression stream, int size)
@@ -100,6 +101,20 @@ namespace Apex.Serialization.Internal
 
         private static readonly MethodInfo CustomContextGetter =
             typeof(TBinary).GetMethod("GetCustomContext", InstanceFlags)!;
+
+        private static readonly MethodInfo DisallowReadingObjectReference =
+            typeof(TBinary).GetMethod("DisallowReadingObjectReference", InstanceFlags)!;
+
+        private static readonly MethodInfo AllowReadingObjectReference =
+            typeof(TBinary).GetMethod("AllowReadingObjectReference", InstanceFlags)!;
+
+        private static readonly MethodInfo CheckReadingObjectReference =
+            typeof(TBinary).GetMethod("CheckReadingObjectReference", InstanceFlags)!;
+
+        private static readonly MethodInfo CheckSerializedVersionUniqueIdMethod =
+            typeof(TBinary).GetMethod("CheckSerializedVersionUniqueId", InstanceFlags, new Type[] { })!;
+        private static readonly MethodInfo WriteSerializedVersionUniqueIdMethod =
+            typeof(TBinary).GetMethod("WriteSerializedVersionUniqueId", InstanceFlags, new Type[] { })!;
 
         private static readonly MethodInfo WriteFunctionMethod = typeof(TBinary).GetMethod("WriteFunction", InstanceFlags)!;
         private static readonly MethodInfo ReadFunctionMethod = typeof(TBinary).GetMethod("ReadFunction", InstanceFlags)!;

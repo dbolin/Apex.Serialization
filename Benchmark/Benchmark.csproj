@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6</TargetFramework>
+    <TargetFramework>net8</TargetFramework>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>Benchmark.snk</AssemblyOriginatorKeyFile>
     <LangVersion>8.0</LangVersion>
@@ -12,11 +12,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.13.1" />
-    <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.13.1" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.13.10" />
+    <PackageReference Include="BenchmarkDotNet.Diagnostics.Windows" Version="0.13.10" />
     <PackageReference Include="Ceras" Version="4.1.7" />
     <PackageReference Include="Ceras.ImmutableCollections" Version="1.0.0" />
-    <PackageReference Include="FluentAssertions" Version="6.10.0" />
+    <PackageReference Include="FluentAssertions" Version="6.12.0" />
     <PackageReference Include="Hyperion" Version="0.12.0" />
     <PackageReference Include="MessagePack" Version="2.3.85" />
     <PackageReference Include="MessagePack.ImmutableCollection" Version="2.3.85" />

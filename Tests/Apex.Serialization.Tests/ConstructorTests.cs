@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Runtime.Serialization;
+using System.Runtime.CompilerServices;
 using System.Text;
 using FluentAssertions;
 using Xunit;
@@ -239,7 +240,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void ConstructorThatThrows()
         {
-            var x = (ThrowsOnConstruct) FormatterServices.GetUninitializedObject(typeof(ThrowsOnConstruct));
+            var x = (ThrowsOnConstruct) RuntimeHelpers.GetUninitializedObject(typeof(ThrowsOnConstruct));
             x.A = 3;
 
             RoundTrip(x);
@@ -259,7 +260,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void ConstructorThatSetsStaticField()
         {
-            var x = (ConstructorSettingStaticField)FormatterServices.GetUninitializedObject(typeof(ConstructorSettingStaticField));
+            var x = (ConstructorSettingStaticField) RuntimeHelpers.GetUninitializedObject(typeof(ConstructorSettingStaticField));
             x.A = 3;
 
             RoundTrip(x, (x, y) => { ConstructorSettingStaticField.B.Should().Be(0); y.A.Should().Be(3); });
@@ -286,7 +287,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void ConstructorThatSetsStaticFieldIndirect()
         {
-            var x = (ConstructorSettingStaticFieldIndirect)FormatterServices.GetUninitializedObject(typeof(ConstructorSettingStaticFieldIndirect));
+            var x = (ConstructorSettingStaticFieldIndirect) RuntimeHelpers.GetUninitializedObject(typeof(ConstructorSettingStaticFieldIndirect));
             x.A = 3;
 
             RoundTrip(x, (x, y) => { ConstructorSettingStaticFieldIndirect.B.Should().Be(0); y.A.Should().Be(3); });
@@ -315,7 +316,7 @@ namespace Apex.Serialization.Tests
         [Fact]
         public void TestDerivedClassWithBaseConstructorSideEffects()
         {
-            var x = (DerivedClassWithBaseConstructor)FormatterServices.GetUninitializedObject(typeof(DerivedClassWithBaseConstructor));
+            var x = (DerivedClassWithBaseConstructor) RuntimeHelpers.GetUninitializedObject(typeof(DerivedClassWithBaseConstructor));
             x.A = 3;
 
             RoundTrip(x);

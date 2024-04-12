@@ -4,7 +4,12 @@ using System.IO;
 
 namespace DeserializeTest
 {
-    public class TestA
+    public abstract class TestO
+    {
+        public int O;
+    }
+
+    public class TestA : TestO
     {
         public int A;
     }
@@ -27,6 +32,7 @@ namespace DeserializeTest
         public decimal? B;
         public string C;
         public Test2<int> D;
+        public TestO E;
     }
 
     class Program

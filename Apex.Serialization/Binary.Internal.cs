@@ -101,13 +101,7 @@ namespace Apex.Serialization
 
                 if (readSerializedVersionId)
                 {
-                    _stream.ReserveSize(4);
-                    var expectedId = GetSerializedVersionUniqueId(type);
-                    var id = _stream.Read<int>();
-                    if(id != expectedId)
-                    {
-                        throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {type.FullName}");
-                    }
+                    CheckSerializedVersionUniqueId(type);
                 }
 
                 _loadedTypeRefs.Add(type);
@@ -116,17 +110,22 @@ namespace Apex.Serialization
             return type;
         }
 
+        public unsafe void CheckSerializedVersionUniqueId(Type type)
+        {
+            _stream.ReserveSize(4);
+            var expectedId = GetSerializedVersionUniqueId(type);
+            var id = _stream.Read<int>();
+            if (id != expectedId)
+            {
+                throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {type.FullName}");
+            }
+        }
+
         internal T ReadValueInternal<T>(bool useSerializedVersionId)
         {
             if (useSerializedVersionId)
             {
-                var expectedId = GetSerializedVersionUniqueId<T>();
-                _stream.ReserveSize(4);
-                var id = _stream.Read<int>();
-                if (id != expectedId)
-                {
-                    throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {typeof(T).FullName}");
-                }
+                CheckSerializedVersionUniqueId<T>();
             }
 
             ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
@@ -136,6 +135,17 @@ namespace Apex.Serialization
             }
 
             return method(ref _stream, this);
+        }
+
+        private void CheckSerializedVersionUniqueId<T>()
+        {
+            var expectedId = GetSerializedVersionUniqueId<T>();
+            _stream.ReserveSize(4);
+            var id = _stream.Read<int>();
+            if (id != expectedId)
+            {
+                throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {typeof(T).FullName}");
+            }
         }
 
         internal T ReadSealedInternal<T>(bool useSerializedVersionId)
@@ -154,6 +164,16 @@ namespace Apex.Serialization
             return method(ref _stream, this);
         }
 
+        private void DisallowReadingObjectReference()
+        {
+            _allowReadingObjectReference = false;
+        }
+
+        private void AllowReadingObjectReference()
+        {
+            _allowReadingObjectReference = true;
+        }
+
         private bool ReadObjectRefHeader<T>(bool checkSerializedVersionId, out T result)
         {
             result = default!;
@@ -168,7 +188,7 @@ namespace Apex.Serialization
             {
                 var expectedId = GetSerializedVersionUniqueId<T>();
                 var id = _stream.Read<int>();
-                if(id != expectedId)
+                if (id != expectedId)
                 {
                     throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {typeof(T).FullName}");
                 }
@@ -176,6 +196,8 @@ namespace Apex.Serialization
 
             if (Settings.SerializationMode == Mode.Graph)
             {
+                CheckReadingObjectReference();
+
                 var refNo = _stream.Read<int>();
                 if (refNo != -1)
                 {
@@ -187,6 +209,14 @@ namespace Apex.Serialization
 
             }
             return false;
+        }
+
+        private void CheckReadingObjectReference()
+        {
+            if (!_allowReadingObjectReference)
+            {
+                throw new InvalidOperationException("Unable to read an object reference in graph mode during custom instantiation");
+            }
         }
 
         internal bool WriteObjectRef(object value)
@@ -223,9 +253,7 @@ namespace Apex.Serialization
                 _stream.WriteTypeId(value);
                 if (writeSerializedVersionId)
                 {
-                    _stream.ReserveSize(4);
-                    var id = GetSerializedVersionUniqueId(value);
-                    _stream.Write(id);
+                    WriteSerializedVersionUniqueId(value);
                 }
                 _lastRefIndex = index;
                 return true;
@@ -234,6 +262,13 @@ namespace Apex.Serialization
             _stream.Write(index);
             _lastRefIndex = index;
             return false;
+        }
+
+        private void WriteSerializedVersionUniqueId(Type value)
+        {
+            _stream.ReserveSize(4);
+            var id = GetSerializedVersionUniqueId(value);
+            _stream.Write(id);
         }
 
         private int GetSerializedVersionUniqueId(Type t)
@@ -584,9 +619,7 @@ namespace Apex.Serialization
         {
             if (useSerializedVersionId)
             {
-                _stream.ReserveSize(4);
-                var id = GetSerializedVersionUniqueId<T>();
-                _stream.Write(id);
+                WriteSerializedVersionUniqueId<T>();
             }
             ref var method = ref WriteMethods<T, TStream, TSettingGen>.Method;
             if (method == null)
@@ -597,6 +630,13 @@ namespace Apex.Serialization
             }
 
             method(value, ref _stream, this);
+        }
+
+        private void WriteSerializedVersionUniqueId<T>()
+        {
+            _stream.ReserveSize(4);
+            var id = GetSerializedVersionUniqueId<T>();
+            _stream.Write(id);
         }
 
         internal void WriteSealedInternal<T>(T value, bool useSerializedVersionId)

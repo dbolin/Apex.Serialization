@@ -10,14 +10,19 @@ namespace Apex.Serialization
     {
         internal class CustomSerializerDelegate : IEquatable<CustomSerializerDelegate>
         {
-            public readonly Delegate Action;
-            public readonly MethodInfo InvokeMethodInfo;
+            public readonly Delegate? Action;
+            public readonly MethodInfo? MethodInfo;
             public readonly Type? CustomContextType;
 
-            public CustomSerializerDelegate(Delegate action, MethodInfo invokeMethodInfo, Type? customContextType)
+            public CustomSerializerDelegate(Delegate action, Type? customContextType)
             {
                 Action = action;
-                InvokeMethodInfo = invokeMethodInfo;
+                CustomContextType = customContextType;
+            }
+
+            public CustomSerializerDelegate(MethodInfo methodInfo, Type? customContextType)
+            {
+                MethodInfo = methodInfo;
                 CustomContextType = customContextType;
             }
 
@@ -29,14 +34,14 @@ namespace Apex.Serialization
             public bool Equals(CustomSerializerDelegate? other)
             {
                 return other != null &&
-                       EqualityComparer<Delegate>.Default.Equals(Action, other.Action) &&
-                       EqualityComparer<MethodInfo>.Default.Equals(InvokeMethodInfo, other.InvokeMethodInfo) &&
+                       EqualityComparer<Delegate?>.Default.Equals(Action, other.Action) &&
+                       EqualityComparer<MethodInfo?>.Default.Equals(MethodInfo, other.MethodInfo) &&
                        EqualityComparer<Type?>.Default.Equals(CustomContextType, other.CustomContextType);
             }
 
             public override int GetHashCode()
             {
-                return HashCode.Combine(Action, InvokeMethodInfo, CustomContextType);
+                return HashCode.Combine(Action, CustomContextType);
             }
         }
 

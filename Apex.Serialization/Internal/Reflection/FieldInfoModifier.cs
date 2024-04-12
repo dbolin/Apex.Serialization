@@ -34,31 +34,14 @@ namespace Apex.Serialization.Internal.Reflection
             var fieldInfo_m_Attributes = type?.GetField("m_fieldAttributes", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
             if (fieldInfo_m_Attributes != null)
             {
-                var fieldInfoParam = Expression.Parameter(typeof(FieldInfo));
-                var castedType = Expression.Convert(fieldInfoParam, type!);
-                var returnLabel = Expression.Label();
-                SetFieldInfoNotReadonly = (Action<FieldInfo>)Expression.Lambda(
-                    Expression.Block(
-                        Expression.Assign(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes),
-                            Expression.Convert(Expression.And(Expression.Convert(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes), typeof(int)), Expression.Constant((int)(~FieldAttributes.InitOnly)))
-                                ,typeof(FieldAttributes))
-                            )
-                        , Expression.Return(returnLabel),
-                        Expression.Label(returnLabel)
-                        )
-                    , fieldInfoParam
-                    ).Compile();
-                SetFieldInfoReadonly = (Action<FieldInfo>)Expression.Lambda(
-                    Expression.Block(
-                        Expression.Assign(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes),
-                            Expression.Convert(Expression.Or(Expression.Convert(Expression.MakeMemberAccess(castedType, fieldInfo_m_Attributes), typeof(int)), Expression.Constant((int)(FieldAttributes.InitOnly)))
-                                , typeof(FieldAttributes))
-                            )
-                        , Expression.Return(returnLabel),
-                        Expression.Label(returnLabel)
-                        )
-                    , fieldInfoParam
-                    ).Compile();
+                SetFieldInfoNotReadonly = f =>
+                {
+                    fieldInfo_m_Attributes.SetValue(f, ((FieldAttributes)fieldInfo_m_Attributes.GetValue(f)!) & ~FieldAttributes.InitOnly);
+                };
+                SetFieldInfoReadonly = f =>
+                {
+                    fieldInfo_m_Attributes.SetValue(f, ((FieldAttributes)fieldInfo_m_Attributes.GetValue(f)!) | FieldAttributes.InitOnly);
+                };
 
                 var s = Binary.Create(new Settings { UseSerializedVersionId = false });
                 try
