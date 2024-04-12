@@ -76,6 +76,7 @@ namespace Apex.Serialization
         private readonly IBinaryReader _binaryReader;
 
         private object _customContext;
+        private bool _allowReadingObjectReference = true;
 
 #pragma warning disable CS8618 // Non-nullable field is uninitialized.
         internal Binary(ImmutableSettings settings, TStream stream)
@@ -128,6 +129,7 @@ namespace Apex.Serialization
 
             if (Settings.SerializationMode == Mode.Graph)
             {
+                _allowReadingObjectReference = true;
                 _loadedObjectRefs.Clear();
                 if (_internedObjects.Count > 0)
                 {

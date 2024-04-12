@@ -1,4 +1,5 @@
-﻿using System;
+﻿using FluentAssertions;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Xunit;
@@ -45,6 +46,16 @@ namespace Apex.Serialization.Tests
             public int Value;
         }
 
+        public class BaseClassThatReferencesDerived
+        {
+            public DerivedClassReferencedFromBase? a;
+        }
+
+        public class DerivedClassReferencedFromBase : BaseClassThatReferencesDerived
+        {
+
+        }
+
         [Fact]
         public void InheritedFields()
         {
@@ -66,6 +77,16 @@ namespace Apex.Serialization.Tests
         public class B2 : A1
         {
             public int B = 3;
+        }
+
+        public abstract class AB1
+        {
+            public int A;
+        }
+
+        public class BB2 : AB1
+        {
+            public int B;
         }
 
         [Fact]
@@ -90,6 +111,23 @@ namespace Apex.Serialization.Tests
             y.Add(3);
 
             RoundTrip(y);
+        }
+
+        [Fact]
+        public void BaseClassThatReferencesDerivedClass()
+        {
+            var x = new DerivedClassReferencedFromBase();
+            x.a = x;
+
+            RoundTrip(x, (x, y) => { (x == x.a).Should().BeTrue(); }, filter: s => s.SerializationMode == Mode.Graph);
+        }
+
+        [Fact]
+        public void AbstractBaseClass()
+        {
+            var x = new BB2();
+
+            RoundTrip(x);
         }
     }
 }
