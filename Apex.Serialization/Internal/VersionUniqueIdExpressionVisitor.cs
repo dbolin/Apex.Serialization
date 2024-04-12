@@ -57,6 +57,21 @@ namespace Apex.Serialization.Internal
             {
                 Combine(d.Method);
             }
+            else if (a is ImmutableSettings settings)
+            {
+                Combine(settings.InliningMaxDepth);
+                Combine(settings.ForceReflectionToSetReadonlyFields);
+                Combine(settings.SerializationMode);
+                Combine(settings.AllowFunctionSerialization);
+                Combine(settings.FlattenClassHierarchy);
+                Combine(settings.SupportSerializationHooks);
+                Combine(settings.UseConstructors);
+                Combine(settings.UseSerializedVersionId);
+                Combine(settings.WhitelistFuncs.Count);
+                Combine(settings.WhitelistedTypes.Count);
+                Combine(settings.CustomActionSerializers.Count);
+                Combine(settings.CustomActionDeserializers.Count);
+            }
             else
             {
                 Result = Result * 31 + (a?.GetHashCode()).GetValueOrDefault();
