@@ -115,7 +115,7 @@ namespace Apex.Serialization.Tests
 
                 if(t.IsValueType)
                 {
-                    AssertionOptions.AssertEquivalencyUsing(x => { x.GetType().GetMethod("ComparingByMembers", Array.Empty<Type>()).MakeGenericMethod(t).Invoke(x, null); return x; });
+                    AssertionConfiguration.Current.Equivalency.Modify(x => { x.GetType().GetMethod("ComparingByMembers", Array.Empty<Type>()).MakeGenericMethod(t).Invoke(x, null); return x; });
                 }
 
                 _createdTypes.Add(typeBuilder, t);
