@@ -5,6 +5,10 @@ variables:
 
 steps:
 - script: |
+   export DOTNET_ROOT=/home/dominic/.dotnet
+   export PATH=$PATH:$DOTNET_ROOT:$DOTNET_ROOT/tools
+  displayName: 'set path'
+- script: |
    dotnet clean Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)
    dotnet build Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)
    dotnet clean DeserializeTest/DeserializeTest.csproj
