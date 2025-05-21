@@ -7,8 +7,6 @@ steps:
 - script: |
    export DOTNET_ROOT=/home/dominic/.dotnet
    export PATH=$PATH:$DOTNET_ROOT:$DOTNET_ROOT/tools
-  displayName: 'set path'
-- script: |
    dotnet clean Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)
    dotnet build Apex.Serialization/Apex.Serialization.csproj -c $(BuildConfiguration)
    dotnet clean DeserializeTest/DeserializeTest.csproj
@@ -23,6 +21,8 @@ steps:
   inputs:
     Contents: '**/*.cobertura.xml'
 - script: |
+   export DOTNET_ROOT=/home/dominic/.dotnet
+   export PATH=$PATH:$DOTNET_ROOT:$DOTNET_ROOT/tools
    dotnet clean Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -c Debug
    dotnet clean Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -c Release
    dotnet test Tests/Apex.Serialization.Tests/Apex.Serialization.Tests.csproj -c Debug --logger "trx;LogFileName=results.trx" /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura /p:Include="[Apex.*]*" /p:UseSourceLink=true
@@ -42,18 +42,3 @@ steps:
     mergeTestResults: true
     failTaskOnFailedTests: true
     testRunTitle: 'Unit tests'
-- task: DotNetCoreCLI@2
-  displayName: 'dotnet pack'
-  inputs:
-    command: pack
-    packagesToPack: 'Apex.Serialization/Apex.Serialization.csproj'
-    nobuild: true
-    versioningScheme: byPrereleaseNumber
-    verbosityPack: Minimal
-
-- task: DotNetCoreCLI@2
-  displayName: 'dotnet push'
-  inputs:
-    command: push
-    publishVstsFeed: 'Main'
-
