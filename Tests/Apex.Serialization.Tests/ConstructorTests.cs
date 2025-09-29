@@ -1,9 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Runtime.Serialization;
 using System.Runtime.CompilerServices;
-using System.Text;
 using FluentAssertions;
 using Xunit;
 
@@ -322,6 +320,37 @@ namespace Apex.Serialization.Tests
             RoundTrip(x);
 
             TypeShouldNotUseConstructor(typeof(DerivedClassWithBaseConstructor));
+        }
+
+        internal class FunctionList
+        {
+            public List<Func<Sub>>? Actions;
+        }
+
+        internal class Sub(FunctionList res)
+        {
+            public FunctionList Res { get; } = res;
+        }
+
+        [Fact]
+        public void DoesNotUseContructorWithClosureLoop()
+        {
+            var valueSource = new FunctionList()
+            {
+                Actions = []
+            };
+            var subs = new Sub(valueSource);
+            valueSource.Actions.Add(() => subs);
+
+            var obj = new
+            {
+                a = subs,
+                b = valueSource,
+            };
+
+            var r = RoundTrip(obj, (a, b) => true, filter: s => s.AllowFunctionSerialization && s.SerializationMode == Mode.Graph);
+
+            r.b.Actions[0]().Should().NotBeNull();
         }
     }
 }

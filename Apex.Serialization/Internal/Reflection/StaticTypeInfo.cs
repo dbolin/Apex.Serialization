@@ -20,7 +20,7 @@ namespace Apex.Serialization.Internal.Reflection
         internal static bool IsSealedOrHasNoDescendents(Type t) => t.IsSealed || HasNoDescendents(t);
         internal static bool HasNoDescendents(Type t)
         {
-            if (t.IsInterface || t.IsAbstract)
+            if (t.IsInterface || t.IsAbstract || typeof(Delegate).IsAssignableFrom(t))
             {
                 return false;
             }
@@ -169,6 +169,21 @@ namespace Apex.Serialization.Internal.Reflection
             if (!testedTypes.Add(currentType))
             {
                 return true;
+            }
+
+            if (currentType.IsArray)
+            {
+                var elementType = currentType.GetElementType();
+                if (elementType == null)
+                {
+                    // should never happen, but return false since this is unknown behavior
+                    return false;
+                }
+                if (!HasNoDescendents(elementType))
+                {
+                    return false;
+                }
+                return CannotReference(originalType, elementType, testedTypes, settings);
             }
 
             var fields = TypeFields.GetOrderedFields(currentType, settings);
