@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -18,6 +19,37 @@ namespace Apex.Serialization.Internal
         public int GetResult()
         {
             return Result;
+        }
+
+        /// <summary>
+        /// Mixes the boundary configuration into the id of every type, so that a payload written with
+        /// boundary settings cannot be read with non-boundary settings (or the reverse) without failing
+        /// the version-id check.  Without this, the sealed-type dispatch path writes no per-type id of
+        /// its own below the inlining depth limit, and a mixed-settings read of a boundary field can
+        /// silently produce a wrong object graph rather than an error.
+        /// <para>
+        /// Applied only when boundaries are configured, so ids stay bit-identical for callers that use
+        /// no boundaries.  The type names are combined - not just the count - because two settings
+        /// marking different types must not collide.  Ids are embedded in payloads, so this uses the
+        /// deterministic string hash rather than Type.GetHashCode, sorts by name so the set's iteration
+        /// order cannot change the result, and uses FullName rather than AssemblyQualifiedName so that
+        /// bumping the assembly version of an assembly declaring a marked type does not invalidate
+        /// existing payloads.
+        /// </para>
+        /// </summary>
+        internal void CombineBoundaryTypes(ImmutableSettings settings)
+        {
+            if (settings.BoundaryTypes.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var name in settings.BoundaryTypes
+                .Select(x => x.FullName ?? x.Name)
+                .OrderBy(x => x, StringComparer.Ordinal))
+            {
+                Combine(name);
+            }
         }
 
         private void Combine<T>(T a)
@@ -71,6 +103,7 @@ namespace Apex.Serialization.Internal
                 Combine(settings.WhitelistedTypes.Count);
                 Combine(settings.CustomActionSerializers.Count);
                 Combine(settings.CustomActionDeserializers.Count);
+                CombineBoundaryTypes(settings);
             }
             else
             {

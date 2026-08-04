@@ -677,6 +677,28 @@ namespace Apex.Serialization
             }
         }
 
+        /// <summary>
+        /// Resolves the substitute for a boundary occurrence.  <paramref name="concreteType"/> is the
+        /// type the generated code will cast the result to, which the setter cannot validate up front
+        /// because the concrete types in a payload are not known until it is read.
+        /// </summary>
+        internal object GetBoundarySubstitute(Type markedType, Type concreteType)
+        {
+            if (!_boundarySubstitutes.TryGetValue(markedType, out var substitute))
+            {
+                throw new InvalidOperationException($"No boundary substitute has been registered for Type {markedType.FullName}. Call IBinary.SetBoundarySubstitute before reading a payload containing this type.");
+            }
+
+            if (!concreteType.IsInstanceOfType(substitute))
+            {
+                throw new InvalidOperationException(
+                    $"The boundary substitute registered for Type {markedType.FullName} is of type {substitute.GetType().FullName}, which cannot be assigned to {concreteType.FullName} as found in the payload."
+                    + " A single substitute must be assignable to every concrete boundary type the payload contains, so a payload holding sibling subclasses of one marked type cannot be read.");
+            }
+
+            return substitute;
+        }
+
         internal void QueueAfterDeserializationHook(Action<object, object> method, object instance)
         {
             _deserializationHooks.Add((method, instance));

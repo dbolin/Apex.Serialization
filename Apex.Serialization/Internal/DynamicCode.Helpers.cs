@@ -29,6 +29,30 @@ namespace Apex.Serialization.Internal
                                 Expression.Constant(size));
         }
 
+        /// <summary>
+        /// The empty field list used for boundary types.  Allocated per call rather than shared: it is
+        /// passed into the same parameter that mutable field caches fill elsewhere, so a single shared
+        /// instance would let any future mutation corrupt every boundary type's generated code
+        /// process-wide.  This runs once per code generation, so the allocation is irrelevant.
+        /// </summary>
+        private static List<FieldInfo> NoFields() => new List<FieldInfo>();
+
+        /// <summary>
+        /// Returns the marked boundary type <paramref name="type"/> resolves to, or null if it is not a
+        /// boundary.  Throws if a boundary type is reached while generating Tree mode code, where there
+        /// is no reference table to resolve repeated occurrences through.
+        /// </summary>
+        private static Type? CheckBoundaryType(Type type, ImmutableSettings settings)
+        {
+            var boundaryType = settings.IsBoundaryType(type);
+            if (boundaryType != null && settings.SerializationMode != Mode.Graph)
+            {
+                throw new NotSupportedException($"Type {type.FullName} is marked as a serialization boundary, which is only supported for Graph serialization");
+            }
+
+            return boundaryType;
+        }
+
         private static void CheckTypeSupported(Type type, List<FieldInfo> fields)
         {
             if (type.IsPointer || fields.Any(x => x.FieldType.IsPointer))
@@ -126,5 +150,8 @@ namespace Apex.Serialization.Internal
 
         private static readonly MethodInfo QueueAfterDeserializationHook =
             typeof(TBinary).GetMethod("QueueAfterDeserializationHook", InstanceFlags)!;
+
+        private static readonly MethodInfo GetBoundarySubstituteMethod =
+            typeof(TBinary).GetMethod("GetBoundarySubstitute", InstanceFlags)!;
     }
 }

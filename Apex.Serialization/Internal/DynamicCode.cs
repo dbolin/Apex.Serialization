@@ -65,7 +65,7 @@ namespace Apex.Serialization.Internal
                 var isolatedBody = Expression.Block(writeStatements);
                 var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Write_Isolated_{type.FullName}", new[] { isolatedSource, stream, output }).Compile();
 
-                return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody) };
+                return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody, settings) };
             }
 
             var source = Expression.Parameter(shouldWriteTypeInfo ? typeof(object) : type, "source");
@@ -96,7 +96,7 @@ namespace Apex.Serialization.Internal
 
             var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Write_{type.FullName}", new[] { source, stream, output }).Compile();
 
-            var uniqueId = GetSerializedVersionUniqueId(type, finalBody);
+            var uniqueId = GetSerializedVersionUniqueId(type, finalBody, settings);
 
             if(!shouldWriteTypeInfo)
             {
@@ -107,9 +107,13 @@ namespace Apex.Serialization.Internal
             return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = uniqueId};
         }
 
-        private static int GetSerializedVersionUniqueId(Type type, Expression expr)
+        private static int GetSerializedVersionUniqueId(Type type, Expression expr, ImmutableSettings settings)
         {
             var visitor = new VersionUniqueIdExpressionVisitor(type);
+            // Combined for every type rather than only for those whose tree happens to embed the
+            // settings object, so no dispatch path can carry a boundary payload under an id that
+            // non-boundary settings also produce.
+            visitor.CombineBoundaryTypes(settings);
             visitor.Visit(expr);
             return visitor.GetResult();
         }
@@ -121,12 +125,17 @@ namespace Apex.Serialization.Internal
             int depth,
             bool writeNullByte = false, bool writeSize = true)
         {
-            if(!settings.IsTypeSerializable(type))
+            var boundaryType = CheckBoundaryType(type, settings);
+            var isBoundary = boundaryType != null;
+
+            // A boundary type is written as its header only, so it is never traversed and never
+            // validated - the point is that it may hold members this serializer cannot handle.
+            if (!isBoundary && !settings.IsTypeSerializable(type))
             {
                 throw new InvalidOperationException($"Type {type.FullName} was encountered during serialization but was not marked as serializable. Use Binary.MarkSerializable before creating any serializers if this type is intended to be serialized.");
             }
 
-            var fields = TypeFields.GetOrderedFields(type, settings);
+            var fields = isBoundary ? NoFields() : TypeFields.GetOrderedFields(type, settings);
             var maxSizeNeeded = writeSize ? (IsBlittable(type) ? TypeFields.GetSizeForType(type).size : fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size)) : 0;
             int metaBytes = 0;
 
@@ -187,43 +196,47 @@ namespace Apex.Serialization.Internal
             }
 
             // write fields for normal types, some things are special like collections
-            var specialExpression = HandleSpecialWrite(type, output, actualSource, stream, source, fields, settings, visitedTypes, depth);
-
-            if (specialExpression != null)
+            // a boundary type stops here - the header written above is its entire payload
+            if (!isBoundary)
             {
-                writeStatements.Add(specialExpression);
-            }
-            else
-            {
-                CheckTypeSupported(type, fields);
+                var specialExpression = HandleSpecialWrite(type, output, actualSource, stream, source, fields, settings, visitedTypes, depth);
 
-                writeStatements.AddRange(fields.Select(x =>
-                    GetWriteFieldExpression(x, actualSource, stream, output, settings, visitedTypes, depth + 1)));
-
-                if (!settings.FlattenClassHierarchy && !type.IsValueType)
+                if (specialExpression != null)
                 {
-                    var baseType = type.BaseType;
-                    while (baseType != null && baseType != typeof(object))
+                    writeStatements.Add(specialExpression);
+                }
+                else
+                {
+                    CheckTypeSupported(type, fields);
+
+                    writeStatements.AddRange(fields.Select(x =>
+                        GetWriteFieldExpression(x, actualSource, stream, output, settings, visitedTypes, depth + 1)));
+
+                    if (!settings.FlattenClassHierarchy && !type.IsValueType)
                     {
-                        if (TypeFields.GetOrderedFields(baseType, settings).Count == 0)
+                        var baseType = type.BaseType;
+                        while (baseType != null && baseType != typeof(object))
                         {
+                            if (TypeFields.GetOrderedFields(baseType, settings).Count == 0)
+                            {
+                                baseType = baseType.BaseType;
+                                continue;
+                            }
+
+                            if (settings.UseSerializedVersionId) {
+                                var writeSerializedIdMethod = WriteSerializedVersionUniqueIdMethod.MakeGenericMethod(baseType);
+                                writeStatements.Add(Expression.Call(output, writeSerializedIdMethod));
+                            }
+
+                            var writeMethod = typeof(WriteMethods<,,>.WriteSealed).MakeGenericType(baseType, typeof(TStream), settings.GetGeneratedType());
+                            var generateWriteMethod = typeof(DynamicCode<,>)
+                                .MakeGenericType(typeof(TStream), typeof(TBinary))
+                                .GetMethod("GenerateWriteMethod", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!
+                                .MakeGenericMethod(writeMethod);
+                            var method = Expression.Call(generateWriteMethod, Expression.Constant(baseType), Expression.Constant(settings), Expression.Constant(false), Expression.Constant(true));
+                            writeStatements.Add(Expression.Invoke(method, actualSource, stream, output));
                             baseType = baseType.BaseType;
-                            continue;
                         }
-
-                        if (settings.UseSerializedVersionId) {
-                            var writeSerializedIdMethod = WriteSerializedVersionUniqueIdMethod.MakeGenericMethod(baseType);
-                            writeStatements.Add(Expression.Call(output, writeSerializedIdMethod));
-                        }
-
-                        var writeMethod = typeof(WriteMethods<,,>.WriteSealed).MakeGenericType(baseType, typeof(TStream), settings.GetGeneratedType());
-                        var generateWriteMethod = typeof(DynamicCode<,>)
-                            .MakeGenericType(typeof(TStream), typeof(TBinary))
-                            .GetMethod("GenerateWriteMethod", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!
-                            .MakeGenericMethod(writeMethod);
-                        var method = Expression.Call(generateWriteMethod, Expression.Constant(baseType), Expression.Constant(settings), Expression.Constant(false), Expression.Constant(true));
-                        writeStatements.Add(Expression.Invoke(method, actualSource, stream, output));
-                        baseType = baseType.BaseType;
                     }
                 }
             }
@@ -616,7 +629,7 @@ namespace Apex.Serialization.Internal
                 var isolatedBody = Expression.Block(localVariables, readStatements);
                 var isolatedLambda = Expression.Lambda<T>(isolatedBody, $"Apex.Serialization.Read_Isolated_{type.FullName}", new[] { isolatedResult, stream, output }).Compile();
 
-                return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody) };
+                return new DynamicCodeMethods.GeneratedDelegate { Delegate = isolatedLambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, isolatedBody, settings) };
             }
 
 
@@ -642,7 +655,7 @@ namespace Apex.Serialization.Internal
             var finalBody = Expression.Block(localVariables, readStatements);
             var lambda = Expression.Lambda<T>(finalBody, $"Apex.Serialization.Read_{type.FullName}", new [] {stream, output}).Compile();
 
-            return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, finalBody) };
+            return new DynamicCodeMethods.GeneratedDelegate { Delegate = lambda, SerializedVersionUniqueId = GetSerializedVersionUniqueId(type, finalBody, settings) };
         }
 
         private static List<Expression> GetReadStatementsForType(Type type, ImmutableSettings settings, ParameterExpression stream,
@@ -650,12 +663,15 @@ namespace Apex.Serialization.Internal
             ImmutableHashSet<Type> visitedTypes, int depth, bool readMetadata = false,
             bool reserveNeededSize = true)
         {
-            if (!settings.IsTypeSerializable(type))
+            var boundaryType = CheckBoundaryType(type, settings);
+            var isBoundary = boundaryType != null;
+
+            if (!isBoundary && !settings.IsTypeSerializable(type))
             {
                 throw new InvalidOperationException($"Type {type.FullName} was encountered during deserialization but was not marked as serializable. Use Binary.MarkSerializable before creating any serializers if this type is intended to be serialized.");
             }
 
-            var fields = TypeFields.GetOrderedFields(type, settings);
+            var fields = isBoundary ? NoFields() : TypeFields.GetOrderedFields(type, settings);
             var readStatements = new List<Expression>();
 
             var skipReadLabel = readMetadata ? Expression.Label("skipRead") : null;
@@ -706,6 +722,32 @@ namespace Apex.Serialization.Internal
                             )
                         );
                 }
+            }
+
+            // A boundary type has no payload beyond the header handled above, so the first occurrence
+            // resolves to the caller's substitute instead of being instantiated and filled.  It still
+            // takes a reference slot, because the writer gave it one and later references to the same
+            // instance arrive as indices into that table.
+            if (isBoundary)
+            {
+                // The concrete type is passed so the resolution can report a substitute that is not
+                // assignable to it, rather than leaving the Convert below to throw a bare
+                // InvalidCastException naming neither the marked type nor the substitute.
+                readStatements.Add(Expression.Assign(result,
+                    Expression.Convert(
+                        Expression.Call(output, GetBoundarySubstituteMethod,
+                            Expression.Constant(boundaryType, typeof(Type)),
+                            Expression.Constant(type, typeof(Type))),
+                        type)));
+                readStatements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
+                    SavedReferencesListAdd, result));
+
+                if (skipReadLabel != null)
+                {
+                    readStatements.Add(Expression.Label(skipReadLabel));
+                }
+
+                return readStatements;
             }
 
             // write fields for normal types, some things are special like collections

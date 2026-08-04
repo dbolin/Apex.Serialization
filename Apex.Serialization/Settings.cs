@@ -1,6 +1,7 @@
 ﻿using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal.Reflection;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
@@ -41,6 +42,16 @@ namespace Apex.Serialization
 
         private readonly HashSet<Type> WhitelistedTypes = new HashSet<Type>();
         private readonly List<Func<Type, bool>> WhitelistFuncs = new List<Func<Type, bool>>();
+
+        private readonly HashSet<Type> BoundaryTypes = new HashSet<Type>();
+
+        private static readonly HashSet<Type> _ineligibleBoundaryBaseTypes = new HashSet<Type>
+        {
+            typeof(object),
+            typeof(ValueType),
+            typeof(Enum),
+            typeof(Array),
+        };
 
         /// <summary>
         /// Registers a custom serializer action.
@@ -186,12 +197,79 @@ namespace Apex.Serialization
             return this;
         }
 
+        /// <summary>
+        /// Marks a type as a serialization boundary.  Instances of a boundary type are written as a
+        /// reference/type header with no field payload, so the graph is never traversed through them,
+        /// and each occurrence is resolved on read to a substitute supplied via
+        /// IBinary.SetBoundarySubstitute.  Only supported for Graph serialization.
+        /// </summary>
+        /// <typeparam name="T">The type to treat as a boundary.  Subclasses are boundaries as well.</typeparam>
+        public Settings MarkBoundary<T>()
+            where T : class
+        {
+            return MarkBoundary(typeof(T));
+        }
+
+        /// <summary>
+        /// Marks a type as a serialization boundary.  Instances of a boundary type are written as a
+        /// reference/type header with no field payload, so the graph is never traversed through them,
+        /// and each occurrence is resolved on read to a substitute supplied via
+        /// IBinary.SetBoundarySubstitute.  Only supported for Graph serialization.
+        /// </summary>
+        /// <param name="type">The type to treat as a boundary.  Subclasses are boundaries as well.</param>
+        public Settings MarkBoundary(Type type)
+        {
+            if (type.IsValueType || type.IsPointer || type.IsByRef)
+            {
+                throw new ArgumentException($"Type '{type.FullName}' cannot be a serialization boundary because it is not a reference type", nameof(type));
+            }
+
+            if (type.IsArray || type == typeof(string)
+                || typeof(Delegate).IsAssignableFrom(type)
+                || typeof(Type).IsAssignableFrom(type))
+            {
+                throw new ArgumentException($"Type '{type.FullName}' cannot be a serialization boundary because strings, arrays, delegates and Types are serialized without traversing fields", nameof(type));
+            }
+
+            // Boundary matching walks the base chain, so a marked interface could never match anything.
+            if (type.IsInterface)
+            {
+                throw new ArgumentException($"Type '{type.FullName}' cannot be a serialization boundary because boundaries are matched by class hierarchy; mark the implementing class instead", nameof(type));
+            }
+
+            // These are reference types that pass every per-type check above, but sit at the root of the
+            // class hierarchy or of a whole category. Boundary matching walks the base chain, so marking
+            // one would make unrelated types - including the categories rejected above - boundaries.
+            // Delegate and MulticastDelegate need no entry here; the Delegate check above covers them.
+            if (_ineligibleBoundaryBaseTypes.Contains(type))
+            {
+                throw new ArgumentException($"Type '{type.FullName}' cannot be a serialization boundary because unrelated types derive from it, which would make them boundaries as well", nameof(type));
+            }
+
+            // IsBoundaryType compares against constructed types, so a marked open generic definition
+            // would never match and the call would silently do nothing.
+            if (type.IsGenericTypeDefinition)
+            {
+                throw new ArgumentException($"Type '{type.FullName}' cannot be a serialization boundary because it is an open generic type definition; mark a constructed type instead", nameof(type));
+            }
+
+            BoundaryTypes.Add(type);
+            return this;
+        }
+
         private static readonly Dictionary<ImmutableSettings, ImmutableSettings> _constructedSettings
             = new Dictionary<ImmutableSettings, ImmutableSettings>(new ImmutableSettingsDeduplicator());
         private static readonly object _constructedSettingsLock = new object();
 
         internal ImmutableSettings ToImmutable()
         {
+            // Rejected here rather than only during code generation so the error surfaces regardless of
+            // which direction is generated first, and for Precompile, which generates both.
+            if (BoundaryTypes.Count > 0 && SerializationMode != Mode.Graph)
+            {
+                throw new InvalidOperationException("Serialization boundaries are only supported for Graph serialization");
+            }
+
             var result = new ImmutableSettings(
                 SerializationMode,
                 AllowFunctionSerialization,
@@ -204,7 +282,8 @@ namespace Apex.Serialization
                 CustomActionDeserializers,
                 CustomActionInstantiators,
                 WhitelistedTypes,
-                WhitelistFuncs);
+                WhitelistFuncs,
+                BoundaryTypes);
             lock (_constructedSettingsLock)
             {
                 if(_constructedSettings.TryGetValue(result, out var previousConstructed))
@@ -230,6 +309,7 @@ namespace Apex.Serialization
         public Dictionary<Type, CustomSerializerDelegate> CustomActionInstantiators { get; }
         public HashSet<Type> WhitelistedTypes { get; }
         public List<Func<Type, bool>> WhitelistFuncs { get; }
+        public HashSet<Type> BoundaryTypes { get; }
         public bool UseConstructors { get; } = true;
         public int InliningMaxDepth { get; }
 
@@ -316,6 +396,34 @@ namespace Apex.Serialization
                 || WhitelistFuncs.Any(x => x(type));
         }
 
+        private readonly ConcurrentDictionary<Type, Type?> _boundaryTypeCache = new ConcurrentDictionary<Type, Type?>();
+
+        /// <summary>
+        /// Returns the marked boundary type that <paramref name="type"/> resolves to - itself or the
+        /// nearest marked base type - or null if it is not a boundary type.  The returned type is the
+        /// key a substitute must be registered under.
+        /// </summary>
+        internal Type? IsBoundaryType(Type type)
+        {
+            if (BoundaryTypes.Count == 0)
+            {
+                return null;
+            }
+
+            return _boundaryTypeCache.GetOrAdd(type, t =>
+            {
+                for (var current = t; current != null; current = current.BaseType)
+                {
+                    if (BoundaryTypes.Contains(current))
+                    {
+                        return current;
+                    }
+                }
+
+                return null;
+            });
+        }
+
         private bool IsSpecialCoreType(Type type)
         {
             if (
@@ -378,7 +486,8 @@ namespace Apex.Serialization
             Dictionary<Type, CustomSerializerDelegate> customActionDeserializers,
             Dictionary<Type, CustomSerializerDelegate> customActionInstatiators,
             HashSet<Type> whitelistedTypes,
-            List<Func<Type, bool>> whitelistFuncs)
+            List<Func<Type, bool>> whitelistFuncs,
+            HashSet<Type> boundaryTypes)
         {
             SerializationMode = serializationMode;
             AllowFunctionSerialization = allowFunctionSerialization;
@@ -393,6 +502,7 @@ namespace Apex.Serialization
             CustomActionInstantiators = new Dictionary<Type, CustomSerializerDelegate>(customActionInstatiators);
             WhitelistedTypes = new HashSet<Type>(whitelistedTypes);
             WhitelistFuncs = new List<Func<Type, bool>>(whitelistFuncs);
+            BoundaryTypes = new HashSet<Type>(boundaryTypes);
 
             _hashCode = HashCode.Combine(
                 HashCode.Combine(SerializationMode,
@@ -406,7 +516,11 @@ namespace Apex.Serialization
                 HashCode.Combine(CustomActionSerializers.Select(x => HashCode.Combine(x.Key, x.Value.GetHashCode())).Aggregate(0, (a,b) => HashCode.Combine(a,b))),
                 HashCode.Combine(CustomActionDeserializers.Select(x => HashCode.Combine(x.Key, x.Value.GetHashCode())).Aggregate(0, (a, b) => HashCode.Combine(a, b))),
                 HashCode.Combine(WhitelistedTypes.Select(x => x.GetHashCode()).Aggregate(0, (a, b) => HashCode.Combine(a, b))),
-                HashCode.Combine(WhitelistFuncs.Select(x => x.GetHashCode()).Aggregate(0, (a, b) => HashCode.Combine(a, b)))
+                HashCode.Combine(WhitelistFuncs.Select(x => x.GetHashCode()).Aggregate(0, (a, b) => HashCode.Combine(a, b))),
+                // Order-insensitive so this agrees with ImmutableSettingsDeduplicator's SetEquals on
+                // BoundaryTypes.  Both must include BoundaryTypes or boundary settings dedup onto
+                // non-boundary settings and share their generated write/read methods.
+                HashCode.Combine(BoundaryTypes.Aggregate(0, (a, x) => a ^ x.GetHashCode()))
                 );
         }
 

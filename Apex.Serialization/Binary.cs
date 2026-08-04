@@ -40,6 +40,8 @@ namespace Apex.Serialization
 
         private readonly List<object> _internedObjects = new List<object>();
 
+        private readonly Dictionary<Type, object> _boundarySubstitutes = new Dictionary<Type, object>();
+
         internal List<Type> LoadedTypeRefs => _loadedTypeRefs;
 
         private readonly DictionarySlim<Type, int> _savedTypeLookup = new DictionarySlim<Type, int>();
@@ -123,9 +125,9 @@ namespace Apex.Serialization
 
         public T Read<T>(Stream inputStream)
         {
-            _stream.ReadFrom(inputStream);
+                _stream.ReadFrom(inputStream);
 
-            var result = ReadObjectEntry<T>();
+                var result = ReadObjectEntry<T>();
 
             if (Settings.SerializationMode == Mode.Graph)
             {
@@ -137,13 +139,14 @@ namespace Apex.Serialization
                 }
             }
             _loadedTypeRefs.Clear();
+            _boundarySubstitutes.Clear();
 
             if (Settings.SupportSerializationHooks)
             {
                 foreach (var a in _deserializationHooks)
                 {
                     a.Item1(a.Item2, _customContext);
-                }
+        }
                 _deserializationHooks.Clear();
             }
 
@@ -207,6 +210,41 @@ namespace Apex.Serialization
             where T : class
         {
             _customContext = context;
+        }
+
+        public void SetBoundarySubstitute(Type type, object substitute)
+        {
+            if (Settings.SerializationMode != Mode.Graph)
+            {
+                throw new InvalidOperationException("Serialization boundaries are only supported for Graph serialization");
+            }
+
+            if (ReferenceEquals(substitute, null))
+            {
+                throw new ArgumentNullException(nameof(substitute), $"A boundary substitute for Type {type.FullName} cannot be null");
+            }
+
+            // Registrations are keyed by the marked type, so resolve through the hierarchy here rather
+            // than trusting the caller's key. This makes registering under a subclass of a marked type
+            // work, and turns a mistyped or unmarked key into an error instead of a silent no-op.
+            var markedType = Settings.IsBoundaryType(type);
+            if (markedType == null)
+            {
+                throw new ArgumentException($"Type {type.FullName} is not a serialization boundary. Call Settings.MarkBoundary before creating the serializer.", nameof(type));
+            }
+
+            if (!markedType.IsInstanceOfType(substitute))
+            {
+                throw new ArgumentException($"Boundary substitute of type {substitute.GetType().FullName} is not assignable to the marked boundary type {markedType.FullName}", nameof(substitute));
+            }
+
+            _boundarySubstitutes[markedType] = substitute;
+        }
+
+        public void SetBoundarySubstitute<T>(T substitute)
+            where T : class
+        {
+            SetBoundarySubstitute(typeof(T), substitute);
         }
 
         public void Dispose()

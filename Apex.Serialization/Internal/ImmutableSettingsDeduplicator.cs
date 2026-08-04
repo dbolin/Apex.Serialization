@@ -22,7 +22,10 @@ namespace Apex.Serialization
                 && x.CustomActionSerializers.SequenceEqual(y.CustomActionSerializers)
                 && x.CustomActionDeserializers.SequenceEqual(y.CustomActionDeserializers)
                 && x.WhitelistedTypes.SequenceEqual(y.WhitelistedTypes)
-                && x.WhitelistFuncs.SequenceEqual(y.WhitelistFuncs);
+                && x.WhitelistFuncs.SequenceEqual(y.WhitelistFuncs)
+                // Boundary types change the generated write/read trees, so settings differing only in
+                // their boundary set must not dedup onto each other and share generated methods.
+                && x.BoundaryTypes.SetEquals(y.BoundaryTypes);
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
         }
 
