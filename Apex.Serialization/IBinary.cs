@@ -6,7 +6,25 @@ namespace Apex.Serialization
     public interface IBinary : IDisposable
     {
         void Intern(object o);
+
+        /// <summary>
+        /// Generates the serialization code for <paramref name="type"/> ahead of its first write/read: the
+        /// delegates used when type information accompanies the value, plus the leaner variants used when
+        /// the runtime can prove the concrete type (sealed, a value type, or no descendents currently
+        /// loaded).  Building them also compiles, best-effort, the base-class-chain code the type's writers
+        /// and readers depend on (not applicable when the settings flatten class hierarchies).  Results are
+        /// cached process-wide per settings, so one call covers every serializer instance built from the
+        /// same settings; repeated calls are cheap cache hits.
+        /// </summary>
         void Precompile(Type type);
+
+        /// <summary>
+        /// Generates the write/read delegates used when <typeparamref name="T"/> is written or read
+        /// directly, or as a field whose declared type is <typeparamref name="T"/>, and the runtime can
+        /// prove the concrete type (sealed, a value type, or no descendents currently loaded).  Prefer
+        /// <see cref="Precompile(Type)"/> for whole-type warm-up; it includes this when applicable.
+        /// Results are cached process-wide per settings.
+        /// </summary>
         void Precompile<T>();
         T Read<T>(Stream inputStream);
         void Write<T>(T value, Stream outputStream);

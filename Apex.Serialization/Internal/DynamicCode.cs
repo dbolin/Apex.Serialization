@@ -37,9 +37,82 @@ namespace Apex.Serialization.Internal
             where T : Delegate
         {
             return (T)DynamicCodeMethods._virtualWriteMethods.GetOrAdd(
-                new TypeKey(type, settings, shouldWriteTypeInfo, isolated), 
+                new TypeKey(type, settings, shouldWriteTypeInfo, isolated),
                 t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo, isolated)).Delegate;
         }
+
+        /// <summary>
+        /// Eagerly compiles, at tree-BUILD time, the base-class delegates the surrounding walk would otherwise
+        /// leave to compile at execution time: the GenerateWriteMethod/GenerateReadMethod call built into a
+        /// derived type's expression tree runs on every invocation of the derived writer/reader, so the first
+        /// EXECUTION — not the tree's compilation — is what pays each isolated variant's codegen, and
+        /// <c>Precompile</c> never executes what it compiles. Hooking generation here, where the tree embeds
+        /// the call, applies exactly the gates the walk already passed (boundary, special-type, flattening,
+        /// constructor-deserialization) — a precompile-side re-walk would have to mirror those by hand.
+        /// <paramref name="embeddedGenerateMethod"/> is the same closed MethodInfo the tree embeds, so the
+        /// cached entry's delegate type cannot diverge from the one the embedded call casts to.
+        ///
+        /// Under <c>UseSerializedVersionId</c> the walk also emits a version-id write/check whose runtime
+        /// fallback runs a full <c>Precompile</c> of the base whenever
+        /// <c>WriteMethods&lt;,,&gt;.VersionUniqueId</c> is still 0 (Binary.Internal.cs,
+        /// GetSerializedVersionUniqueId) — only non-isolated write generation assigns that field, so that is
+        /// generated here too or the first write/read still pays the base's full non-isolated codegen.
+        ///
+        /// Failures of the two generation calls are swallowed: this is an optimization, and a base whose
+        /// generation throws here (e.g. a field type the settings do not whitelist) must keep failing at
+        /// first write/read exactly as it did when generation happened there — surfacing it earlier would
+        /// make <c>Precompile</c> throw for types that are never actually serialized. The reflection plumbing
+        /// is resolved OUTSIDE the try so a rename or added overload fails loudly instead of silently
+        /// disabling the optimization.
+        ///
+        /// Generating eagerly from inside a tree build is reentrant in a way the lazy path is not, in two
+        /// respects the guards below exist for:
+        /// - A cycle of types whose generations reach each other's base walks recurses without bound
+        ///   (GetOrAdd does not block a same-key factory reentry — this overflowed the stack on a
+        ///   collection-derived type). The in-progress set cuts recursion per (direction, base) key, so
+        ///   non-cyclic nesting — a base whose FIELD type has its own base chain — is still pregenerated
+        ///   rather than left to the lazy path (a whole-subtree boolean guard left that shape paying full
+        ///   first-write codegen).
+        /// - A nested GenerateReadMethod call drains and clears the thread-local init-only-field restore set
+        ///   that the OUTER build still owns, so the set is swapped out around the invokes and restored
+        ///   after; the nested call then drains only its own registrations.
+        /// </summary>
+        private static void PregenerateBaseDelegates(MethodInfo embeddedGenerateMethod, Type delegateType, Type baseType, ImmutableSettings settings)
+        {
+            var inProgress = _pregenerating ??= new HashSet<(MethodInfo, Type)>();
+            if (!inProgress.Add((embeddedGenerateMethod, baseType)))
+            {
+                return;
+            }
+
+            var generateNonIsolatedWrite = settings.UseSerializedVersionId
+                ? GenerateWriteMethodDefinition.MakeGenericMethod(delegateType)
+                : null;
+
+            var savedInitOnlyFields = DynamicCodeMethods._fieldsToRestoreInitOnly.Value!;
+            DynamicCodeMethods._fieldsToRestoreInitOnly.Value = new HashSet<FieldInfo>();
+            try
+            {
+                embeddedGenerateMethod.Invoke(null, new object[] { baseType, settings, false, true });
+                generateNonIsolatedWrite?.Invoke(null, new object[] { baseType, settings, false, false });
+            }
+            catch (Exception)
+            {
+            }
+            finally
+            {
+                DynamicCodeMethods._fieldsToRestoreInitOnly.Value = savedInitOnlyFields;
+                inProgress.Remove((embeddedGenerateMethod, baseType));
+            }
+        }
+
+        [ThreadStatic]
+        private static HashSet<(MethodInfo, Type)>? _pregenerating;
+
+        private static readonly MethodInfo GenerateWriteMethodDefinition =
+            typeof(DynamicCode<TStream, TBinary>).GetMethod(nameof(GenerateWriteMethod),
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("GenerateWriteMethod not found");
 
         internal static DynamicCodeMethods.GeneratedDelegate GenerateWriteMethodImpl<T>(Type type,
             ImmutableSettings settings,
@@ -235,6 +308,7 @@ namespace Apex.Serialization.Internal
                                 .MakeGenericMethod(writeMethod);
                             var method = Expression.Call(generateWriteMethod, Expression.Constant(baseType), Expression.Constant(settings), Expression.Constant(false), Expression.Constant(true));
                             writeStatements.Add(Expression.Invoke(method, actualSource, stream, output));
+                            PregenerateBaseDelegates(generateWriteMethod, writeMethod, baseType, settings);
                             baseType = baseType.BaseType;
                         }
                     }
@@ -936,6 +1010,7 @@ namespace Apex.Serialization.Internal
                                 .MakeGenericMethod(readMethod);
                             var method = Expression.Call(generateReadMethod, Expression.Constant(baseType), Expression.Constant(settings), Expression.Constant(false), Expression.Constant(true));
                             readStatements.Add(Expression.Invoke(method, result, stream, output));
+                            PregenerateBaseDelegates(generateReadMethod, readMethod, baseType, settings);
                             baseType = baseType.BaseType;
                         }
                     }

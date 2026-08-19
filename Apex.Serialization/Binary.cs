@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal;
+using Apex.Serialization.Internal.Reflection;
 
 namespace Apex.Serialization
 {
@@ -178,7 +179,12 @@ namespace Apex.Serialization
                 }
             }
 
-            if(type.IsSealed || type.IsValueType)
+            // IsSealedOrHasNoDescendents rather than IsSealed: the write/read paths dispatch through the
+            // sealed variant when a declared type has no descendents, sealed or not (Delegate- and
+            // Type-derived types excepted — they stay polymorphic), so gating on IsSealed alone would leave
+            // unsealed leaf classes compiling their sealed variants on first use. Value types are covered
+            // because they are always IsSealed.
+            if(StaticTypeInfo.IsSealedOrHasNoDescendents(type))
             {
                 typeof(Binary<TStream, TSettingGen>).GetMethods().Single(x => x.IsGenericMethod && x.Name == "Precompile")
                     .MakeGenericMethod(type).Invoke(this, Array.Empty<object>());
