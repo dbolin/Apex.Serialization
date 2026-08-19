@@ -100,12 +100,72 @@ namespace Apex.Serialization.Tests
             public int Value;
         }
 
-        private static IBinary CreateBinary(bool flattenClassHierarchy = true)
+        public abstract class TwoFieldedBase
         {
-            return Binary.Create(new Settings
+            public int A;
+        }
+
+        public class TwoFieldedMiddle : TwoFieldedBase
+        {
+            public int B;
+        }
+
+        public sealed class TwoFieldedDerived : TwoFieldedMiddle
+        {
+            public int C;
+        }
+
+        public sealed class RestrictedField
+        {
+            public int Value;
+        }
+
+        public abstract class RestrictedBase
+        {
+            public RestrictedField? Field;
+        }
+
+        public sealed class RestrictedDerived : RestrictedBase
+        {
+            public int Value;
+        }
+
+        public abstract class GraphHierarchyBase
+        {
+            public int BaseValue;
+        }
+
+        public sealed class GraphHierarchyDerived : GraphHierarchyBase
+        {
+            public int DerivedValue;
+        }
+
+        public abstract class NoVidHierarchyBase
+        {
+            public int BaseValue;
+        }
+
+        public sealed class NoVidHierarchyDerived : NoVidHierarchyBase
+        {
+            public int DerivedValue;
+        }
+
+        private static IBinary CreateBinary(bool flattenClassHierarchy = true, Mode? mode = null, bool? useSerializedVersionId = null)
+        {
+            var settings = new Settings
             {
                 FlattenClassHierarchy = flattenClassHierarchy,
-            }.MarkSerializable(x => true));
+            };
+            if (mode is { } m)
+            {
+                settings.SerializationMode = m;
+            }
+            if (useSerializedVersionId is { } v)
+            {
+                settings.UseSerializedVersionId = v;
+            }
+
+            return Binary.Create(settings.MarkSerializable(x => true));
         }
 
         private static List<TypeKey> KeysFor(IEnumerable<KeyValuePair<TypeKey, DynamicCodeMethods.GeneratedDelegate>> cache, params Type[] types)
@@ -181,11 +241,84 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
+        public void PrecompilingCoversStackedFieldBearingAncestors()
+        {
+            // Two field-bearing ancestors in ONE chain — the per-ancestor loop, which every one-ancestor
+            // fixture leaves indistinguishable from a first-ancestor-only implementation.
+            using var binary = CreateBinary(flattenClassHierarchy: false);
+            binary.Precompile(typeof(TwoFieldedDerived));
+
+            AssertNoCodegenAcrossFirstRoundTrip(binary,
+                new TwoFieldedDerived { A = 1, B = 2, C = 3 },
+                result =>
+                {
+                    result.A.Should().Be(1);
+                    result.B.Should().Be(2);
+                    result.C.Should().Be(3);
+                },
+                typeof(TwoFieldedBase), typeof(TwoFieldedMiddle), typeof(TwoFieldedDerived));
+        }
+
+        [Fact]
+        public void PrecompileDefersABaseGenerationFailureToTheFirstWrite()
+        {
+            // The eager pass's failure contract: a base that cannot generate (non-whitelisted field type)
+            // must not surface from Precompile — the type may never be serialized — and must keep failing
+            // at first write exactly as it did when generation happened there. RestrictedField's declaring
+            // type must stay off the whitelist too: serializability is inherited from the declaring type.
+            using var binary = Binary.Create(new Settings
+            {
+                FlattenClassHierarchy = false,
+            }.MarkSerializable(t => t == typeof(RestrictedBase) || t == typeof(RestrictedDerived)));
+
+            binary.Precompile(typeof(RestrictedDerived));
+
+            using var stream = new MemoryStream();
+            Assert.Throws<InvalidOperationException>(
+                () => binary.Write(new RestrictedDerived { Value = 1, Field = new RestrictedField() }, stream));
+        }
+
+        [Fact]
+        public void PrecompilingUnderGraphModeLeavesNoCodegenForItsFirstWriteAndRead()
+        {
+            using var binary = CreateBinary(flattenClassHierarchy: false, mode: Mode.Graph);
+            binary.Precompile(typeof(GraphHierarchyDerived));
+
+            AssertNoCodegenAcrossFirstRoundTrip(binary,
+                new GraphHierarchyDerived { BaseValue = 3, DerivedValue = 4 },
+                result =>
+                {
+                    result.BaseValue.Should().Be(3);
+                    result.DerivedValue.Should().Be(4);
+                },
+                typeof(GraphHierarchyBase), typeof(GraphHierarchyDerived));
+        }
+
+        [Fact]
+        public void PrecompilingWithoutVersionIdsLeavesNoCodegenForItsFirstWriteAndRead()
+        {
+            using var binary = CreateBinary(flattenClassHierarchy: false, useSerializedVersionId: false);
+            binary.Precompile(typeof(NoVidHierarchyDerived));
+
+            AssertNoCodegenAcrossFirstRoundTrip(binary,
+                new NoVidHierarchyDerived { BaseValue = 3, DerivedValue = 4 },
+                result =>
+                {
+                    result.BaseValue.Should().Be(3);
+                    result.DerivedValue.Should().Be(4);
+                },
+                typeof(NoVidHierarchyBase), typeof(NoVidHierarchyDerived));
+        }
+
+        [Fact]
         public void PrecompilingUnderAFlattenedHierarchyGeneratesNoIsolatedDelegates()
         {
             using var binary = CreateBinary();
             binary.Precompile(typeof(FlattenedHierarchyDerived));
 
+            // Positive control first, so a Precompile that silently no-ops cannot pass this test.
+            DynamicCodeMethods._virtualWriteMethods.Keys
+                .Should().Contain(k => k.Type == typeof(FlattenedHierarchyDerived) && k.IncludesTypeInfo);
             DynamicCodeMethods._virtualWriteMethods.Keys
                 .Should().NotContain(k => k.Type == typeof(FlattenedHierarchyBase) && k.Isolated);
             DynamicCodeMethods._virtualReadMethods.Keys
@@ -221,6 +354,8 @@ namespace Apex.Serialization.Tests
             binary.Precompile(typeof(GatedBase));
 
             DynamicCodeMethods._virtualWriteMethods.Keys
+                .Should().Contain(k => k.Type == typeof(GatedBase) && k.IncludesTypeInfo);
+            DynamicCodeMethods._virtualWriteMethods.Keys
                 .Should().NotContain(k => k.Type == typeof(GatedBase) && !k.IncludesTypeInfo && !k.Isolated);
             DynamicCodeMethods._virtualReadMethods.Keys
                 .Should().NotContain(k => k.Type == typeof(GatedBase) && !k.IncludesTypeInfo && !k.Isolated);
@@ -238,6 +373,8 @@ namespace Apex.Serialization.Tests
             binary.Precompile(typeof(BoundaryDerived));
 
             DynamicCodeMethods._virtualWriteMethods.Keys
+                .Should().Contain(k => k.Type == typeof(BoundaryDerived) && k.IncludesTypeInfo);
+            DynamicCodeMethods._virtualWriteMethods.Keys
                 .Should().NotContain(k => k.Type == typeof(BoundaryBase) && k.Isolated);
             DynamicCodeMethods._virtualReadMethods.Keys
                 .Should().NotContain(k => k.Type == typeof(BoundaryBase) && k.Isolated);
@@ -248,11 +385,26 @@ namespace Apex.Serialization.Tests
         {
             // The shapes where eager base-delegate generation first went reentrant and overflowed the
             // stack: generation of one type reaches a walk that re-enters generation of the same type.
-            // Completing at all is this test's assertion.
             using var binary = CreateBinary(flattenClassHierarchy: false);
             binary.Precompile(typeof(ListDerived));
             binary.Precompile(typeof(SelfList));
             binary.Precompile(typeof(CycleDerived));
+
+            // Round trips distinguish "recursion cut correctly" from "eager pass silently no-opped".
+            using var listStream = new MemoryStream();
+            binary.Write(new ListDerived { 1, 2, 3 }, listStream);
+            listStream.Seek(0, SeekOrigin.Begin);
+            binary.Read<ListDerived>(listStream).Should().Equal(1, 2, 3);
+
+            using var selfStream = new MemoryStream();
+            binary.Write(new SelfList { new SelfList() }, selfStream);
+            selfStream.Seek(0, SeekOrigin.Begin);
+            binary.Read<SelfList>(selfStream).Should().ContainSingle().Which.Should().BeEmpty();
+
+            using var cycleStream = new MemoryStream();
+            binary.Write(new CycleDerived { Value = 9, Child = null }, cycleStream);
+            cycleStream.Seek(0, SeekOrigin.Begin);
+            binary.Read<CycleDerived>(cycleStream).Value.Should().Be(9);
         }
     }
 }
