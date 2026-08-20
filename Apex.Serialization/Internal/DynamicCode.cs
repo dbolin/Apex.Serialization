@@ -668,9 +668,15 @@ namespace Apex.Serialization.Internal
                 {
                     lock (DynamicCodeMethods._fieldInfoModifierLock)
                     {
-                        if (DynamicCodeMethods._allFieldsToRestoreInitOnly[fieldInfo]-- == 0)
+                        var remaining = DynamicCodeMethods._allFieldsToRestoreInitOnly[fieldInfo] - 1;
+                        if (remaining == 0)
                         {
+                            DynamicCodeMethods._allFieldsToRestoreInitOnly.Remove(fieldInfo);
                             FieldInfoModifier.SetFieldInfoReadonly!(fieldInfo);
+                        }
+                        else
+                        {
+                            DynamicCodeMethods._allFieldsToRestoreInitOnly[fieldInfo] = remaining;
                         }
                     }
                 }
@@ -1204,15 +1210,28 @@ namespace Apex.Serialization.Internal
             };
 
 
-            if (fieldInfo.Attributes.HasFlag(FieldAttributes.InitOnly))
+            // The reflection test must match the boxed-instance gate in GetReadStatementsForType: under
+            // ForceReflectionToSetReadonlyFields the caller passes an object-typed boxed instance, which
+            // only the SetValue branch below can address — flipping the field and falling through would
+            // build a field assign against System.Object. (The mismatch was previously unreachable: the
+            // restore never firing left fields permanently non-InitOnly after their first generation.)
+            bool isInitOnly;
+            lock (DynamicCodeMethods._fieldInfoModifierLock)
             {
-                if(FieldInfoModifier.SetFieldInfoNotReadonly != null)
+                // While another in-flight generation holds the field flipped writable, its attributes no
+                // longer say InitOnly — the in-flight table is the truth, and this generation must
+                // register too or the other generation's drain restores readonly-ness mid-build.
+                isInitOnly = fieldInfo.Attributes.HasFlag(FieldAttributes.InitOnly)
+                    || DynamicCodeMethods._allFieldsToRestoreInitOnly.ContainsKey(fieldInfo);
+                if (isInitOnly && !FieldInfoModifier.MustUseReflectionToSetReadonly(settings))
                 {
-                    lock (DynamicCodeMethods._fieldInfoModifierLock)
+                    FieldInfoModifier.SetFieldInfoNotReadonly!(fieldInfo);
+                    // Increment only on first registration by THIS generation (the thread-local set is
+                    // what the drain iterates), or a field read twice in one tree leaks a count and is
+                    // never restored.
+                    if (DynamicCodeMethods._fieldsToRestoreInitOnly.Value!.Add(fieldInfo))
                     {
-                        FieldInfoModifier.SetFieldInfoNotReadonly(fieldInfo);
-                        DynamicCodeMethods._fieldsToRestoreInitOnly.Value!.Add(fieldInfo);
-                        if(DynamicCodeMethods._allFieldsToRestoreInitOnly.TryGetValue(fieldInfo, out var v))
+                        if (DynamicCodeMethods._allFieldsToRestoreInitOnly.TryGetValue(fieldInfo, out var v))
                         {
                             DynamicCodeMethods._allFieldsToRestoreInitOnly[fieldInfo] = v + 1;
                         }
@@ -1222,15 +1241,16 @@ namespace Apex.Serialization.Internal
                         }
                     }
                 }
-                else
-                {
-                    statements.Add(
-                        Expression.Call(
-                            Expression.Constant(fieldInfo), fieldInfoSetValueMethod, Expression.Convert(result, typeof(object)), Expression.Convert(tempValueResult, typeof(object))
-                            )
-                        );
-                    return Expression.Block(new[] { tempValueResult }, statements);
-                }
+            }
+
+            if (isInitOnly && FieldInfoModifier.MustUseReflectionToSetReadonly(settings))
+            {
+                statements.Add(
+                    Expression.Call(
+                        Expression.Constant(fieldInfo), fieldInfoSetValueMethod, Expression.Convert(result, typeof(object)), Expression.Convert(tempValueResult, typeof(object))
+                        )
+                    );
+                return Expression.Block(new[] { tempValueResult }, statements);
             }
 
             var valueAccessExpression = Expression.MakeMemberAccess(result, fieldInfo);
