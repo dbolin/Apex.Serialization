@@ -32,10 +32,50 @@ namespace Apex.Serialization.Internal
     internal static class PaddingMap
     {
         private static readonly ConcurrentDictionary<Type, bool[]> _coverage = new ConcurrentDictionary<Type, bool[]>();
+        private static readonly ConcurrentDictionary<Type, (int Start, int Length)[]> _unfieldedDataRanges = new ConcurrentDictionary<Type, (int Start, int Length)[]>();
 
         internal static (int Start, int Length)[] GetRanges(Type type)
         {
-            var covered = Coverage(type);
+            return Uncovered(Coverage(type));
+        }
+
+        /// <summary>
+        /// Empty for a sequential struct holding a reference, whose declared size the runtime ignores even when its own
+        /// layout happens to come out at that size, and for any struct the runtime gave a size other than the declared one.
+        /// </summary>
+        internal static (int Start, int Length)[] GetUnfieldedDataRanges(Type type) => _unfieldedDataRanges.GetOrAdd(type, ComputeUnfieldedDataRanges);
+
+        private static (int Start, int Length)[] ComputeUnfieldedDataRanges(Type type)
+        {
+            var size = RuntimeHelpers.SizeOf(type.TypeHandle);
+            var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (!HasOpaqueDeclaredSize(type, fields) || size != type.StructLayoutAttribute?.Size
+                || (type.IsLayoutSequential && HoldsReferences(type)))
+            {
+                return Array.Empty<(int, int)>();
+            }
+
+            var covered = new bool[size];
+            var offsets = FieldOffsets(type, fields);
+            for (var i = 0; i < fields.Length; ++i)
+            {
+                var fieldType = fields[i].FieldType;
+                covered.AsSpan(offsets[i], fieldType.IsValueType ? RuntimeHelpers.SizeOf(fieldType.TypeHandle) : IntPtr.Size).Fill(true);
+            }
+
+            return Uncovered(covered);
+        }
+
+        private static readonly MethodInfo IsReferenceOrContainsReferencesMethod =
+            typeof(RuntimeHelpers).GetMethod(nameof(RuntimeHelpers.IsReferenceOrContainsReferences))!;
+
+        private static bool HoldsReferences(Type type)
+        {
+            return (bool)IsReferenceOrContainsReferencesMethod.MakeGenericMethod(type).Invoke(null, null)!;
+        }
+
+        private static (int Start, int Length)[] Uncovered(bool[] covered)
+        {
             var ranges = new List<(int Start, int Length)>();
             for (var start = 0; start < covered.Length; ++start)
             {

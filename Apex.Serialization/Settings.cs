@@ -343,22 +343,8 @@ namespace Apex.Serialization
 
         private bool FindCustomSerializedValue(Type type)
         {
-            if (IsCustomSerializedValue(type))
-            {
-                return true;
-            }
-
-            if (!TypeFields.HasPrimitiveShape(type) || !TypeFields.GetFields(type).Any(x => ContainsCustomSerializedValue(x.FieldType)))
-            {
-                return false;
-            }
-
-            if (type.IsDefined(typeof(InlineArrayAttribute), false) || type.StructLayoutAttribute?.Size > 0)
-            {
-                throw new NotSupportedException($"Type {type.FullName} is an inline buffer ([InlineArray] or a declared StructLayout size) holding a value with a custom serializer, which cannot be written without copying the buffer's memory");
-            }
-
-            return true;
+            return IsCustomSerializedValue(type)
+                || (TypeFields.HasPrimitiveShape(type) && TypeFields.GetFields(type).Any(x => ContainsCustomSerializedValue(x.FieldType)));
         }
 
         private static HashSet<Type> _autoWhitelistedTypes = new HashSet<Type>
@@ -420,7 +406,7 @@ namespace Apex.Serialization
                 return true;
             }
 
-            if (TypeFields.HasPrimitiveShape(type))
+            if (TypeFields.HoldsOnlyPrimitives(type))
             {
                 return true;
             }

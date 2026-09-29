@@ -47,6 +47,12 @@ namespace Apex.Serialization.Tests
             public Point Element;
         }
 
+        [InlineArray(2)]
+        public struct TwoOuters
+        {
+            public Outer Element;
+        }
+
         [StructLayout(LayoutKind.Sequential, Size = 16)]
         public struct SizedBuffer
         {
@@ -379,14 +385,52 @@ namespace Apex.Serialization.Tests
             WriteThenRead(second, P1).Should().Be(new Point { X = 10, Y = 20 });
         }
 
-        [Fact]
-        public void InlineBufferHoldingACustomSerializedValueIsRejected()
+        [Theory]
+        [InlineData(Mode.Tree)]
+        [InlineData(Mode.Graph)]
+        public void InlineArrayElementsUseTheirCustomSerializer(Mode mode)
         {
-            var inlineArray = () => WriteThenRead(PointSettings(Mode.Tree, new Calls()), new Holder<TwoPoints>());
-            var declaredSize = () => WriteThenRead(PointSettings(Mode.Tree, new Calls()), new Holder<SizedBuffer>());
+            var buffer = new TwoPoints();
+            buffer[0] = P1;
+            buffer[1] = P2;
 
-            inlineArray.Should().Throw<NotSupportedException>();
-            declaredSize.Should().Throw<NotSupportedException>();
+            ShouldRoundTripThroughCustomSerializer(mode, buffer, (_, b) => (b[0], b[1]).Should().Be((P1, P2)), customValues: 2);
+            ShouldRoundTripThroughCustomSerializer(mode, new Holder<TwoPoints> { Value = buffer, Number = 7 },
+                (_, b) => (b.Value[0], b.Value[1], b.Number).Should().Be((P1, P2, 7)), customValues: 2);
+        }
+
+        [Theory]
+        [InlineData(Mode.Tree)]
+        [InlineData(Mode.Graph)]
+        public void InlineArrayElementsHoldingACustomSerializedValueUseItsSerializer(Mode mode)
+        {
+            var buffer = new TwoOuters();
+            buffer[0] = new Outer { A = 1, P = P1 };
+            buffer[1] = new Outer { A = 2, P = P2 };
+
+            ShouldRoundTripThroughCustomSerializer(mode, new Holder<TwoOuters> { Value = buffer },
+                (_, b) => (b.Value[0], b.Value[1]).Should().Be((buffer[0], buffer[1])), customValues: 2);
+        }
+
+        [Theory]
+        [InlineData(Mode.Tree)]
+        [InlineData(Mode.Graph)]
+        public void DeclaredSizeStructKeepsTheBytesPastItsCustomSerializedField(Mode mode)
+        {
+            var value = new SizedBuffer { First = P1 };
+            var tail = MemoryMarshal.CreateSpan(ref Unsafe.As<SizedBuffer, byte>(ref value), Unsafe.SizeOf<SizedBuffer>())[Unsafe.SizeOf<Point>()..];
+            for (var i = 0; i < tail.Length; ++i)
+            {
+                tail[i] = (byte)(0xA0 + i);
+            }
+
+            ShouldRoundTripThroughCustomSerializer(mode, value, (a, b) => BytesOf(b).Should().Equal(BytesOf(a)), customValues: 1);
+            ShouldRoundTripThroughCustomSerializer(mode, new Holder<SizedBuffer> { Value = value, Number = 7 },
+                (a, b) =>
+                {
+                    BytesOf(b.Value).Should().Equal(BytesOf(a.Value));
+                    b.Number.Should().Be(7);
+                }, customValues: 1);
         }
 
         private static void ShouldRoundTripThroughCustomSerializer<T>(Mode mode, T value, Action<T, T> assertEquivalent, int customValues)
@@ -431,6 +475,11 @@ namespace Apex.Serialization.Tests
         private static Settings Configure(Mode mode)
         {
             return new Settings { SerializationMode = mode, SupportSerializationHooks = true }.MarkSerializable(_ => true);
+        }
+
+        private static byte[] BytesOf<T>(T value)
+        {
+            return MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref value), Unsafe.SizeOf<T>()).ToArray();
         }
 
         private static Settings PointSettings(Mode mode, Calls calls)
