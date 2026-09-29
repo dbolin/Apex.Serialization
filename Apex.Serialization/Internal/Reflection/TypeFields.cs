@@ -38,11 +38,31 @@ namespace Apex.Serialization.Internal.Reflection
         {
             public Type Type;
             public bool Flattened;
+            public ImmutableSettings? CustomValueSettings;
         }
 
         private static object _cacheLock = new object();
 
-        internal static bool IsPrimitive(Type x)
+        internal static bool IsNeverCustomSerialized(Type type)
+        {
+            return type.IsEnum || BuiltInPrimitives.Contains(type);
+        }
+
+        /// <summary>
+        /// A block copy, reserved size or field order decided by <see cref="HasPrimitiveShape(Type)"/> instead copies the
+        /// memory of a value whose registered serializer should run.
+        /// </summary>
+        internal static bool IsPrimitive(Type type, ImmutableSettings settings)
+        {
+            return HasPrimitiveShape(type) && !settings.ContainsCustomSerializedValue(type);
+        }
+
+        internal static (int size, bool isRef) GetSizeForType(Type type, ImmutableSettings settings)
+        {
+            return settings.ContainsCustomSerializedValue(type) ? (0, true) : GetShapeSize(type);
+        }
+
+        internal static bool HasPrimitiveShape(Type x)
         {
             lock (_cacheLock)
             {
@@ -79,8 +99,10 @@ namespace Apex.Serialization.Internal.Reflection
             {typeof(UIntPtr), UIntPtr.Size},
             {typeof(Guid), Unsafe.SizeOf<Guid>()},
         };
-        
-        internal static (int size, bool isRef) GetSizeForType(Type type)
+
+        private static readonly HashSet<Type> BuiltInPrimitives = new HashSet<Type>(primitiveTypeSizeDictionary.Keys);
+
+        internal static (int size, bool isRef) GetShapeSize(Type type)
         {
             lock (_cacheLock)
             {
@@ -113,7 +135,7 @@ namespace Apex.Serialization.Internal.Reflection
 
             if (type.IsGenericType && typeof(Nullable<>) == type.GetGenericTypeDefinition())
             {
-                var (innerSize, isRef) = GetSizeForType(type.GenericTypeArguments[0]);
+                var (innerSize, isRef) = GetShapeSize(type.GenericTypeArguments[0]);
                 if(isRef)
                 {
                     sizeForField = 5;
@@ -124,7 +146,7 @@ namespace Apex.Serialization.Internal.Reflection
                 return true;
             }
 
-            if (type.IsValueType && fields.All(f => IsPrimitive(f.FieldType)))
+            if (type.IsValueType && fields.All(f => HasPrimitiveShape(f.FieldType)))
             {
                 if(fields.Count == 0)
                 {
@@ -151,20 +173,26 @@ namespace Apex.Serialization.Internal.Reflection
             var mustUseReflectionToSetReadonly = FieldInfoModifier.MustUseReflectionToSetReadonly(settings);
             lock (_cacheLock)
             {
-                ref var fields = ref _orderedCache.GetOrAddValueRef(new OrderedTypeCacheKey { Type = type, Flattened = settings.FlattenClassHierarchy });
+                var key = new OrderedTypeCacheKey
+                {
+                    Type = type,
+                    Flattened = settings.FlattenClassHierarchy,
+                    CustomValueSettings = settings.HasCustomValueTypeSerializers ? settings : null,
+                };
+                ref var fields = ref _orderedCache.GetOrAddValueRef(key);
                 if (fields == null)
                 {
                     var unorderedFields = settings.FlattenClassHierarchy ? GetFlattenedFields(type) : GetFields(type);
                     if (mustUseReflectionToSetReadonly)
                     {
-                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType) ? 0 : 1)
+                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType, settings) ? 0 : 1)
                             .ThenBy(x => x.IsInitOnly ? 0 : 1)
                             .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
                             .ThenBy(x => x.Name).ToList();
                     }
                     else
                     {
-                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType) ? 0 : 1)
+                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType, settings) ? 0 : 1)
                             .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
                             .ThenBy(x => x.Name).ToList();
                     }
@@ -211,7 +239,7 @@ namespace Apex.Serialization.Internal.Reflection
             }
         }
 
-        private static List<FieldInfo> GetFields(Type type)
+        internal static List<FieldInfo> GetFields(Type type)
         {
             lock (_cacheLock)
             {

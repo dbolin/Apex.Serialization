@@ -24,7 +24,7 @@ namespace Apex.Serialization.Internal
                 var elementType = type.GetElementType()!;
                 var dimensions = type.GetArrayRank();
 
-                var (elementSize, isRef) = TypeFields.GetSizeForType(elementType);
+                var (elementSize, isRef) = TypeFields.GetSizeForType(elementType, settings);
 
                 var lengths = new List<ParameterExpression>();
                 for (int i = 0; i < dimensions; ++i)
@@ -49,7 +49,7 @@ namespace Apex.Serialization.Internal
                         )
                     );
 
-                if (IsBlittable(elementType) && dimensions < 3)
+                if (IsBlittable(elementType, settings) && dimensions < 3)
                 {
                     statements.Add(WriteArrayOfBlittableValues(output, actualSource, stream, dimensions, elementType, elementSize));
                 }
@@ -150,7 +150,7 @@ namespace Apex.Serialization.Internal
                 var elementType = type.GetElementType()!;
                 var dimensions = type.GetArrayRank();
 
-                var (elementSize, isRef) = TypeFields.GetSizeForType(elementType);
+                var (elementSize, isRef) = TypeFields.GetSizeForType(elementType, settings);
 
                 var lengths = new List<ParameterExpression>();
                 for (int i = 0; i < dimensions; ++i)
@@ -163,7 +163,7 @@ namespace Apex.Serialization.Internal
                 statements.AddRange(lengths.Select((x, i) => Expression.Assign(x,
                     Expression.Call(stream, BinaryStreamMethods<TStream>.GenericMethods<int>.ReadValueMethodInfo))));
 
-                var isBlittable = IsBlittable(elementType) && dimensions < 3;
+                var isBlittable = IsBlittable(elementType, settings) && dimensions < 3;
 
                 if (isBlittable)
                 {

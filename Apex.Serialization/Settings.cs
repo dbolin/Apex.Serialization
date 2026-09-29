@@ -56,9 +56,9 @@ namespace Apex.Serialization
         /// <summary>
         /// Registers a custom serializer action.
         /// </summary>
-        /// <typeparam name="T">Type to which the custom serialization will apply.  Does not support primitives.</typeparam>
+        /// <typeparam name="T">Type to which the custom serialization will apply, including a value type that would otherwise be written as one copy of its memory.  Does not apply to bool, char, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal, IntPtr, UIntPtr, Guid, enums, strings, delegates or Type objects.</typeparam>
         /// <param name="writeMethod">Method to be called when a type matching T is to be serialized.</param>
-        /// <param name="readMethod">Method to be called when a type matching T is to be deserialized.</param>
+        /// <param name="readMethod">Method to be called when a type matching T is to be deserialized.  A value type arrives as a copy, so register a custom instantiator to produce it.</param>
         public Settings RegisterCustomSerializer<T>(Action<T, IBinaryWriter> writeMethod, Action<T, IBinaryReader> readMethod)
         {
             CustomActionSerializers.Add(typeof(T), new CustomSerializerDelegate(
@@ -77,7 +77,7 @@ namespace Apex.Serialization
         /// <param name="type">The open generic type to be directed to the custom serialization functions.</param>
         /// <param name="serializerClass">The type of the class which declares the serialization functions. The methods must static.</param>
         /// <param name="writeMethod">The name of the generic method to be used to write the objects.</param>
-        /// <param name="readMethod">The name of the generic method to be used to read the objects.</param>
+        /// <param name="readMethod">The name of the generic method to be used to read the objects.  A value type arrives as a copy, so register a custom instantiator to produce it.</param>
         /// <param name="customContextType">The type of the custom context, if any.</param>
         /// <returns></returns>
         /// <exception cref="ArgumentException"></exception>
@@ -117,10 +117,10 @@ namespace Apex.Serialization
         /// <summary>
         /// Registers a custom serializer action.
         /// </summary>
-        /// <typeparam name="T">Type to which the custom serialization will apply.  Does not support primitives.</typeparam>
+        /// <typeparam name="T">Type to which the custom serialization will apply, including a value type that would otherwise be written as one copy of its memory.  Does not apply to bool, char, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal, IntPtr, UIntPtr, Guid, enums, strings, delegates or Type objects.</typeparam>
         /// <typeparam name="TContext">Type of custom serialization context.  Will be null if the current context is not set or cannot be cast to this type.</typeparam>
         /// <param name="writeMethod">Method to be called when a type matching T is to be serialized.</param>
-        /// <param name="readMethod">Method to be called when a type matching T is to be deserialized.</param>
+        /// <param name="readMethod">Method to be called when a type matching T is to be deserialized.  A value type arrives as a copy, so register a custom instantiator to produce it.</param>
         public Settings RegisterCustomSerializer<T, TContext>(Action<T, IBinaryWriter, TContext> writeMethod, Action<T, IBinaryReader, TContext> readMethod)
             where TContext : class
         {
@@ -136,9 +136,9 @@ namespace Apex.Serialization
         }
 
         /// <summary>
-        /// Registers a custom function to instantiate objects prior to deserialization. Reading a non-value type within this function in graph mode will throw an InvalidOperationException as this could result in corrupting the object graph.
+        /// Registers a custom function to instantiate objects prior to deserialization. When it instantiates a class in graph mode, reading a non-value type within this function throws an InvalidOperationException, as this could corrupt the object graph (a value type's instantiator may read objects, unless it's read from inside a class's instantiator).
         /// </summary>
-        /// <typeparam name="T">Type to which the custom instantiation will apply.  Does not support primitives.</typeparam>
+        /// <typeparam name="T">Type to which the custom instantiation will apply.  Does not apply to bool, char, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal, IntPtr, UIntPtr, Guid, enums, strings, delegates or Type objects, and any other value type uses it only when a custom serializer is registered for it too.</typeparam>
         /// <param name="instantiationFunc">Method to be called when a type matching T is to be instantiated.</param>
         /// <returns></returns>
         public Settings RegisterCustomInstantiator<T>(Func<IBinaryReader, T> instantiationFunc)
@@ -148,9 +148,9 @@ namespace Apex.Serialization
         }
 
         /// <summary>
-        /// Registers a custom function to instantiate objects prior to deserialization. Reading a non-value type within this function in graph mode will throw an InvalidOperationException as this could result in corrupting the object graph.
+        /// Registers a custom function to instantiate objects prior to deserialization. When it instantiates a class in graph mode, reading a non-value type within this function throws an InvalidOperationException, as this could corrupt the object graph (a value type's instantiator may read objects, unless it's read from inside a class's instantiator).
         /// </summary>
-        /// <param name="type">The open generic type to be directed to the custom instantiation function.</param>
+        /// <param name="type">The open generic type to be directed to the custom instantiation function.  A value type uses it only when a custom serializer is registered for it too.</param>
         /// <param name="serializerClass">The type of the class which declares the instantiation function. The methods must static.</param>
         /// <param name="methodName">The name of the generic method to be used to instantiate the objects.</param>
         /// <param name="customContextType">The type of the custom context, if any.</param>
@@ -315,6 +315,52 @@ namespace Apex.Serialization
 
         internal bool ForceReflectionToSetReadonlyFields { get; }
 
+        internal bool HasCustomValueTypeSerializers { get; }
+
+        private readonly ConcurrentDictionary<Type, bool> _containsCustomSerializedValue = new ConcurrentDictionary<Type, bool>();
+
+        internal static bool MatchesRegistration(Type registeredType, Type type, out bool throughGenericDefinition)
+        {
+            throughGenericDefinition = type.IsConstructedGenericType && registeredType == type.GetGenericTypeDefinition();
+            return throughGenericDefinition || registeredType == type;
+        }
+
+        internal bool IsCustomSerializedValue(Type type)
+        {
+            return HasCustomValueTypeSerializers
+                && type.IsValueType
+                && !TypeFields.IsNeverCustomSerialized(type)
+                && CustomActionSerializers.Keys.Any(x => MatchesRegistration(x, type, out _));
+        }
+
+        internal bool ContainsCustomSerializedValue(Type type)
+        {
+            return HasCustomValueTypeSerializers
+                && type.IsValueType
+                && !TypeFields.IsNeverCustomSerialized(type)
+                && _containsCustomSerializedValue.GetOrAdd(type, FindCustomSerializedValue);
+        }
+
+        private bool FindCustomSerializedValue(Type type)
+        {
+            if (IsCustomSerializedValue(type))
+            {
+                return true;
+            }
+
+            if (!TypeFields.HasPrimitiveShape(type) || !TypeFields.GetFields(type).Any(x => ContainsCustomSerializedValue(x.FieldType)))
+            {
+                return false;
+            }
+
+            if (type.IsDefined(typeof(InlineArrayAttribute), false) || type.StructLayoutAttribute?.Size > 0)
+            {
+                throw new NotSupportedException($"Type {type.FullName} is an inline buffer ([InlineArray] or a declared StructLayout size) holding a value with a custom serializer, which cannot be written without copying the buffer's memory");
+            }
+
+            return true;
+        }
+
         private static HashSet<Type> _autoWhitelistedTypes = new HashSet<Type>
         {
             typeof(string),
@@ -374,7 +420,7 @@ namespace Apex.Serialization
                 return true;
             }
 
-            if (TypeFields.IsPrimitive(type))
+            if (TypeFields.HasPrimitiveShape(type))
             {
                 return true;
             }
@@ -500,6 +546,8 @@ namespace Apex.Serialization
             CustomActionSerializers = new Dictionary<Type, CustomSerializerDelegate>(customActionSerializers);
             CustomActionDeserializers = new Dictionary<Type, CustomSerializerDelegate>(customActionDeserializers);
             CustomActionInstantiators = new Dictionary<Type, CustomSerializerDelegate>(customActionInstatiators);
+            HasCustomValueTypeSerializers = SupportSerializationHooks
+                && CustomActionSerializers.Keys.Any(x => x.IsValueType && !TypeFields.IsNeverCustomSerialized(x));
             WhitelistedTypes = new HashSet<Type>(whitelistedTypes);
             WhitelistFuncs = new List<Func<Type, bool>>(whitelistFuncs);
             BoundaryTypes = new HashSet<Type>(boundaryTypes);

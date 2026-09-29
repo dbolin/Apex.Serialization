@@ -68,7 +68,12 @@ namespace Apex.Serialization.Internal
 
         private static ConcurrentDictionary<Type, bool> _isBlittableCache = new ConcurrentDictionary<Type, bool>();
 
-        internal static bool IsBlittable(Type elementType)
+        internal static bool IsBlittable(Type type, ImmutableSettings settings)
+        {
+            return HasBlittableShape(type) && !settings.ContainsCustomSerializedValue(type);
+        }
+
+        private static bool HasBlittableShape(Type elementType)
         {
             return _isBlittableCache.GetOrAdd(elementType, _ =>
             {
@@ -77,7 +82,7 @@ namespace Apex.Serialization.Internal
                     return false;
                 }
 
-                if(!TypeFields.IsPrimitive(elementType))
+                if(!TypeFields.HasPrimitiveShape(elementType))
                 {
                     return false;
                 }

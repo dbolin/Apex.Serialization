@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using Apex.Serialization.Extensions;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Xunit;
@@ -63,6 +64,18 @@ namespace Apex.Serialization.Tests
         public sealed class CustomWrittenHolder
         {
             public Padded Value;
+        }
+
+        public static class CollectionSerializers
+        {
+            public static void WriteHashSet<T>(HashSet<T> value, IBinaryWriter writer) { }
+            public static void ReadHashSet<T>(HashSet<T> value, IBinaryReader reader) { }
+            public static void WriteDictionary<K, V>(Dictionary<K, V> value, IBinaryWriter writer) where K : notnull { }
+            public static void ReadDictionary<K, V>(Dictionary<K, V> value, IBinaryReader reader) where K : notnull { }
+            public static void WriteSortedSet<T>(SortedSet<T> value, IBinaryWriter writer) { }
+            public static void ReadSortedSet<T>(SortedSet<T> value, IBinaryReader reader) { }
+            public static void WriteStack<T>(Stack<T> value, IBinaryWriter writer) { }
+            public static void ReadStack<T>(Stack<T> value, IBinaryReader reader) { }
         }
 
         public sealed class VectorHolder<T>
@@ -347,6 +360,71 @@ namespace Apex.Serialization.Tests
         }
 
         [Theory]
+        [InlineData(Mode.Tree, UnpaddedTreeBytes)]
+        [InlineData(Mode.Graph, UnpaddedGraphBytes)]
+        public void UnrelatedCustomSerializersLeaveBytesUnchanged(Mode mode, string expectedHex)
+        {
+            var bytes = Write(mode, BuildUnpaddedPin(), settings =>
+            {
+                settings.SupportSerializationHooks = true;
+                settings.RegisterCustomSerializer<Padded>((_, _) => { }, (_, _) => { });
+                settings.RegisterCustomSerializer<FieldHolder>((_, _) => { }, (_, _) => { });
+            });
+
+            Convert.ToHexString(bytes).Should().Be(expectedHex);
+        }
+
+        [Theory]
+        [InlineData(Mode.Tree, UnpaddedTreeBytes)]
+        [InlineData(Mode.Graph, UnpaddedGraphBytes)]
+        public void RegistrationsWithHooksOffLeaveBytesUnchanged(Mode mode, string expectedHex)
+        {
+            var bytes = Write(mode, BuildUnpaddedPin(), settings => settings.RegisterCustomSerializer<Dense>((_, _) => { }, (_, _) => { }));
+
+            Convert.ToHexString(bytes).Should().Be(expectedHex);
+        }
+
+        [Theory]
+        [InlineData(Mode.Tree, UnpaddedTreeBytes)]
+        [InlineData(Mode.Graph, UnpaddedGraphBytes)]
+        public void OpenGenericCollectionSerializersLeaveBytesUnchanged(Mode mode, string expectedHex)
+        {
+            var bytes = Write(mode, BuildUnpaddedPin(), settings =>
+            {
+                settings.SupportSerializationHooks = true;
+                settings.RegisterCustomSerializer(typeof(HashSet<>), typeof(CollectionSerializers), nameof(CollectionSerializers.WriteHashSet), nameof(CollectionSerializers.ReadHashSet));
+                settings.RegisterCustomSerializer(typeof(Dictionary<,>), typeof(CollectionSerializers), nameof(CollectionSerializers.WriteDictionary), nameof(CollectionSerializers.ReadDictionary));
+                settings.RegisterCustomSerializer(typeof(SortedSet<>), typeof(CollectionSerializers), nameof(CollectionSerializers.WriteSortedSet), nameof(CollectionSerializers.ReadSortedSet));
+                settings.RegisterCustomSerializer(typeof(Stack<>), typeof(CollectionSerializers), nameof(CollectionSerializers.WriteStack), nameof(CollectionSerializers.ReadStack));
+                Ignore<FieldHolder>(settings);
+            });
+
+            Convert.ToHexString(bytes).Should().Be(expectedHex);
+        }
+
+        [Theory]
+        [InlineData(Mode.Tree, UnpaddedTreeBytes)]
+        [InlineData(Mode.Graph, UnpaddedGraphBytes)]
+        public void RegistrationsForPrimitivesAndEnumsLeaveBytesUnchanged(Mode mode, string expectedHex)
+        {
+            var bytes = Write(mode, BuildUnpaddedPin(), settings =>
+            {
+                settings.SupportSerializationHooks = true;
+                Ignore<int>(settings);
+                Ignore<long>(settings);
+                Ignore<float>(settings);
+                Ignore<bool>(settings);
+                Ignore<char>(settings);
+                Ignore<decimal>(settings);
+                Ignore<Guid>(settings);
+                Ignore<DayOfWeek>(settings);
+                Ignore<Padded>(settings);
+            });
+
+            Convert.ToHexString(bytes).Should().Be(expectedHex);
+        }
+
+        [Theory]
         [InlineData(Mode.Tree)]
         [InlineData(Mode.Graph)]
         public void RuntimeSizedVectorKeepsEveryLane(Mode mode)
@@ -453,6 +531,11 @@ namespace Apex.Serialization.Tests
             var output = WriteAfterPrefix(values, flushAtByteOfValue: 4, (ref BufferedStream stream, void* source, uint byteLength) => stream.WriteBytes(source, byteLength));
 
             ShouldHoldEveryValue(output, PoisonedPaddedBlock, values.Length);
+        }
+
+        private static void Ignore<T>(Settings settings)
+        {
+            settings.RegisterCustomSerializer<T>((_, _) => { }, (_, _) => { });
         }
 
         private static void ShouldWriteExactly<T>(Mode mode, Fill<T> fill, byte[] expected)
