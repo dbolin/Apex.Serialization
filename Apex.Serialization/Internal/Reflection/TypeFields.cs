@@ -102,6 +102,12 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static bool TryGetSizeForStruct(Type type, out int sizeForField)
         {
+            if (type.ContainsGenericParameters)
+            {
+                sizeForField = 5;
+                return false;
+            }
+
             var fields = GetFields(type);
             int size;
 

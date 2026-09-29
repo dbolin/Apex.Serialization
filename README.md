@@ -62,6 +62,10 @@ Always reuse serializer instances when possible, as the instance caches a lot of
 
 Fields with the [Nonserialized] attribute will not be serialized or deserialized.
 
+A value type whose serialized fields are all primitive (recursively) is written as one copy of its memory, and so is a one- or two-dimensional array of such values.  The padding bytes in that copy are written as zeros, so two values serialize to equal bytes when every field is equal.  That includes any [NonSerialized] field inside the struct, which is still written as part of the copy.
+
+A struct with a declared size (`StructLayout.Size`) counts as having no padding, because the bytes past its fields may hold data.  Any real padding in such a struct is written as is.  That applies to a fixed buffer (the compiler declares the size on the hidden struct it generates for each buffer) but not to the struct that holds it, whose own padding is still zeroed.  An empty struct with no declared size (the compiler gives it one byte) is written as a zero byte, and a type whose layout the runtime defines, such as `Vector<T>`, is copied whole.
+
 #### Settings
 
 You must pass a Settings object to Binary.Create that lets you choose:

@@ -33,7 +33,7 @@ namespace Apex.Serialization.Internal
         private byte* _typeIdBufferPtr;
 
         private uint _bufferPosition;
-        private const uint MaxSize = 1024*1024;
+        internal const uint MaxSize = 1024*1024;
         private int _size;
 
         private DictionarySlim<Type, TypeIdCacheEntry> _typeIdCache;
@@ -406,7 +406,13 @@ namespace Apex.Serialization.Internal
         {
             CheckReserved(Unsafe.SizeOf<T>());
 
-            Unsafe.Write(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), value);
+            var destination = (byte*)Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition);
+            Unsafe.Write(destination, value);
+            if (PaddingMap<T>.HasPadding)
+            {
+                PaddingMap<T>.ZeroPadding(destination);
+            }
+
             _bufferPosition += (uint)Unsafe.SizeOf<T>();
         }
 
@@ -446,6 +452,42 @@ namespace Apex.Serialization.Internal
         public void Dispose()
         {
             Dispose(true);
+        }
+
+        public void WriteValues<T>(void* source, uint byteLength) where T : struct
+        {
+            if (PaddingMap<T>.HasPadding)
+            {
+                WriteValuesZeroingPadding<T>((byte*)source, byteLength);
+            }
+            else
+            {
+                WriteBytes(source, byteLength);
+            }
+        }
+
+        private void WriteValuesZeroingPadding<T>(byte* source, uint byteLength) where T : struct
+        {
+            uint written = 0;
+            while (written < byteLength)
+            {
+                var allowed = (uint)(_size - _bufferPosition);
+                if (allowed == 0)
+                {
+                    if (!Flush())
+                    {
+                        ThrowFailedStream();
+                    }
+
+                    continue;
+                }
+
+                var count = Math.Min(allowed, byteLength - written);
+                var destination = (byte*)Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition);
+                PaddingMap<T>.CopyZeroingPadding(destination, source + written, written, count);
+                _bufferPosition += count;
+                written += count;
+            }
         }
 
         public void WriteBytes(void* source, uint length)

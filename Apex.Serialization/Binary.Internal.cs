@@ -709,7 +709,7 @@ namespace Apex.Serialization
         {
             fixed (void* ptr = array)
             {
-                _stream.WriteBytes(ptr, (uint)(array.Length * elementSize));
+                _stream.WriteValues<T>(ptr, (uint)(array.Length * elementSize));
             }
         }
 
@@ -739,7 +739,7 @@ namespace Apex.Serialization
 
             fixed (void* ptr = array)
             {
-                _stream.WriteBytes(ptr, (uint)(length1 * length2 * elementSize));
+                _stream.WriteValues<T>(ptr, (uint)(length1 * length2 * elementSize));
             }
         }
 
