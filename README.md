@@ -62,6 +62,10 @@ Always reuse serializer instances when possible, as the instance caches a lot of
 
 Fields with the [Nonserialized] attribute will not be serialized or deserialized.
 
+A value type whose fields are all primitive (recursively) is written as one copy of its memory, and so is a one- or two-dimensional array of such values, unless a custom serializer applies to the type or to a value inside it, or one of those fields is [NonSerialized].  The padding bytes in that copy are written as zeros, so two values serialize to equal bytes when every field is equal.  Any other struct is written field by field, so a [NonSerialized] field in it reads back as its default.  An `[InlineArray]` that isn't copied whole is written as its elements, each the way a field of the element type would be.
+
+A struct with a declared size (`StructLayout.Size`) counts as having no padding, because the bytes past its fields may hold data.  Any real padding in such a struct is written as is.  That applies to a fixed buffer (the compiler declares the size on the hidden struct it generates for each buffer) but not to the struct that holds it, whose own padding is still zeroed.  A struct with a declared size that's written field by field (because it holds a custom-serialized value or a [NonSerialized] field, say) is followed by the bytes no field covers, copied as they are.  The runtime ignores the declared size of a sequential struct holding a reference (it keeps the size of an explicit-layout one), so that struct writes only its fields.  An empty struct is written at its declared size when that's more than one byte, and as a zero byte otherwise (the compiler gives it one byte).  A type whose layout the runtime defines, such as `Vector<T>`, is copied whole.
+
 #### Settings
 
 You must pass a Settings object to Binary.Create that lets you choose:
@@ -115,6 +119,10 @@ Settings.RegisterCustomSerializer<CustomType>(writeAction, readAction)
 ```
 
 In order for custom serialization to be used, the SupportSerializationHooks property on the Settings used to instantiate the Binary class must also be set to true.
+
+A registration applies to every value of the matching type, including a value type that would otherwise be written as one copy of its memory (a struct holding such a value is then written field by field, and an `[InlineArray]` element by element), and `Nullable<T>` or `Nullable<>` can be registered as well.  It doesn't apply to bool, char, byte, sbyte, short, ushort, int, uint, long, ulong, float, double, decimal, IntPtr, UIntPtr, Guid, enums, strings, delegates or Type objects.
+
+A value type's read Action gets a copy it can't fill in, so register a custom instantiator with `Settings.RegisterCustomInstantiator<CustomType>(readFunc)` to produce the value.  The instantiator runs first and may read object references in graph mode (unless it's read from inside a class's instantiator).  The read Action still runs after it, so between them they must read exactly what the write Action wrote, or the rest of the stream is read out of step.  Without an instantiator the value reads back as its default.
 
 Both the write Action and read Action will be called with an instance of the type being serialized/deserialized and a BinaryWriter/BinaryReader interface which exposes three methods:
 

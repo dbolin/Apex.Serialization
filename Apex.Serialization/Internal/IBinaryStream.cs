@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Apex.Serialization.Internal
 {
@@ -15,7 +16,7 @@ namespace Apex.Serialization.Internal
         void Write(string? input);
         void WriteTypeId(Type type);
         void Write<T>(T value) where T : struct;
-        void WriteBytes(void* source, uint length);
+        void WriteValues<T>(void* source, uint byteLength) where T : struct;
 
         string? Read();
         byte* ReadTypeId(out int length1, out int length2);
@@ -37,13 +38,16 @@ namespace Apex.Serialization.Internal
         internal static readonly MethodInfo WriteTypeIdMethodInfo =
             typeof(TStream).GetMethod("WriteTypeId", new[] { typeof(Type) })!;
 
-        internal static readonly MethodInfo WriteBytesMethodInfo =
-            typeof(TStream).GetMethod("WriteBytes", new[] { typeof(void*), typeof(uint) })!;
-
         internal static readonly MethodInfo ReadBytesMethodInfo =
             typeof(TStream).GetMethod("ReadBytes", new[] { typeof(void*), typeof(uint) })!;
 
-        internal static MethodInfo GetWriteValueMethodInfo(Type t) => typeof(TStream).GetMethods().Single(x => x.Name == "Write" && x.IsGenericMethod).MakeGenericMethod(t);
+        internal static MethodInfo GetWriteValueMethodInfo(Type t)
+        {
+            // Initialized before the generated code that calls Write<t> is compiled, so the JIT folds
+            // PaddingMap<t>.HasPadding to a constant and an unpadded type's write carries no padding check.
+            RuntimeHelpers.RunClassConstructor(typeof(PaddingMap<>).MakeGenericType(t).TypeHandle);
+            return typeof(TStream).GetMethods().Single(x => x.Name == "Write" && x.IsGenericMethod).MakeGenericMethod(t);
+        }
         internal static MethodInfo GetReadValueMethodInfo(Type t) => typeof(TStream).GetMethods().Single(x => x.Name == "Read" && x.IsGenericMethod).MakeGenericMethod(t);
 
         internal static class GenericMethods<T> where T : struct

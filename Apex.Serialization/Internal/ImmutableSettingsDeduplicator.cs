@@ -21,6 +21,7 @@ namespace Apex.Serialization
                 && x.UseSerializedVersionId == y.UseSerializedVersionId
                 && x.CustomActionSerializers.SequenceEqual(y.CustomActionSerializers)
                 && x.CustomActionDeserializers.SequenceEqual(y.CustomActionDeserializers)
+                && x.CustomActionInstantiators.SequenceEqual(y.CustomActionInstantiators)
                 && x.WhitelistedTypes.SequenceEqual(y.WhitelistedTypes)
                 && x.WhitelistFuncs.SequenceEqual(y.WhitelistFuncs)
                 // Boundary types change the generated write/read trees, so settings differing only in

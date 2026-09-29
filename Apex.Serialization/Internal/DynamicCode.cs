@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Transactions;
 using Apex.Serialization.Extensions;
@@ -130,7 +131,7 @@ namespace Apex.Serialization.Internal
                 var isolatedSource = Expression.Parameter(type, "source");
 
                 var isolatedFields = TypeFields.GetOrderedFields(type, settings);
-                var isolatedFieldsSize = isolatedFields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size);
+                var isolatedFieldsSize = isolatedFields.Sum(x => TypeFields.GetSizeForType(x.FieldType, settings).size);
                 writeStatements.Add(ReserveConstantSize(stream, isolatedFieldsSize));
                 writeStatements.AddRange(isolatedFields.Select(x =>
                                     GetWriteFieldExpression(x, isolatedSource, stream, output, settings, visitedTypes, 0)));
@@ -209,7 +210,7 @@ namespace Apex.Serialization.Internal
             }
 
             var fields = isBoundary ? NoFields() : TypeFields.GetOrderedFields(type, settings);
-            var maxSizeNeeded = writeSize ? (IsBlittable(type) ? TypeFields.GetSizeForType(type).size : fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size)) : 0;
+            var maxSizeNeeded = writeSize ? (IsBlittable(type, settings) ? TypeFields.GetSizeForType(type, settings).size : fields.Sum(x => TypeFields.GetSizeForType(x.FieldType, settings).size)) : 0;
             int metaBytes = 0;
 
             if(writeNullByte && !type.IsValueType)
@@ -285,6 +286,11 @@ namespace Apex.Serialization.Internal
                     writeStatements.AddRange(fields.Select(x =>
                         GetWriteFieldExpression(x, actualSource, stream, output, settings, visitedTypes, depth + 1)));
 
+                    if (type.IsValueType)
+                    {
+                        writeStatements.AddRange(WriteUnfieldedData(type, output, actualSource));
+                    }
+
                     if (!settings.FlattenClassHierarchy && !type.IsValueType)
                     {
                         var baseType = type.BaseType;
@@ -349,7 +355,7 @@ namespace Apex.Serialization.Internal
             Expression actualSource, ParameterExpression stream, Expression source, List<FieldInfo> fields,
             ImmutableSettings settings, ImmutableHashSet<Type> visitedTypes, int depth)
         {
-            var primitive = HandlePrimitiveWrite(stream, output, type, actualSource);
+            var primitive = HandlePrimitiveWrite(stream, output, type, actualSource, settings);
             if(primitive != null)
             {
                 return primitive;
@@ -376,7 +382,7 @@ namespace Apex.Serialization.Internal
                 return custom;
             }
 
-            var writeStruct = WriteStructExpression(type, actualSource, stream, fields);
+            var writeStruct = WriteStructExpression(type, actualSource, stream, output, fields, settings, visitedTypes, depth);
             if (writeStruct != null)
             {
                 return writeStruct;
@@ -392,27 +398,53 @@ namespace Apex.Serialization.Internal
         }
 
         private static Expression? WriteStructExpression(Type type, Expression source, ParameterExpression stream,
-            List<FieldInfo> fields)
+            ParameterExpression output, List<FieldInfo> fields, ImmutableSettings settings,
+            ImmutableHashSet<Type> visitedTypes, int depth)
         {
-            if (type.IsValueType)
+            if (!type.IsValueType || settings.IsCustomSerializedValue(type))
             {
-                if (fields.Count == 0)
-                {
-                    return Expression.Empty();
-                }
+                return null;
+            }
 
-                var isPrimitive = fields.All(x => TypeFields.IsPrimitive(x.FieldType));
-                if (type.IsExplicitLayout && isPrimitive)
-                {
-                    var method = (MethodInfo) typeof(BinaryStreamMethods<>.GenericMethods<>)
-                        .MakeGenericType(typeof(TStream), type)
-                        .GetField("WriteValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
-                    return Expression.Call(stream, method, source);
-                }
+            if (fields.Count == 0)
+            {
+                return PaddingMap.GetUnfieldedDataRanges(type).Length == 0 ? Expression.Empty() : null;
+            }
+
+            if (type.IsDefined(typeof(InlineArrayAttribute), false))
+            {
+                return WriteInlineArray(type, source, stream, output, fields[0].FieldType, settings, visitedTypes, depth);
             }
 
             return null;
         }
+
+        private static Expression WriteInlineArray(Type type, Expression source, ParameterExpression stream,
+            ParameterExpression output, Type elementType, ImmutableSettings settings,
+            ImmutableHashSet<Type> visitedTypes, int depth)
+        {
+            var buffer = Expression.Variable(type, "inlineArray");
+            var element = Expression.Variable(elementType, "element");
+            var index = Expression.Variable(typeof(int), "index");
+            var written = Expression.Label("inlineArrayWritten");
+
+            return Expression.Block(new[] { buffer, element, index },
+                Expression.Assign(buffer, source),
+                Expression.Assign(index, Expression.Constant(0)),
+                Expression.Loop(
+                    Expression.IfThenElse(
+                        Expression.LessThan(index, Expression.Constant(InlineArrayLength(type))),
+                        Expression.Block(
+                            Expression.Assign(element, Expression.Call(InlineArrayElement.GetMethod.MakeGenericMethod(type, elementType), buffer, index)),
+                            WriteValue(stream, output, elementType, element, settings, visitedTypes, depth + 1, out _),
+                            Expression.PreIncrementAssign(index)),
+                        Expression.Break(written)),
+                    written));
+        }
+
+        private static int InlineArrayLength(Type type) => type.GetCustomAttribute<InlineArrayAttribute>() is { } inlineArray
+            ? inlineArray.Length
+            : throw new ArgumentException($"{type} is not an [InlineArray] struct", nameof(type));
 
         internal static Expression GetWriteFieldExpression(FieldInfo fieldInfo,
             Expression source,
@@ -438,7 +470,7 @@ namespace Apex.Serialization.Internal
             int depth,
             out bool inlineWrite)
         {
-            var primitiveExpression = HandlePrimitiveWrite(stream, output, declaredType, valueAccessExpression);
+            var primitiveExpression = HandlePrimitiveWrite(stream, output, declaredType, valueAccessExpression, settings);
             if(primitiveExpression != null)
             {
                 inlineWrite = true;
@@ -452,7 +484,7 @@ namespace Apex.Serialization.Internal
                 return nullableExpression;
             }
 
-            var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, TypeFields.GetOrderedFields(declaredType, settings));
+            var writeStruct = WriteStructExpression(declaredType, valueAccessExpression, stream, output, TypeFields.GetOrderedFields(declaredType, settings), settings, visitedTypes, depth);
             if (writeStruct != null)
             {
                 inlineWrite = true;
@@ -479,7 +511,7 @@ namespace Apex.Serialization.Internal
                 inlineWrite = true;
                 var writeStatements = GetWriteStatementsForType(declaredType, settings, stream, output,
                     valueAccessExpression, false, valueAccessExpression,
-                    visitedTypes, depth, writeSize: !TypeFields.IsPrimitive(declaredType));
+                    visitedTypes, depth, writeSize: !TypeFields.IsPrimitive(declaredType, settings));
                 return Expression.Block(writeStatements);
             }
             else
@@ -512,7 +544,8 @@ namespace Apex.Serialization.Internal
             int depth,
             Expression valueAccessExpression)
         {
-            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
+            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>)
+                || settings.IsCustomSerializedValue(declaredType))
             {
                 return null;
             }
@@ -520,7 +553,7 @@ namespace Apex.Serialization.Internal
             var hasValueMethod = declaredType.GetProperty("HasValue")!.GetGetMethod()!;
             var valueMethod = declaredType.GetProperty("Value")!.GetGetMethod()!;
             var nullableType = declaredType.GenericTypeArguments[0];
-            var isPrimitive = TypeFields.IsPrimitive(nullableType);
+            var isPrimitive = TypeFields.IsPrimitive(nullableType, settings);
 
             return
                 Expression.Block(
@@ -567,16 +600,15 @@ namespace Apex.Serialization.Internal
         private static bool CustomSerializationAction<BinaryT>(ParameterExpression output, Type type, Expression result, List<Expression> statements, ImmutableSettings settings, KeyValuePair<Type, Binary.CustomSerializerDelegate> entry,
             MethodInfo binaryGetter, Type delegateTypeWithoutContext, Type delegateTypeWithContext)
         {
-            var matchingType = entry.Key == type;
-            var matchingGeneric = type.IsConstructedGenericType && entry.Key == type.GetGenericTypeDefinition();
-            if (matchingType || matchingGeneric)
+            if (ImmutableSettings.MatchesRegistration(entry.Key, type, out var matchingGeneric))
             {
                 var customContextType = entry.Value.CustomContextType;
                 var callArgList = new List<Expression>();
                 Type concreteType;
                 var isFunc = delegateTypeWithoutContext.GetGenericTypeDefinition() == typeof(Func<,>);
+                var guardsObjectReferences = isFunc && settings.SerializationMode == Mode.Graph && !type.IsValueType;
 
-                if (isFunc && settings.SerializationMode == Mode.Graph)
+                if (guardsObjectReferences)
                 {
                     statements.Add(Expression.Call(output, DisallowReadingObjectReference));
                 }
@@ -626,7 +658,7 @@ namespace Apex.Serialization.Internal
 
                 statements.Add(statement);
 
-                if (isFunc && settings.SerializationMode == Mode.Graph)
+                if (guardsObjectReferences)
                 {
                     statements.Add(Expression.Call(output, AllowReadingObjectReference));
                 }
@@ -638,9 +670,9 @@ namespace Apex.Serialization.Internal
         }
 
         private static Expression? HandlePrimitiveWrite(ParameterExpression stream, ParameterExpression output, Type declaredType,
-            Expression valueAccessExpression)
+            Expression valueAccessExpression, ImmutableSettings settings)
         {
-            if(IsBlittable(declaredType))
+            if(IsBlittable(declaredType, settings))
             {
                 return Expression.Call(stream, BinaryStreamMethods<TStream>.GetWriteValueMethodInfo(declaredType), valueAccessExpression);
             }
@@ -702,7 +734,7 @@ namespace Apex.Serialization.Internal
                 var isolatedResult = Expression.Parameter(type, "result");
 
                 var isolatedFields = TypeFields.GetOrderedFields(type, settings);
-                var isolatedFieldsSize = isolatedFields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size);
+                var isolatedFieldsSize = isolatedFields.Sum(x => TypeFields.GetSizeForType(x.FieldType, settings).size);
                 readStatements.Add(ReserveConstantSize(stream, isolatedFieldsSize));
                 readStatements.AddRange(isolatedFields.Select(x => GetReadFieldExpression(x, isolatedResult, stream, output, settings, localVariables, visitedTypes, 0)));
 
@@ -755,7 +787,7 @@ namespace Apex.Serialization.Internal
             var readStatements = new List<Expression>();
 
             var skipReadLabel = readMetadata ? Expression.Label("skipRead") : null;
-            var maxSizeNeeded = reserveNeededSize ? (IsBlittable(type) ? TypeFields.GetSizeForType(type).size : fields.Sum(x => TypeFields.GetSizeForType(x.FieldType).size)) : 0;
+            var maxSizeNeeded = reserveNeededSize ? (IsBlittable(type, settings) ? TypeFields.GetSizeForType(type, settings).size : fields.Sum(x => TypeFields.GetSizeForType(x.FieldType, settings).size)) : 0;
             if (readMetadata)
             {
                 maxSizeNeeded++;
@@ -929,6 +961,15 @@ namespace Apex.Serialization.Internal
                 }
             }
 
+            if (!created && settings.IsCustomSerializedValue(type))
+            {
+                foreach (var entry in settings.CustomActionInstantiators)
+                {
+                    CustomSerializationAction<IBinaryReader>(output, type, result, readStatements, settings, entry,
+                        BinaryReaderGetter, typeof(Func<,>), typeof(Func<,,>));
+                }
+            }
+
             if (!created)
             {
                 if (!type.IsValueType && settings.SerializationMode == Mode.Graph)
@@ -1021,6 +1062,11 @@ namespace Apex.Serialization.Internal
                         }
                     }
                 }
+
+                if (type.IsValueType)
+                {
+                    readStatements.AddRange(ReadUnfieldedData(type, output, result));
+                }
             }
 
             if (settings.SupportSerializationHooks)
@@ -1089,7 +1135,7 @@ namespace Apex.Serialization.Internal
             int depth, bool readMetadata,
             out bool created)
         {
-            var primitive = HandlePrimitiveRead(stream, output, type);
+            var primitive = HandlePrimitiveRead(stream, output, type, settings);
             if (primitive != null)
             {
                 created = true;
@@ -1129,7 +1175,7 @@ namespace Apex.Serialization.Internal
                 return custom;
             }
 
-            var readStructExpression = ReadStructExpression(type, stream, fields);
+            var readStructExpression = ReadStructExpression(type, stream, output, fields, settings, localVariables, visitedTypes, depth);
             if (readStructExpression != null)
             {
                 created = true;
@@ -1172,28 +1218,50 @@ namespace Apex.Serialization.Internal
             return Expression.Block(customReadStatements);
         }
 
-        private static Expression? ReadStructExpression(Type type, ParameterExpression stream,
-            List<FieldInfo> fields)
+        private static Expression? ReadStructExpression(Type type, ParameterExpression stream, ParameterExpression output,
+            List<FieldInfo> fields, ImmutableSettings settings, List<ParameterExpression> localVariables,
+            ImmutableHashSet<Type> visitedTypes, int depth)
         {
-            if (type.IsValueType)
+            if (!type.IsValueType || settings.IsCustomSerializedValue(type))
             {
-                if (fields.Count == 0)
-                {
-                    return Expression.Default(type);
-                }
+                return null;
+            }
 
-                var isPrimitive = fields.All(x => TypeFields.IsPrimitive(x.FieldType));
-                if (type.IsExplicitLayout && isPrimitive)
-                {
+            if (fields.Count == 0)
+            {
+                return PaddingMap.GetUnfieldedDataRanges(type).Length == 0 ? Expression.Default(type) : null;
+            }
 
-                    var method = (MethodInfo) typeof(BinaryStreamMethods<>.GenericMethods<>)
-                        .MakeGenericType(typeof(TStream), type)
-                        .GetField("ReadValueMethodInfo", BindingFlags.Static | BindingFlags.NonPublic)!.GetValue(null)!;
-                    return Expression.Call(stream, method);
-                }
+            if (type.IsDefined(typeof(InlineArrayAttribute), false))
+            {
+                return ReadInlineArray(type, stream, output, fields[0].FieldType, settings, localVariables, visitedTypes, depth);
             }
 
             return null;
+        }
+
+        private static Expression ReadInlineArray(Type type, ParameterExpression stream, ParameterExpression output,
+            Type elementType, ImmutableSettings settings, List<ParameterExpression> localVariables,
+            ImmutableHashSet<Type> visitedTypes, int depth)
+        {
+            var buffer = Expression.Variable(type, "inlineArray");
+            var element = Expression.Variable(elementType, "element");
+            var index = Expression.Variable(typeof(int), "index");
+            var read = Expression.Label("inlineArrayRead");
+
+            return Expression.Block(new[] { buffer, element, index },
+                Expression.Assign(buffer, Expression.Default(type)),
+                Expression.Assign(index, Expression.Constant(0)),
+                Expression.Loop(
+                    Expression.IfThenElse(
+                        Expression.LessThan(index, Expression.Constant(InlineArrayLength(type))),
+                        Expression.Block(
+                            Expression.Assign(element, ReadValue(stream, output, settings, elementType, localVariables, visitedTypes, depth + 1, out _)),
+                            Expression.Call(InlineArrayElement.SetMethod.MakeGenericMethod(type, elementType), buffer, index, element),
+                            Expression.PreIncrementAssign(index)),
+                        Expression.Break(read)),
+                    read),
+                buffer);
         }
 
         internal static Expression GetReadFieldExpression(FieldInfo fieldInfo, Expression result,
@@ -1264,7 +1332,7 @@ namespace Apex.Serialization.Internal
             int depth,
             out bool isInlineRead)
         {
-            var primitiveExpression = HandlePrimitiveRead(stream, output, declaredType);
+            var primitiveExpression = HandlePrimitiveRead(stream, output, declaredType, settings);
             if (primitiveExpression != null)
             {
                 isInlineRead = true;
@@ -1278,7 +1346,7 @@ namespace Apex.Serialization.Internal
                 return nullableExpression;
             }
 
-            var readStructExpression = ReadStructExpression(declaredType, stream, TypeFields.GetOrderedFields(declaredType, settings));
+            var readStructExpression = ReadStructExpression(declaredType, stream, output, TypeFields.GetOrderedFields(declaredType, settings), settings, localVariables, visitedTypes, depth);
             if (readStructExpression != null)
             {
                 isInlineRead = true;
@@ -1309,7 +1377,7 @@ namespace Apex.Serialization.Internal
                     Expression.Assign(result, Expression.Default(declaredType))
                 };
                 readStatements.AddRange(GetReadStatementsForType(declaredType, settings, stream, output,
-                    result, localVariables, visitedTypes, depth, reserveNeededSize: !TypeFields.IsPrimitive(declaredType)));
+                    result, localVariables, visitedTypes, depth, reserveNeededSize: !TypeFields.IsPrimitive(declaredType, settings)));
                 readStatements.Add(result);
                 return Expression.Block(readStatements);
             }
@@ -1336,9 +1404,9 @@ namespace Apex.Serialization.Internal
             }
         }
 
-        private static Expression? HandlePrimitiveRead(ParameterExpression stream, ParameterExpression output, Type declaredType)
+        private static Expression? HandlePrimitiveRead(ParameterExpression stream, ParameterExpression output, Type declaredType, ImmutableSettings settings)
         {
-            if(IsBlittable(declaredType))
+            if(IsBlittable(declaredType, settings))
             {
                 return Expression.Call(stream, BinaryStreamMethods<TStream>.GetReadValueMethodInfo(declaredType));
             }
@@ -1357,13 +1425,14 @@ namespace Apex.Serialization.Internal
             ImmutableSettings settings, List<ParameterExpression> localVariables, ImmutableHashSet<Type> visitedTypes,
             int depth)
         {
-            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>))
+            if (!declaredType.IsGenericType || declaredType.GetGenericTypeDefinition() != typeof(Nullable<>)
+                || settings.IsCustomSerializedValue(declaredType))
             {
                 return null;
             }
 
             var nullableType = declaredType.GenericTypeArguments[0];
-            var isPrimitive = TypeFields.IsPrimitive(nullableType);
+            var isPrimitive = TypeFields.IsPrimitive(nullableType, settings);
             var tempResult = Expression.Variable(nullableType, "tempResult");
 
             return 

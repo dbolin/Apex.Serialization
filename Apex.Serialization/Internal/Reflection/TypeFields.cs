@@ -38,11 +38,32 @@ namespace Apex.Serialization.Internal.Reflection
         {
             public Type Type;
             public bool Flattened;
+            public bool ReadonlyFieldsFirst;
+            public ImmutableSettings? CustomValueSettings;
         }
 
         private static object _cacheLock = new object();
 
-        internal static bool IsPrimitive(Type x)
+        internal static bool IsNeverCustomSerialized(Type type)
+        {
+            return type.IsEnum || BuiltInPrimitives.Contains(type);
+        }
+
+        /// <summary>
+        /// A block copy, reserved size or field order decided by <see cref="HasPrimitiveShape(Type)"/> instead copies the
+        /// memory of a value whose registered serializer should run.
+        /// </summary>
+        internal static bool IsPrimitive(Type type, ImmutableSettings settings)
+        {
+            return HasPrimitiveShape(type) && !settings.ContainsCustomSerializedValue(type);
+        }
+
+        internal static (int size, bool isRef) GetSizeForType(Type type, ImmutableSettings settings)
+        {
+            return settings.ContainsCustomSerializedValue(type) ? (0, true) : GetShapeSize(type);
+        }
+
+        internal static bool HasPrimitiveShape(Type x)
         {
             lock (_cacheLock)
             {
@@ -58,7 +79,21 @@ namespace Apex.Serialization.Internal.Reflection
 
                 return false;
             }
-        } 
+        }
+
+        /// <summary>
+        /// Unlike <see cref="HasPrimitiveShape(Type)"/> it ignores a skipped [NonSerialized] field, which changes how a value
+        /// is written but not what reading it can create.
+        /// </summary>
+        internal static bool HoldsOnlyPrimitives(Type type)
+        {
+            if (HasPrimitiveShape(type))
+            {
+                return true;
+            }
+
+            return type.IsValueType && !type.ContainsGenericParameters && GetFields(type).All(x => HoldsOnlyPrimitives(x.FieldType));
+        }
 
         private static Dictionary<Type, int> primitiveTypeSizeDictionary = new Dictionary<Type, int>
         {
@@ -79,8 +114,10 @@ namespace Apex.Serialization.Internal.Reflection
             {typeof(UIntPtr), UIntPtr.Size},
             {typeof(Guid), Unsafe.SizeOf<Guid>()},
         };
-        
-        internal static (int size, bool isRef) GetSizeForType(Type type)
+
+        private static readonly HashSet<Type> BuiltInPrimitives = new HashSet<Type>(primitiveTypeSizeDictionary.Keys);
+
+        internal static (int size, bool isRef) GetShapeSize(Type type)
         {
             lock (_cacheLock)
             {
@@ -102,12 +139,17 @@ namespace Apex.Serialization.Internal.Reflection
 
         private static bool TryGetSizeForStruct(Type type, out int sizeForField)
         {
+            if (type.ContainsGenericParameters)
+            {
+                sizeForField = 5;
+                return false;
+            }
+
             var fields = GetFields(type);
-            int size;
 
             if (type.IsGenericType && typeof(Nullable<>) == type.GetGenericTypeDefinition())
             {
-                var (innerSize, isRef) = GetSizeForType(type.GenericTypeArguments[0]);
+                var (innerSize, isRef) = GetShapeSize(type.GenericTypeArguments[0]);
                 if(isRef)
                 {
                     sizeForField = 5;
@@ -118,17 +160,10 @@ namespace Apex.Serialization.Internal.Reflection
                 return true;
             }
 
-            if (type.IsValueType && fields.All(f => IsPrimitive(f.FieldType)))
+            if (type.IsValueType && !SkipsFields(type, fields) && fields.All(f => HasPrimitiveShape(f.FieldType)))
             {
-                if(fields.Count == 0)
-                {
-                    size = 1;
-                }
-                else
-                {
-                    size = (int)UnsafeSizeOfMethodInfo.MakeGenericMethod(type)!
-                        .Invoke(null, Array.Empty<Type>())!;
-                }
+                var size = (int)UnsafeSizeOfMethodInfo.MakeGenericMethod(type)!
+                    .Invoke(null, Array.Empty<Type>())!;
 
                 primitiveTypeSizeDictionary.Add(type, size);
 
@@ -140,25 +175,41 @@ namespace Apex.Serialization.Internal.Reflection
             return false;
         }
 
+        /// <summary>
+        /// A block copy writes every field, so a struct that skips a [NonSerialized] one would carry its bytes (a pointer,
+        /// for a reference).
+        /// </summary>
+        private static bool SkipsFields(Type type, List<FieldInfo> fields)
+        {
+            return fields.Count != type.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).Length;
+        }
+
         internal static List<FieldInfo> GetOrderedFields(Type type, ImmutableSettings settings)
         {
             var mustUseReflectionToSetReadonly = FieldInfoModifier.MustUseReflectionToSetReadonly(settings);
             lock (_cacheLock)
             {
-                ref var fields = ref _orderedCache.GetOrAddValueRef(new OrderedTypeCacheKey { Type = type, Flattened = settings.FlattenClassHierarchy });
+                var key = new OrderedTypeCacheKey
+                {
+                    Type = type,
+                    Flattened = settings.FlattenClassHierarchy,
+                    ReadonlyFieldsFirst = mustUseReflectionToSetReadonly,
+                    CustomValueSettings = settings.HasCustomValueTypeSerializers ? settings : null,
+                };
+                ref var fields = ref _orderedCache.GetOrAddValueRef(key);
                 if (fields == null)
                 {
                     var unorderedFields = settings.FlattenClassHierarchy ? GetFlattenedFields(type) : GetFields(type);
                     if (mustUseReflectionToSetReadonly)
                     {
-                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType) ? 0 : 1)
+                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType, settings) ? 0 : 1)
                             .ThenBy(x => x.IsInitOnly ? 0 : 1)
                             .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
                             .ThenBy(x => x.Name).ToList();
                     }
                     else
                     {
-                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType) ? 0 : 1)
+                        fields = unorderedFields.OrderBy(x => IsPrimitive(x.FieldType, settings) ? 0 : 1)
                             .ThenBy(x => x.FieldType == typeof(string) ? 0 : 1)
                             .ThenBy(x => x.Name).ToList();
                     }
@@ -205,7 +256,7 @@ namespace Apex.Serialization.Internal.Reflection
             }
         }
 
-        private static List<FieldInfo> GetFields(Type type)
+        internal static List<FieldInfo> GetFields(Type type)
         {
             lock (_cacheLock)
             {

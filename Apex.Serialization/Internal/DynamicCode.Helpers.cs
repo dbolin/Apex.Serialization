@@ -66,9 +66,37 @@ namespace Apex.Serialization.Internal
             }
         }
 
+        private static IEnumerable<Expression> WriteUnfieldedData(Type type, ParameterExpression output, Expression source)
+        {
+            return RawBytesCalls(WriteRawBytesMethod, type, output, source);
+        }
+
+        private static IEnumerable<Expression> ReadUnfieldedData(Type type, ParameterExpression output, Expression result)
+        {
+            return RawBytesCalls(ReadRawBytesMethod, type, output, result);
+        }
+
+        private static IEnumerable<Expression> RawBytesCalls(MethodInfo rawBytesMethod, Type type, ParameterExpression output, Expression value)
+        {
+            var ranges = PaddingMap.GetUnfieldedDataRanges(type);
+            if (ranges.Length == 0)
+            {
+                return Enumerable.Empty<Expression>();
+            }
+
+            var method = rawBytesMethod.MakeGenericMethod(type);
+            return ranges.Select(x =>
+                (Expression)Expression.Call(output, method, value, Expression.Constant(x.Start), Expression.Constant(x.Length)));
+        }
+
         private static ConcurrentDictionary<Type, bool> _isBlittableCache = new ConcurrentDictionary<Type, bool>();
 
-        internal static bool IsBlittable(Type elementType)
+        internal static bool IsBlittable(Type type, ImmutableSettings settings)
+        {
+            return HasBlittableShape(type) && !settings.ContainsCustomSerializedValue(type);
+        }
+
+        private static bool HasBlittableShape(Type elementType)
         {
             return _isBlittableCache.GetOrAdd(elementType, _ =>
             {
@@ -77,7 +105,7 @@ namespace Apex.Serialization.Internal
                     return false;
                 }
 
-                if(!TypeFields.IsPrimitive(elementType))
+                if(!TypeFields.HasPrimitiveShape(elementType))
                 {
                     return false;
                 }
@@ -147,6 +175,9 @@ namespace Apex.Serialization.Internal
         private static readonly MethodInfo ReadArrayOfValuesMethod1 = typeof(TBinary).GetMethod("ReadValuesArray1", InstanceFlags)!;
         private static readonly MethodInfo WriteArrayOfValuesMethod2 = typeof(TBinary).GetMethod("WriteValuesArray2", InstanceFlags)!;
         private static readonly MethodInfo ReadArrayOfValuesMethod2 = typeof(TBinary).GetMethod("ReadValuesArray2", InstanceFlags)!;
+
+        private static readonly MethodInfo WriteRawBytesMethod = typeof(TBinary).GetMethod("WriteRawBytes", InstanceFlags)!;
+        private static readonly MethodInfo ReadRawBytesMethod = typeof(TBinary).GetMethod("ReadRawBytes", InstanceFlags)!;
 
         private static readonly MethodInfo QueueAfterDeserializationHook =
             typeof(TBinary).GetMethod("QueueAfterDeserializationHook", InstanceFlags)!;

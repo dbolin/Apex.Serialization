@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Apex.Serialization
 {
@@ -709,7 +710,7 @@ namespace Apex.Serialization
         {
             fixed (void* ptr = array)
             {
-                _stream.WriteBytes(ptr, (uint)(array.Length * elementSize));
+                _stream.WriteValues<T>(ptr, (uint)(array.Length * elementSize));
             }
         }
 
@@ -739,7 +740,7 @@ namespace Apex.Serialization
 
             fixed (void* ptr = array)
             {
-                _stream.WriteBytes(ptr, (uint)(length1 * length2 * elementSize));
+                _stream.WriteValues<T>(ptr, (uint)(length1 * length2 * elementSize));
             }
         }
 
@@ -759,6 +760,24 @@ namespace Apex.Serialization
             }
 
             return array;
+        }
+
+        unsafe internal void WriteRawBytes<T>(ref T value, int offset, int length)
+            where T : struct
+        {
+            fixed (byte* start = &Unsafe.As<T, byte>(ref value))
+            {
+                _stream.WriteValues<byte>(start + offset, (uint)length);
+            }
+        }
+
+        unsafe internal void ReadRawBytes<T>(ref T value, int offset, int length)
+            where T : struct
+        {
+            fixed (byte* start = &Unsafe.As<T, byte>(ref value))
+            {
+                _stream.ReadBytes(start + offset, (uint)length);
+            }
         }
 
         internal IBinaryWriter BinaryWriter => _binaryWriter;
