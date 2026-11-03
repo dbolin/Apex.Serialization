@@ -48,6 +48,10 @@ Requires code generation capabilities
 
 Version 2 adds type whitelisting, which means no types can be serialized unless marked by calling Settings.MarkSerializable(Type | Func<Type, bool>).  To restore the previous behavior for backwards compatibility you can simply pass a function that always returns true.
 
+### Migrating to version 8.x
+
+Version 8 reads through bounds-checked managed buffers, so malformed data throws instead of reading out of bounds, and the exceptions it throws have changed: data that ends early throws `EndOfStreamException`, and an impossible length, a reference to a type or object that hasn't been read, or a delegate that can't be valid throws `InvalidDataException` (Limitations lists the others).  Some delegates are refused on write as well: one to a dynamic method throws `NotSupportedException`, and once `Settings.AllowDelegateMethodsFrom` (new in version 8) is called, one to a method from another assembly, or to a generic method over a type from one, throws `InvalidOperationException`.  The wire format is unchanged, so valid data written by version 7 reads back the same, within the read limits Limitations describes (nesting depth, which assemblies a type name can load).
+
 ### Usage
 
 Serialization
