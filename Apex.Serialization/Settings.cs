@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
@@ -44,6 +45,8 @@ namespace Apex.Serialization
         private readonly List<Func<Type, bool>> WhitelistFuncs = new List<Func<Type, bool>>();
 
         private readonly HashSet<Type> BoundaryTypes = new HashSet<Type>();
+
+        private HashSet<Assembly>? DelegateMethodAssemblies;
 
         private static readonly HashSet<Type> _ineligibleBoundaryBaseTypes = new HashSet<Type>
         {
@@ -257,6 +260,20 @@ namespace Apex.Serialization
             return this;
         }
 
+        /// <summary>
+        /// Limits the methods a deserialized delegate may call to those declared in <paramref name="assemblies"/>, and a
+        /// generic method to type arguments from them; reading a delegate to any other method throws
+        /// <see cref="InvalidDataException"/>, and writing one throws <see cref="InvalidOperationException"/>, so data
+        /// these settings couldn't read is refused when it's written.  Until this is called a delegate may call any
+        /// method.  Each call adds to the assemblies allowed.
+        /// </summary>
+        public Settings AllowDelegateMethodsFrom(params Assembly[] assemblies)
+        {
+            DelegateMethodAssemblies ??= new HashSet<Assembly>();
+            DelegateMethodAssemblies.UnionWith(assemblies);
+            return this;
+        }
+
         private static readonly Dictionary<ImmutableSettings, ImmutableSettings> _constructedSettings
             = new Dictionary<ImmutableSettings, ImmutableSettings>(new ImmutableSettingsDeduplicator());
         private static readonly object _constructedSettingsLock = new object();
@@ -283,7 +300,8 @@ namespace Apex.Serialization
                 CustomActionInstantiators,
                 WhitelistedTypes,
                 WhitelistFuncs,
-                BoundaryTypes);
+                BoundaryTypes,
+                DelegateMethodAssemblies);
             lock (_constructedSettingsLock)
             {
                 if(_constructedSettings.TryGetValue(result, out var previousConstructed))
@@ -310,6 +328,7 @@ namespace Apex.Serialization
         public HashSet<Type> WhitelistedTypes { get; }
         public List<Func<Type, bool>> WhitelistFuncs { get; }
         public HashSet<Type> BoundaryTypes { get; }
+        public HashSet<Assembly>? DelegateMethodAssemblies { get; }
         public bool UseConstructors { get; } = true;
         public int InliningMaxDepth { get; }
 
@@ -428,6 +447,24 @@ namespace Apex.Serialization
                 || WhitelistFuncs.Any(x => x(type));
         }
 
+        internal bool AllowsDelegateMethod(Type declaringType, Type[]? genericArguments)
+        {
+            return DelegateMethodAssemblies == null
+                || (DelegateMethodAssemblies.Contains(declaringType.Assembly)
+                    && (genericArguments == null || genericArguments.All(IsFromDelegateMethodAssemblies)));
+        }
+
+        private bool IsFromDelegateMethodAssemblies(Type type)
+        {
+            if (type.HasElementType)
+            {
+                return IsFromDelegateMethodAssemblies(type.GetElementType()!);
+            }
+
+            return DelegateMethodAssemblies!.Contains(type.Assembly)
+                && (!type.IsGenericType || type.GetGenericArguments().All(IsFromDelegateMethodAssemblies));
+        }
+
         private readonly ConcurrentDictionary<Type, Type?> _boundaryTypeCache = new ConcurrentDictionary<Type, Type?>();
 
         /// <summary>
@@ -519,7 +556,8 @@ namespace Apex.Serialization
             Dictionary<Type, CustomSerializerDelegate> customActionInstatiators,
             HashSet<Type> whitelistedTypes,
             List<Func<Type, bool>> whitelistFuncs,
-            HashSet<Type> boundaryTypes)
+            HashSet<Type> boundaryTypes,
+            HashSet<Assembly>? delegateMethodAssemblies)
         {
             SerializationMode = serializationMode;
             AllowFunctionSerialization = allowFunctionSerialization;
@@ -537,6 +575,7 @@ namespace Apex.Serialization
             WhitelistedTypes = new HashSet<Type>(whitelistedTypes);
             WhitelistFuncs = new List<Func<Type, bool>>(whitelistFuncs);
             BoundaryTypes = new HashSet<Type>(boundaryTypes);
+            DelegateMethodAssemblies = delegateMethodAssemblies == null ? null : new HashSet<Assembly>(delegateMethodAssemblies);
 
             _hashCode = HashCode.Combine(
                 HashCode.Combine(SerializationMode,
@@ -554,7 +593,8 @@ namespace Apex.Serialization
                 // Order-insensitive so this agrees with ImmutableSettingsDeduplicator's SetEquals on
                 // BoundaryTypes.  Both must include BoundaryTypes or boundary settings dedup onto
                 // non-boundary settings and share their generated write/read methods.
-                HashCode.Combine(BoundaryTypes.Aggregate(0, (a, x) => a ^ x.GetHashCode()))
+                HashCode.Combine(BoundaryTypes.Aggregate(0, (a, x) => a ^ x.GetHashCode())),
+                DelegateMethodAssemblies?.Aggregate(1, (a, x) => a ^ x.GetHashCode()) ?? 0
                 );
         }
 

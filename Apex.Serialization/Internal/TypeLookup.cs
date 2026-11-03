@@ -1,72 +1,44 @@
 ﻿using System;
-
-#nullable disable
+using System.Collections.Generic;
 
 namespace Apex.Serialization.Internal
 {
-    internal sealed unsafe class TypeLookup<T>
+    /// <summary>
+    /// The types a reader has resolved, keyed by the whole serialized type id including its length header, so two ids
+    /// with the same bytes split differently between type and assembly name stay apart.
+    /// </summary>
+    internal sealed class TypeLookup
     {
-        private Node<T> _root;
+        private readonly Dictionary<byte[], Type> _types = new Dictionary<byte[], Type>(ContentComparer.Instance);
+        private readonly Dictionary<byte[], Type>.AlternateLookup<ReadOnlySpan<byte>> _bySpan;
 
         public TypeLookup()
         {
-            _root = new Node<T>();
+            _bySpan = _types.GetAlternateLookup<ReadOnlySpan<byte>>();
         }
 
-        public T Find(byte* key, int length)
+        public Type? Find(ReadOnlySpan<byte> typeId) => _bySpan.TryGetValue(typeId, out var type) ? type : null;
+
+        public void Add(ReadOnlySpan<byte> typeId, Type type) => _bySpan.TryAdd(typeId, type);
+
+        private sealed class ContentComparer : IEqualityComparer<byte[]>, IAlternateEqualityComparer<ReadOnlySpan<byte>, byte[]>
         {
-            ref var current = ref _root;
-            while (true)
+            internal static readonly ContentComparer Instance = new ContentComparer();
+
+            public bool Equals(byte[]? x, byte[]? y) => x.AsSpan().SequenceEqual(y);
+
+            public int GetHashCode(byte[] obj) => GetHashCode((ReadOnlySpan<byte>)obj);
+
+            public bool Equals(ReadOnlySpan<byte> alternate, byte[] other) => alternate.SequenceEqual(other);
+
+            public int GetHashCode(ReadOnlySpan<byte> alternate)
             {
-                if (current.Children == null)
-                {
-                    var span1 = new Span<byte>(current.Key, current.KeyLength);
-                    var span2 = new Span<byte>(key, length);
-                    if (span1.SequenceEqual(span2))
-                    {
-                        return current.Value;
-                    }
-
-                    return default;
-                }
-
-                current = ref current.Children[*key];
-                key++;
-                length--;
-            }
-        }
-
-        public void Add(byte* key, int length, T value)
-        {
-            Add(ref _root, key, length, value);
-        }
-
-        private void Add(ref Node<T> node, byte* key, int length, T value)
-        {
-            if (node.Children == null)
-            {
-                if (node.Key == null)
-                {
-                    node.Key = key;
-                    node.KeyLength = length;
-                    node.Value = value;
-                    return;
-                }
-
-                node.Children = new Node<T>[256];
-                node.Children[*node.Key] = new Node<T> {Key = node.Key + 1, KeyLength = node.KeyLength - 1, Value = node.Value};
+                var hash = new HashCode();
+                hash.AddBytes(alternate);
+                return hash.ToHashCode();
             }
 
-            Add(ref node.Children[*key], key + 1, length - 1, value);
+            public byte[] Create(ReadOnlySpan<byte> alternate) => alternate.ToArray();
         }
-    }
-
-    internal unsafe struct Node<T>
-    {
-        public byte* Key;
-        public int KeyLength;
-        public T Value;
-
-        public Node<T>[] Children;
     }
 }

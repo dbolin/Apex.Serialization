@@ -30,6 +30,8 @@ namespace Apex.Serialization.Tests
             new object[] {typeof(PrimitiveValue), 1938464263},
             new object[] {typeof(Value), 1445229640},
             new object[] {typeof(CustomProperty), 797909415},
+            new object[] {typeof(int[]), 1128055323},
+            new object[] {typeof(long[,]), 885019863},
         };
 
         [Theory]

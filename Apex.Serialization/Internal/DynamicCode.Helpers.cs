@@ -145,6 +145,9 @@ namespace Apex.Serialization.Internal
         private static readonly PropertyInfo SavedReferencesListIndexer =
             typeof(List<object>).GetProperty("Item", new[] { typeof(int) })!;
 
+        private static readonly MethodInfo GetSavedReferenceMethod =
+            typeof(TBinary).GetMethod("GetSavedReference", InstanceFlags)!;
+
         private static readonly MethodInfo BinaryWriterGetter =
             typeof(TBinary).GetProperty("BinaryWriter", InstanceFlags)!.GetMethod!;
 
@@ -175,6 +178,11 @@ namespace Apex.Serialization.Internal
         private static readonly MethodInfo ReadArrayOfValuesMethod1 = typeof(TBinary).GetMethod("ReadValuesArray1", InstanceFlags)!;
         private static readonly MethodInfo WriteArrayOfValuesMethod2 = typeof(TBinary).GetMethod("WriteValuesArray2", InstanceFlags)!;
         private static readonly MethodInfo ReadArrayOfValuesMethod2 = typeof(TBinary).GetMethod("ReadValuesArray2", InstanceFlags)!;
+
+        private static readonly MethodInfo CheckArrayLengthMethod = typeof(TBinary).GetMethod("CheckArrayLength", InstanceFlags)!;
+        private static readonly MethodInfo CheckArrayElementCountMethod = typeof(TBinary).GetMethod("CheckArrayElementCount", InstanceFlags)!;
+        private static readonly MethodInfo MultiplyArrayLengthMethod =
+            typeof(TBinary).GetMethod("MultiplyArrayLength", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!;
 
         private static readonly MethodInfo WriteRawBytesMethod = typeof(TBinary).GetMethod("WriteRawBytes", InstanceFlags)!;
         private static readonly MethodInfo ReadRawBytesMethod = typeof(TBinary).GetMethod("ReadRawBytes", InstanceFlags)!;

@@ -181,7 +181,7 @@ namespace Apex.Serialization.Internal
         }
     }
 
-    internal static unsafe class PaddingMap<T> where T : struct
+    internal static class PaddingMap<T> where T : struct
     {
         private const int MinimumTileLength = 1024;
 
@@ -194,67 +194,71 @@ namespace Apex.Serialization.Internal
         // Stores zeros rather than applying KeepMask: loading a word that the value's narrower field stores have
         // just written stalls on store-to-load forwarding.
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        internal static void ZeroPadding(byte* value)
+        internal static void ZeroPadding(Span<byte> value)
         {
+            ref var first = ref MemoryMarshal.GetReference(value.Slice(0, Unsafe.SizeOf<T>()));
             foreach (var (start, length) in Ranges)
             {
-                var at = value + start;
-                var end = at + length;
+                var at = start;
+                var end = start + length;
                 for (; at + sizeof(ulong) <= end; at += sizeof(ulong))
                 {
-                    Unsafe.WriteUnaligned<ulong>(at, 0);
+                    Unsafe.WriteUnaligned<ulong>(ref Unsafe.Add(ref first, at), 0);
                 }
 
                 if (at + sizeof(uint) <= end)
                 {
-                    Unsafe.WriteUnaligned<uint>(at, 0);
+                    Unsafe.WriteUnaligned<uint>(ref Unsafe.Add(ref first, at), 0);
                     at += sizeof(uint);
                 }
 
                 if (at + sizeof(ushort) <= end)
                 {
-                    Unsafe.WriteUnaligned<ushort>(at, 0);
+                    Unsafe.WriteUnaligned<ushort>(ref Unsafe.Add(ref first, at), 0);
                     at += sizeof(ushort);
                 }
 
                 if (at < end)
                 {
-                    *at = 0;
+                    Unsafe.Add(ref first, at) = 0;
                 }
             }
         }
 
         /// <summary>
-        /// Copies <paramref name="length"/> bytes that start <paramref name="offset"/> bytes into a run of consecutive
-        /// <typeparamref name="T"/> values, zeroing the padding in the copy.
+        /// Copies <paramref name="source"/>, a run of consecutive <typeparamref name="T"/> values that starts
+        /// <paramref name="offset"/> bytes into them, to <paramref name="destination"/>, zeroing the padding in the copy.
         /// </summary>
-        internal static void CopyZeroingPadding(byte* destination, byte* source, uint offset, uint length)
+        internal static void CopyZeroingPadding(Span<byte> destination, ReadOnlySpan<byte> source, uint offset)
         {
+            var length = (uint)source.Length;
+            ref var to = ref MemoryMarshal.GetReference(destination.Slice(0, source.Length));
+            ref var from = ref MemoryMarshal.GetReference(source);
             var tileLength = (uint)(KeepMask.Length - Unsafe.SizeOf<T>());
             ref var inPhase = ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(KeepMask), offset % (uint)Unsafe.SizeOf<T>());
             for (uint done = 0; done < length; done += tileLength)
             {
-                KeepMasked(destination + done, source + done, ref inPhase, Math.Min(tileLength, length - done));
+                KeepMasked(ref Unsafe.Add(ref to, done), ref Unsafe.Add(ref from, done), ref inPhase, Math.Min(tileLength, length - done));
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static void KeepMasked(byte* destination, byte* source, ref byte mask, uint length)
+        private static void KeepMasked(ref byte destination, ref byte source, ref byte mask, uint length)
         {
             uint i = 0;
             for (; i + (uint)Vector<byte>.Count <= length; i += (uint)Vector<byte>.Count)
             {
-                Vector.Store(Vector.Load(source + i) & Vector.LoadUnsafe(ref mask, i), destination + i);
+                Vector.StoreUnsafe(Vector.LoadUnsafe(ref source, i) & Vector.LoadUnsafe(ref mask, i), ref destination, i);
             }
 
             for (; i + sizeof(ulong) <= length; i += sizeof(ulong))
             {
-                Unsafe.WriteUnaligned(destination + i, Unsafe.ReadUnaligned<ulong>(source + i) & Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref mask, i)));
+                Unsafe.WriteUnaligned(ref Unsafe.Add(ref destination, i), Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref source, i)) & Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref mask, i)));
             }
 
             for (; i < length; ++i)
             {
-                destination[i] = (byte)(source[i] & Unsafe.Add(ref mask, i));
+                Unsafe.Add(ref destination, i) = (byte)(Unsafe.Add(ref source, i) & Unsafe.Add(ref mask, i));
             }
         }
 

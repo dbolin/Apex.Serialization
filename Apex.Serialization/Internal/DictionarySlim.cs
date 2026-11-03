@@ -263,7 +263,7 @@ namespace Apex.Serialization.Internal
             return ref entries[entryIndex].value;
         }
 
-        public unsafe void Clear()
+        public void Clear()
         {
             if(_count == 0)
             {
@@ -281,11 +281,7 @@ namespace Apex.Serialization.Internal
             }
             else
             {
-                fixed (void* b = &_buckets[0])
-                {
-                    Unsafe.InitBlock(b, 0, (uint)(4 * _buckets.Length));
-                }
-
+                Array.Clear(_buckets);
                 Array.Clear(_entries, 0, _count);
             }
 

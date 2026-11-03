@@ -61,14 +61,14 @@ namespace Apex.Serialization
         private Type? _lastRefType;
         private int _lastRefIndex;
 
-        private readonly TypeLookup<Type> _knownTypes = new TypeLookup<Type>();
+        private readonly TypeLookup _knownTypes = new TypeLookup();
 
         private readonly List<ValueTuple<Action<object, object>, object>> _deserializationHooks;
 
         private DictionarySlim<MethodInfo, Type[]> _methodParametersCache = new DictionarySlim<MethodInfo, Type[]>();
         private DictionarySlim<MethodInfo, Type[]> _methodGenericsCache = new DictionarySlim<MethodInfo, Type[]>();
 
-        private readonly DictionarySlim<DelegateID, Delegate> _delegateCache = new DictionarySlim<DelegateID, Delegate>();
+        private readonly DictionarySlim<DelegateID, CachedDelegate> _delegateCache = new DictionarySlim<DelegateID, CachedDelegate>();
         private static readonly Func<object, object> _clone = CreateCloneFunc();
         private static readonly Action<Delegate, object> _setTarget = CreateSetTargetAction();
 
@@ -106,10 +106,20 @@ namespace Apex.Serialization
             _lastRefType = null;
             _stream.WriteTo(outputStream);
 
-            WriteObjectEntry(value);
+            try
+            {
+                WriteObjectEntry(value);
 
-            _stream.Flush();
+                _stream.Flush();
+            }
+            finally
+            {
+                ClearWriteState();
+            }
+        }
 
+        private void ClearWriteState()
+        {
             if (Settings.SerializationMode == Mode.Graph)
             {
                 _savedObjectLookup.Clear();
@@ -126,10 +136,45 @@ namespace Apex.Serialization
 
         public T Read<T>(Stream inputStream)
         {
+            T result;
+            try
+            {
                 _stream.ReadFrom(inputStream);
 
-                var result = ReadObjectEntry<T>();
+                result = ReadObjectEntry<T>();
+                _stream.ThrowIfReadPastEnd();
+            }
+            catch
+            {
+                _deserializationHooks?.Clear();
+                throw;
+            }
+            finally
+            {
+                _stream.ReleaseReadAhead();
+                ClearReadState();
+            }
 
+            if (Settings.SupportSerializationHooks)
+            {
+                try
+                {
+                    foreach (var a in _deserializationHooks)
+                    {
+                        a.Item1(a.Item2, _customContext);
+                    }
+                }
+                finally
+                {
+                    _deserializationHooks.Clear();
+                }
+            }
+
+            return result;
+        }
+
+        private void ClearReadState()
+        {
             if (Settings.SerializationMode == Mode.Graph)
             {
                 _allowReadingObjectReference = true;
@@ -141,17 +186,6 @@ namespace Apex.Serialization
             }
             _loadedTypeRefs.Clear();
             _boundarySubstitutes.Clear();
-
-            if (Settings.SupportSerializationHooks)
-            {
-                foreach (var a in _deserializationHooks)
-                {
-                    a.Item1(a.Item2, _customContext);
-        }
-                _deserializationHooks.Clear();
-            }
-
-            return result;
         }
 
         public void Precompile(Type type)

@@ -822,12 +822,7 @@ namespace Apex.Serialization.Internal
                                     Expression.NotEqual(refIndex, Expression.Constant(-1)),
                                     Expression.Block(
                                         Expression.Assign(result,
-                                            Expression.Convert(
-                                                Expression.Property(
-                                                    Expression.Call(output, SavedReferencesGetter),
-                                                SavedReferencesListIndexer, Expression.Decrement(refIndex)),
-                                            type)
-                                        ),
+                                            Expression.Convert(Expression.Call(output, GetSavedReferenceMethod, refIndex), type)),
                                         Expression.Goto(skipReadLabel!)
                                     )
                                 )
@@ -888,6 +883,12 @@ namespace Apex.Serialization.Internal
                     {
                         customInstantiation = true;
                     }
+                }
+
+                // An instantiator may read from the stream, which uses up the reservation the field reads below rely on.
+                if (customInstantiation && specialExpression == null)
+                {
+                    readStatements.Add(ReserveConstantSize(stream, fields.Sum(x => TypeFields.GetSizeForType(x.FieldType, settings).size)));
                 }
 
                 if (!customInstantiation)

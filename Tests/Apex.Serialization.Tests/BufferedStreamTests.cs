@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using Apex.Serialization.Internal;
 using FluentAssertions;
 using Xunit;
@@ -100,7 +101,7 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
-        public unsafe void WriteType()
+        public void WriteType()
         {
             Sut.WriteTo(memoryStream);
             memoryStream.Seek(0, SeekOrigin.Begin);
@@ -111,13 +112,15 @@ namespace Apex.Serialization.Tests
             memoryStream.Seek(0, SeekOrigin.Begin);
             Sut.ReadFrom(memoryStream);
 
-            var ptr = Sut.ReadTypeId(out var len1, out var len2);
+            var typeId = Sut.ReadTypeId();
 
-            len1.Should().Be(44);
-            len2.Should().Be(91);
+            typeId.Length.Should().Be(8 + 44 + 2 + 91);
+            MemoryMarshal.Read<int>(typeId).Should().Be(44);
+            MemoryMarshal.Read<int>(typeId.Slice(4)).Should().Be(91);
 
-            var type = Sut.RestoreTypeFromId(ref ptr, len1, len2);
+            var type = Sut.RestoreTypeFromId(typeId, out var isCanonical);
             type.AssemblyQualifiedName.Should().Be(typeof(BufferedStreamTests).AssemblyQualifiedName);
+            isCanonical.Should().BeTrue();
 
             Sut.Flush();
 
@@ -130,12 +133,12 @@ namespace Apex.Serialization.Tests
             memoryStream.Seek(0, SeekOrigin.Begin);
             Sut.ReadFrom(memoryStream);
 
-            ptr = Sut.ReadTypeId(out var len3, out var len4);
+            typeId = Sut.ReadTypeId();
 
-            len3.Should().Be(51);
-            len4.Should().Be(91);
+            MemoryMarshal.Read<int>(typeId).Should().Be(51);
+            MemoryMarshal.Read<int>(typeId.Slice(4)).Should().Be(91);
 
-            type = Sut.RestoreTypeFromId(ref ptr, len3, len4);
+            type = Sut.RestoreTypeFromId(typeId, out _);
             type.AssemblyQualifiedName.Should().Be(typeof(AbstractSerializerTestBase).AssemblyQualifiedName);
 
             Sut.Flush();
@@ -186,7 +189,7 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
-        public unsafe void WriteBytes()
+        public void WriteBytes()
         {
             var x = new int[] {1, 2, 3, 4};
             var y = new int[4];
@@ -194,20 +197,14 @@ namespace Apex.Serialization.Tests
             memoryStream.Seek(0, SeekOrigin.Begin);
             Sut.WriteTo(memoryStream);
 
-            fixed (int* p = &x[0])
-            {
-                Sut.WriteBytes((byte*) p, 4 * 4);
-            }
+            Sut.WriteBytes(MemoryMarshal.AsBytes(x.AsSpan()));
 
             Sut.Flush();
 
             memoryStream.Seek(0, SeekOrigin.Begin);
             Sut.ReadFrom(memoryStream);
 
-            fixed (int* p = &y[0])
-            {
-                Sut.ReadBytes((byte*)p, 4 * 4);
-            }
+            Sut.ReadBytes(MemoryMarshal.AsBytes(y.AsSpan()));
 
             y[0].Should().Be(1);
             y[1].Should().Be(2);
@@ -224,25 +221,17 @@ namespace Apex.Serialization.Tests
                 largeBuffer[i] = (byte)i;
             }
 
-            fixed (byte* p = &largeBuffer[0])
-            {
-                Sut.WriteBytes(p, 2_000_000);
-            }
+            Sut.WriteBytes(largeBuffer);
 
             Sut.Flush();
 
             memoryStream.Seek(0, SeekOrigin.Begin);
             Sut.ReadFrom(memoryStream);
 
-            fixed (byte* p = &largeBuffer[0])
-            {
-                Sut.ReadBytes(p, 2_000_000);
-            }
+            var largeRead = new byte[2_000_000];
+            Sut.ReadBytes(largeRead);
 
-            for (int i = 0; i < 2_000_000; ++i)
-            {
-                largeBuffer[i].Should().Be((byte)i);
-            }
+            largeRead.Should().Equal(largeBuffer);
         }
 
         [Fact]
@@ -296,8 +285,21 @@ namespace Apex.Serialization.Tests
             s.Seek(0, SeekOrigin.Begin);
             Sut.ReadFrom(s);
 
-            var e = Assert.Throws<InvalidOperationException>(() => Sut.Read());
-            e.Message.Should().Be("Underlying stream failed to read or write");
+            Assert.Throws<EndOfStreamException>(() => Sut.Read());
+        }
+
+        [Fact]
+        public void AReservationTheStreamEndsInsideReadsZeroesWhereTheStreamEnded()
+        {
+            Sut.ReadFrom(new MemoryStream(new byte[] { 0x11, 0x22, 0x33, 0x44, 0x55, 0x66 }));
+            Sut.ReserveSize(4);
+            Sut.Read<int>().Should().Be(0x44332211);
+
+            // Moves the last two bytes to the front of the buffer, ahead of the earlier 0x33 and 0x44 still in it.
+            Sut.ReserveSize(4);
+
+            Sut.Read<int>().Should().Be(0x6655);
+            Assert.Throws<EndOfStreamException>(() => Sut.ThrowIfReadPastEnd());
         }
 
         private class CustomStream : Stream

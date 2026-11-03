@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>net10.0</TargetFrameworks>
-    <Version>7.2.0</Version>
+    <Version>7.3.0</Version>
     <Authors>Dominic Bolin</Authors>
     <Description>A high performance contract-less binary serializer</Description>
     <PackageProjectUrl>https://github.com/dbolin/Apex.Serialization</PackageProjectUrl>
@@ -10,7 +10,7 @@
     <RepositoryUrl>https://github.com/dbolin/Apex.Serialization.git</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
     <Nullable>enable</Nullable>
     <NullableContextOptions>enable</NullableContextOptions>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
