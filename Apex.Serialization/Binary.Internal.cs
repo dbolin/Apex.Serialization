@@ -33,26 +33,64 @@ namespace Apex.Serialization
             }
         }
 
+        /// <summary>
+        /// For a reference type the root read is shared generic code, where each static of a generic class over
+        /// <typeparamref name="T"/> costs a helper call, so what it needs is cached on the instance, keyed by the type
+        /// of what is cached.
+        /// </summary>
         internal T ReadObjectEntry<T>()
         {
-            object? result;
-            if (StaticTypeInfo<T>.IsSealedOrHasNoDescendents)
+            if (typeof(T).IsValueType)
             {
-                if (StaticTypeInfo<T>.IsValueType)
-                {
-                    result = ReadValueInternal<T>(Settings.UseSerializedVersionId);
-                }
-                else
-                {
-                    result = ReadSealedInternal<T>(Settings.UseSerializedVersionId);
-                }
-            }
-            else
-            {
-                result = ReadInternal();
+                return StaticTypeInfo<T>.IsSealedOrHasNoDescendents ? ReadValueInternal<T>(Settings.UseSerializedVersionId) : (T)ReadInternal();
             }
 
-            return (T)result!;
+            while (true)
+            {
+                var root = _rootRead;
+                if (root is ReadMethods<T, TStream, TSettingGen>.ReadSealed method)
+                {
+                    RuntimeHelpers.EnsureSufficientExecutionStack();
+                    if (ReadObjectRefHeader(Settings.UseSerializedVersionId, out T result))
+                    {
+                        return result;
+                    }
+
+                    return method(ref _stream, this);
+                }
+
+                if (root is PolymorphicRoot<T>)
+                {
+                    return (T)ReadInternal();
+                }
+
+                if (root is SealedRoot<T>)
+                {
+                    var result = ReadSealedInternal<T>(Settings.UseSerializedVersionId);
+                    _rootRead = ReadMethods<T, TStream, TSettingGen>.Method ?? root;
+                    return result;
+                }
+
+                _rootRead = StaticTypeInfo<T>.IsSealedOrHasNoDescendents
+                    ? ReadMethods<T, TStream, TSettingGen>.Method ?? (object)SealedRoot<T>.Instance
+                    : PolymorphicRoot<T>.Instance;
+            }
+        }
+
+        private object? _rootRead;
+
+        private sealed class PolymorphicRoot<T>
+        {
+            internal static readonly PolymorphicRoot<T> Instance = new PolymorphicRoot<T>();
+        }
+
+        /// <summary>
+        /// A sealed root whose read hasn't been generated yet.  It is generated after the header, as before, so a null
+        /// root of a type that can't be read still reads as null.
+        /// </summary>
+        private sealed class SealedRoot<T>
+        {
+            internal static readonly SealedRoot<T> Instance = new SealedRoot<T>();
         }
 
         internal object ReadInternal()
@@ -104,42 +142,40 @@ namespace Apex.Serialization
             return !innermost.IsByRef && !innermost.IsPointer && !innermost.IsByRefLike && !type.ContainsGenericParameters && type != typeof(void);
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private Type ReadTypeRef(bool readSerializedVersionId)
         {
             _stream.ReserveSize(4);
             _stream.ThrowIfStreamEndsWithin(4);
             var knownTypeIndex = _stream.Read<int>();
-            Type? type;
             if (knownTypeIndex != -1)
             {
-                if ((uint)(knownTypeIndex - 1) >= (uint)_loadedTypeRefs.Count)
-                {
-                    ThrowHelper.ThrowInvalidReference("type", knownTypeIndex);
-                }
-
-                type = _loadedTypeRefs[knownTypeIndex - 1];
+                return _loadedTypeRefs.GetReferenced(knownTypeIndex, "type");
             }
-            else
+
+            return ReadNewTypeRef(readSerializedVersionId);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private Type ReadNewTypeRef(bool readSerializedVersionId)
+        {
+            var typeId = _stream.ReadTypeId();
+            var type = _knownTypes.Find(typeId);
+            if (type == null)
             {
-                var typeId = _stream.ReadTypeId();
-                type = _knownTypes.Find(typeId);
-                if (type == null)
+                type = _stream.RestoreTypeFromId(typeId, out var isCanonical);
+                if (isCanonical)
                 {
-                    type = _stream.RestoreTypeFromId(typeId, out var isCanonical);
-                    if (isCanonical)
-                    {
-                        _knownTypes.Add(typeId, type);
-                    }
+                    _knownTypes.Add(typeId, type);
                 }
-
-                if (readSerializedVersionId)
-                {
-                    CheckSerializedVersionUniqueId(type);
-                }
-
-                _loadedTypeRefs.Add(type);
             }
 
+            if (readSerializedVersionId)
+            {
+                CheckSerializedVersionUniqueId(type);
+            }
+
+            _loadedTypeRefs.Add(type);
             return type;
         }
 
@@ -184,6 +220,11 @@ namespace Apex.Serialization
             }
         }
 
+        /// <summary>
+        /// Generated code calls this for each nested object of a type it doesn't inline, and inlined there the statics of
+        /// <typeparamref name="T"/> resolve when the JIT compiles it rather than through a helper call per object.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal T ReadSealedInternal<T>(bool useSerializedVersionId)
         {
             RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -211,6 +252,7 @@ namespace Apex.Serialization
             _allowReadingObjectReference = true;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool ReadObjectRefHeader<T>(bool checkSerializedVersionId, out T result)
         {
             result = default!;
@@ -247,21 +289,13 @@ namespace Apex.Serialization
             return false;
         }
 
-        internal object GetSavedReference(int refIndex)
-        {
-            if ((uint)(refIndex - 1) >= (uint)_loadedObjectRefs.Count)
-            {
-                ThrowHelper.ThrowInvalidReference("object", refIndex);
-            }
-
-            return _loadedObjectRefs[refIndex - 1];
-        }
+        internal object GetSavedReference(int refIndex) => _loadedObjectRefs.GetReferenced(refIndex, "object");
 
         private void CheckReadingObjectReference()
         {
             if (!_allowReadingObjectReference)
             {
-                throw new InvalidOperationException("Unable to read an object reference in graph mode during custom instantiation");
+                ThrowHelper.ThrowObjectReferenceDuringInstantiation();
             }
         }
 

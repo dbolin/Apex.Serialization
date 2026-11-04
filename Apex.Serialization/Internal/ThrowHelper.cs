@@ -12,6 +12,12 @@ namespace Apex.Serialization.Internal
         private const int MaxNameInMessage = 512;
 
         [DoesNotReturn]
+        internal static void ThrowObjectReferenceDuringInstantiation()
+        {
+            throw new InvalidOperationException("Unable to read an object reference in graph mode during custom instantiation");
+        }
+
+        [DoesNotReturn]
         internal static void ThrowEndOfStream()
         {
             throw new EndOfStreamException("The stream ended before the serialized data did");

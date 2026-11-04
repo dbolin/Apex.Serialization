@@ -37,6 +37,17 @@ namespace Apex.Serialization.Internal
             bool isolated)
             where T : Delegate
         {
+            if (DynamicCodeMethods._virtualWriteMethods.TryGetValue(new TypeKey(type, settings, shouldWriteTypeInfo, isolated), out var generated))
+            {
+                return (T)generated.Delegate;
+            }
+
+            return GenerateWriteMethodSlow<T>(type, settings, shouldWriteTypeInfo, isolated);
+        }
+
+        private static T GenerateWriteMethodSlow<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo, bool isolated)
+            where T : Delegate
+        {
             return (T)DynamicCodeMethods._virtualWriteMethods.GetOrAdd(
                 new TypeKey(type, settings, shouldWriteTypeInfo, isolated),
                 t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo, isolated)).Delegate;
@@ -686,7 +697,23 @@ namespace Apex.Serialization.Internal
             return null;
         }
 
+        /// <summary>
+        /// Looks the method up before calling <c>GetOrAdd</c>, whose factory captures the arguments in a closure allocated on
+        /// every call: generated code calls this once per base class for each object of a hierarchy that isn't
+        /// flattened.  Only a call that generates has init-only fields of its own to restore, so a found method skips that.
+        /// </summary>
         internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed, bool isolated)
+            where T : Delegate
+        {
+            if (DynamicCodeMethods._virtualReadMethods.TryGetValue(new TypeKey(type, settings, isBoxed, isolated), out var generated))
+            {
+                return (T)generated.Delegate;
+            }
+
+            return GenerateReadMethodSlow<T>(type, settings, isBoxed, isolated);
+        }
+
+        private static T GenerateReadMethodSlow<T>(Type type, ImmutableSettings settings, bool isBoxed, bool isolated)
             where T : Delegate
         {
             try

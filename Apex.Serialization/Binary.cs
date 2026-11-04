@@ -34,19 +34,19 @@ namespace Apex.Serialization
         public ImmutableSettings Settings { get; }
         internal TStream _stream;
 
-        internal List<object> LoadedObjectRefs => _loadedObjectRefs;
+        internal ReferenceTable<object> LoadedObjectRefs => _loadedObjectRefs;
 
         private readonly DictionarySlim<object, int> _savedObjectLookup;
-        private readonly List<object> _loadedObjectRefs;
+        private readonly ReferenceTable<object> _loadedObjectRefs;
 
         private readonly List<object> _internedObjects = new List<object>();
 
         private readonly Dictionary<Type, object> _boundarySubstitutes = new Dictionary<Type, object>();
 
-        internal List<Type> LoadedTypeRefs => _loadedTypeRefs;
+        internal ReferenceTable<Type> LoadedTypeRefs => _loadedTypeRefs;
 
         private readonly DictionarySlim<Type, int> _savedTypeLookup = new DictionarySlim<Type, int>();
-        private readonly List<Type> _loadedTypeRefs = new List<Type>();
+        private readonly ReferenceTable<Type> _loadedTypeRefs = new ReferenceTable<Type>(8);
 
         private readonly DictionarySlim<Type, WriteObject> VirtualWriteMethods = new DictionarySlim<Type, WriteObject>();
         private readonly DictionarySlim<Type, ReadObject> VirtualReadMethods = new DictionarySlim<Type, ReadObject>();
@@ -92,7 +92,7 @@ namespace Apex.Serialization
             if (Settings.SerializationMode == Mode.Graph)
             {
                 _savedObjectLookup = new DictionarySlim<object, int>(16);
-                _loadedObjectRefs = new List<object>(16);
+                _loadedObjectRefs = new ReferenceTable<object>(16);
             }
 
             if (Settings.SupportSerializationHooks)
@@ -134,6 +134,10 @@ namespace Apex.Serialization
             _savedTypeLookup.Clear();
         }
 
+        /// <summary>
+        /// Ends the read in the catch and after the try rather than in a finally, which the JIT compiles to a separate
+        /// handler called on every read.
+        /// </summary>
         public T Read<T>(Stream inputStream)
         {
             T result;
@@ -147,30 +151,38 @@ namespace Apex.Serialization
             catch
             {
                 _deserializationHooks?.Clear();
+                EndRead();
                 throw;
             }
-            finally
-            {
-                _stream.ReleaseReadAhead();
-                ClearReadState();
-            }
 
-            if (Settings.SupportSerializationHooks)
+            EndRead();
+            if (Settings.SupportSerializationHooks && _deserializationHooks.Count != 0)
             {
-                try
-                {
-                    foreach (var a in _deserializationHooks)
-                    {
-                        a.Item1(a.Item2, _customContext);
-                    }
-                }
-                finally
-                {
-                    _deserializationHooks.Clear();
-                }
+                RunDeserializationHooks();
             }
 
             return result;
+        }
+
+        private void EndRead()
+        {
+            _stream.ReleaseReadAhead();
+            ClearReadState();
+        }
+
+        private void RunDeserializationHooks()
+        {
+            try
+            {
+                foreach (var a in _deserializationHooks)
+                {
+                    a.Item1(a.Item2, _customContext);
+                }
+            }
+            finally
+            {
+                _deserializationHooks.Clear();
+            }
         }
 
         private void ClearReadState()
@@ -185,7 +197,10 @@ namespace Apex.Serialization
                 }
             }
             _loadedTypeRefs.Clear();
-            _boundarySubstitutes.Clear();
+            if (_boundarySubstitutes.Count != 0)
+            {
+                _boundarySubstitutes.Clear();
+            }
         }
 
         public void Precompile(Type type)
