@@ -124,21 +124,34 @@ namespace Apex.Serialization
             }
 
             ref var method = ref VirtualReadMethods.GetOrAddValueRef(type);
-
-            if (method == null)
-            {
-                if (!CanBeAnObjectsType(type))
-                {
-                    ThrowHelper.ThrowImpossibleObjectType(type);
-                }
-
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true, false);
-            }
+            method ??= GenerateObjectRead(type);
 
             _lastReadType = type;
             _lastReadMethod = method;
 
             return method(ref _stream, this);
+        }
+
+        /// <summary>
+        /// Out of line, as is <see cref="GenerateSealedRead{T}"/>: inlined into the reads that nest, the one-time
+        /// generation call widens every level's frame, which cuts how deep data can nest on a given stack.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private ReadObject GenerateObjectRead(Type type)
+        {
+            if (!CanBeAnObjectsType(type))
+            {
+                ThrowHelper.ThrowImpossibleObjectType(type);
+            }
+
+            return DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true, false);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private ReadMethods<T, TStream, TSettingGen>.ReadSealed GenerateSealedRead<T>()
+        {
+            return ReadMethods<T, TStream, TSettingGen>.Method =
+                DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false, false);
         }
 
         /// <summary>
@@ -202,7 +215,7 @@ namespace Apex.Serialization
             var id = _stream.Read<int>();
             if (id != expectedId)
             {
-                throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {type.FullName}");
+                ThrowHelper.ThrowVersionIdMismatch(type);
             }
         }
 
@@ -214,12 +227,7 @@ namespace Apex.Serialization
                 CheckSerializedVersionUniqueId<T>();
             }
 
-            ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
-            if (method == null)
-            {
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false, false);
-            }
-
+            var method = ReadMethods<T, TStream, TSettingGen>.Method ?? GenerateSealedRead<T>();
             return method(ref _stream, this);
         }
 
@@ -231,7 +239,7 @@ namespace Apex.Serialization
             var id = _stream.Read<int>();
             if (id != expectedId)
             {
-                throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {typeof(T).FullName}");
+                ThrowHelper.ThrowVersionIdMismatch(typeof(T));
             }
         }
 
@@ -248,12 +256,7 @@ namespace Apex.Serialization
                 return result;
             }
 
-            ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
-            if (method == null)
-            {
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false, false);
-            }
-
+            var method = ReadMethods<T, TStream, TSettingGen>.Method ?? GenerateSealedRead<T>();
             return method(ref _stream, this);
         }
 
@@ -285,7 +288,7 @@ namespace Apex.Serialization
                 var id = _stream.Read<int>();
                 if (id != expectedId)
                 {
-                    throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {typeof(T).FullName}");
+                    ThrowHelper.ThrowVersionIdMismatch(typeof(T));
                 }
             }
 

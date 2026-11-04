@@ -18,6 +18,12 @@ namespace Apex.Serialization.Internal
         }
 
         [DoesNotReturn]
+        internal static void ThrowVersionIdMismatch(Type type)
+        {
+            throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {type.FullName}");
+        }
+
+        [DoesNotReturn]
         internal static void ThrowEndOfStream()
         {
             throw new EndOfStreamException("The stream ended before the serialized data did");

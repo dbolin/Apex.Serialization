@@ -701,7 +701,9 @@ namespace Apex.Serialization.Internal
         /// Looks the method up before calling <c>GetOrAdd</c>, whose factory captures the arguments in a closure allocated on
         /// every call: generated code calls this once per base class for each object of a hierarchy that isn't
         /// flattened.  Only a call that generates has init-only fields of its own to restore, so a found method skips that.
+        /// Inlined into those reads, it would widen the frame of every level of nesting.
         /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
         internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed, bool isolated)
             where T : Delegate
         {
