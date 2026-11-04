@@ -81,7 +81,8 @@ namespace Apex.Serialization.Internal
         private void AddWithResize(T? value)
         {
             Array.Resize(ref _slots, (int)Math.Min(Math.Max(4L, 2L * _slots.Length), Array.MaxLength));
-            _slots[_count++].Value = value;
+            _slots[_count].Value = value;
+            _count++;
         }
 
         public void AddRange(List<T> values)
