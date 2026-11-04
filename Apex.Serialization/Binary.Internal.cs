@@ -112,10 +112,6 @@ namespace Apex.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void EnsureSufficientStack() => StackLimit.Ensure(_stackStart, _stackSpan);
 
-        /// <summary>
-        /// The root's cached read and <see cref="ReadSealedInternal{T}"/> both start here, so neither can lose the stack
-        /// check without the other.
-        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool ReadSealedHeader<T>(bool useSerializedVersionId, out T result)
         {
