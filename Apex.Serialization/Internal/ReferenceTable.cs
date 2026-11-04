@@ -5,9 +5,8 @@ using System.Runtime.CompilerServices;
 namespace Apex.Serialization.Internal
 {
     /// <summary>
-    /// The objects or types a read has met so far, which later references in the data index into.  The slots are structs
-    /// because a store into an array of a reference type goes through the runtime's covariance check, and every object a
-    /// read creates in graph mode is added here.
+    /// The slots are structs because a store into an array of a reference type goes through the runtime's covariance
+    /// check, and every object a read creates in graph mode is added here.
     /// </summary>
     internal sealed class ReferenceTable<T> where T : class
     {
@@ -32,7 +31,7 @@ namespace Apex.Serialization.Internal
             {
                 if ((uint)index >= (uint)_count)
                 {
-                    ThrowIndexOutOfRange();
+                    ThrowHelper.ThrowIndexOutOfRange();
                 }
 
                 return _slots[index].Value;
@@ -41,7 +40,7 @@ namespace Apex.Serialization.Internal
             {
                 if ((uint)index >= (uint)_count)
                 {
-                    ThrowIndexOutOfRange();
+                    ThrowHelper.ThrowIndexOutOfRange();
                 }
 
                 _slots[index].Value = value;
@@ -81,7 +80,7 @@ namespace Apex.Serialization.Internal
         [MethodImpl(MethodImplOptions.NoInlining)]
         private void AddWithResize(T? value)
         {
-            Array.Resize(ref _slots, Math.Max(4, 2 * _slots.Length));
+            Array.Resize(ref _slots, (int)Math.Min(Math.Max(4L, 2L * _slots.Length), Array.MaxLength));
             _slots[_count++].Value = value;
         }
 
@@ -95,32 +94,8 @@ namespace Apex.Serialization.Internal
 
         public void Clear()
         {
-            var count = _count;
-            if (count == 0)
-            {
-                return;
-            }
-
-            var slots = _slots;
-            if (count <= 8)
-            {
-                for (int i = 0; i < count && i < slots.Length; ++i)
-                {
-                    slots[i].Value = null;
-                }
-            }
-            else
-            {
-                Array.Clear(slots, 0, count);
-            }
-
+            _slots.AsSpan(0, _count).Clear();
             _count = 0;
-        }
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private static void ThrowIndexOutOfRange()
-        {
-            throw new ArgumentOutOfRangeException("index");
         }
     }
 }

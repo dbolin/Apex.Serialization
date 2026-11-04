@@ -24,6 +24,12 @@ namespace Apex.Serialization.Internal
         }
 
         [DoesNotReturn]
+        internal static void ThrowIndexOutOfRange()
+        {
+            throw new ArgumentOutOfRangeException("index");
+        }
+
+        [DoesNotReturn]
         internal static void ThrowEndOfStream()
         {
             throw new EndOfStreamException("The stream ended before the serialized data did");

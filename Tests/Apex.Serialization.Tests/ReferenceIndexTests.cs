@@ -9,8 +9,7 @@ using Xunit;
 namespace Apex.Serialization.Tests
 {
     /// <summary>
-    /// A reference in the data is the position, counting from 1, of a type or object read earlier in the same payload.  The
-    /// reader has to reject 0 and the first position past what it has read, and let go of what it read once the read ends.
+    /// A reference in the data is the position, counting from 1, of a type or object read earlier in the same payload.
     /// </summary>
     public class ReferenceIndexTests
     {
@@ -39,7 +38,7 @@ namespace Apex.Serialization.Tests
 
         /// <summary>
         /// In graph mode the first element is written last as a reference to the object the second element introduced,
-        /// which is the last of the two objects read by then (the array and that element).
+        /// which is the last object read by then.
         /// </summary>
         [Fact]
         public void AnObjectReferenceToTheLastObjectReadReadsAndOnePastItOrZeroIsRejected()
@@ -55,8 +54,6 @@ namespace Apex.Serialization.Tests
             read[0].Should().BeOfType<Empty>().And.BeSameAs(read[1]);
         }
 
-        // The array and its elements make 4 and 21 entries, either side of the most the reader clears one at a time
-        // rather than with Array.Clear.
         [Theory]
         [InlineData(3)]
         [InlineData(20)]
@@ -70,15 +67,15 @@ namespace Apex.Serialization.Tests
             GC.WaitForPendingFinalizers();
             GC.Collect();
 
-            read.TryGetTarget(out _).Should().BeFalse("the serializer, still alive, keeps nothing it read");
+            read.Where(x => x.TryGetTarget(out _)).Should().BeEmpty("the serializer, still alive, keeps nothing it read");
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static WeakReference<Empty[]> ReadAndDrop(IBinary binary, byte[] payload)
+        private static WeakReference<object>[] ReadAndDrop(IBinary binary, byte[] payload)
         {
             var read = binary.Read<Empty[]>(new MemoryStream(payload));
             read.Should().OnlyContain(x => x != null);
-            return new WeakReference<Empty[]>(read);
+            return read.Prepend<object>(read).Select(x => new WeakReference<object>(x)).ToArray();
         }
 
         private static Func<object?[]> ReadWithLastIntAs(IBinary binary, byte[] payload, int value)
