@@ -1,3 +1,4 @@
+using Apex.Serialization.Internal;
 using FluentAssertions;
 using System;
 using System.Buffers.Binary;
@@ -72,6 +73,9 @@ namespace Apex.Serialization.Tests
         private const int ReadableDepth = 2 * DeepestRealDepth;
 
         private const int ReaderStackBytes = 1024 * 1024;
+
+        // Less than the 256 KB that StackLimit keeps above a stack's low end.
+        private const int TinyStackBytes = 192 * 1024;
 
         private const int WriterStackBytes = 1024 * 1024 * 1024;
 
@@ -316,6 +320,32 @@ namespace Apex.Serialization.Tests
 
             exception.Should().BeOfType<InsufficientExecutionStackException>();
             depths.Should().Equal(DeepestRealDepth, DeepestRealDepth);
+        }
+
+        [Fact]
+        public void OnAStackSmallerThanTheMarginEveryLevelCallsTheRuntimesCheck()
+        {
+            var hostile = Write(Nest(nameof(Links), HostileDepth));
+            StackLimit.Bounds bounds = default;
+            Exception? exception = null;
+            var reader = new Thread(() =>
+            {
+                bounds = StackLimit.ForCurrentThread();
+                using var binary = Binary.Create(NestingSettings());
+                try
+                {
+                    binary.Read<object>(new MemoryStream(hostile));
+                }
+                catch (Exception e)
+                {
+                    exception = e;
+                }
+            }, TinyStackBytes);
+            reader.Start();
+            reader.Join();
+
+            bounds.Span.Should().Be(0);
+            exception.Should().BeOfType<InsufficientExecutionStackException>();
         }
 
         [Fact]

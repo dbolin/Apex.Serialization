@@ -8,15 +8,15 @@ namespace Apex.Serialization.Internal
     /// A range of stack addresses in which <see cref="RuntimeHelpers.EnsureSufficientExecutionStack"/> can't throw, so a
     /// read inside it skips that call into the runtime and a read outside it, including one on another thread, makes the
     /// call, which then decides.  CoreCLR refuses once less than 128 KB of the thread's stack is left on 64-bit (measured
-    /// on .NET 10 x64: within 128 bytes of that from the caller's frame).  The range starts 256 KB above the stack's low
-    /// end, which would still hold with a margin up to twice as large.
+    /// on .NET 10 x64: within 128 bytes of that from the caller's frame).  The range would still hold with a margin up to
+    /// twice as large.
     /// </summary>
     internal static class StackLimit
     {
         private const nuint Margin = 256 * 1024;
 
-        // Wine reports bounds of its own making, which the runtime's margin isn't measured against.
-        private static readonly bool UnderWine = IsWine();
+        // The stack bounds Wine reports haven't been measured against the runtime's margin.
+        internal static readonly bool UnderWine = IsWine();
 
         [ThreadStatic]
         private static Bounds t_bounds;
@@ -69,6 +69,7 @@ namespace Apex.Serialization.Internal
                     var start = low + Margin;
                     bounds = new Bounds(start, high > start ? high - start : 0);
                 }
+                // A Wine that hides its exports (wine-staging's HideWineExports) or a kernel32 without this export.
                 catch (EntryPointNotFoundException)
                 {
                 }
