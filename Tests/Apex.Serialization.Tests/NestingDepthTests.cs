@@ -24,6 +24,19 @@ namespace Apex.Serialization.Tests
             public Link? Next;
         }
 
+        public class BaseLink
+        {
+            public int Index;
+        }
+
+        /// <summary>
+        /// With the hierarchy not flattened, each level also reads its base class's fields through a read of their own.
+        /// </summary>
+        public sealed class DerivedLink : BaseLink
+        {
+            public DerivedLink? Next;
+        }
+
         /// <summary>
         /// Written and read by custom code that nests one value inside the next, so reading it recurses through the reads
         /// of value types alone.
@@ -54,8 +67,8 @@ namespace Apex.Serialization.Tests
         // The deepest the data of the library's main consumer nests.
         private const int DeepestRealDepth = 300;
 
-        // On a 1 MiB stack the shapes here read between 1,395 (Chain, Debug) and 19,077 (Links, Release) levels, measured
-        // on .NET 10 x64, so twice the real depth leaves room for frames that grow.
+        // On a 1 MiB stack the shapes here read between about 1,400 (Node, Debug) and 19,000 (Links, Release) levels,
+        // measured on .NET 10 x64, so twice the real depth leaves room for frames that grow.
         private const int ReadableDepth = 2 * DeepestRealDepth;
 
         private const int ReaderStackBytes = 1024 * 1024;
@@ -102,6 +115,42 @@ namespace Apex.Serialization.Tests
                 return new Node { Depth = depth };
             });
 
+        /// <summary>
+        /// About three quarters of the fewest levels each shape read on a 1 MiB stack, measured on .NET 10 x64 with tiered
+        /// compilation warmed up, off, and stopped at tier 0, as a multiple of <see cref="DeepestRealDepth"/>.  A change
+        /// that widens the frame of every level fails here.
+        /// </summary>
+        public static TheoryData<bool, string, int> DepthFloors() => new TheoryData<bool, string, int>
+        {
+#if DEBUG
+            { false, nameof(Links), 17 },
+            { false, nameof(ObjectArrays), 7 },
+            { false, nameof(Chain), 3 },
+            { false, nameof(Node), 3 },
+            { true, nameof(Links), 9 },
+            { true, nameof(DerivedLinks), 8 },
+#else
+            { false, nameof(Links), 47 },
+            { false, nameof(ObjectArrays), 10 },
+            { false, nameof(Chain), 5 },
+            { false, nameof(Node), 4 },
+            { true, nameof(Links), 23 },
+            { true, nameof(DerivedLinks), 8 },
+#endif
+        };
+
+        /// <summary>
+        /// Graph mode, the hierarchy not flattened, no inlining, hooks and version ids: a large consumer's settings.
+        /// </summary>
+        private static Settings GraphSettings() => new Settings
+        {
+            SerializationMode = Mode.Graph,
+            FlattenClassHierarchy = false,
+            InliningMaxDepth = 0,
+            SupportSerializationHooks = true,
+            AllowFunctionSerialization = true,
+        }.MarkSerializable(_ => true);
+
         public static TheoryData<string> Shapes() => new TheoryData<string> { nameof(ObjectArrays), nameof(Links), nameof(Chain), nameof(Node) };
 
         private static object Nest(string shape, int depth) => shape switch
@@ -110,6 +159,7 @@ namespace Apex.Serialization.Tests
             nameof(Links) => Links(depth),
             nameof(Chain) => new Chain { Depth = depth },
             nameof(Node) => new Node { Depth = depth },
+            nameof(DerivedLinks) => DerivedLinks(depth),
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
@@ -122,6 +172,19 @@ namespace Apex.Serialization.Tests
                 var next = new object?[1];
                 current[0] = next;
                 current = next;
+            }
+
+            return root;
+        }
+
+        private static DerivedLink DerivedLinks(int depth)
+        {
+            var root = new DerivedLink();
+            var current = root;
+            for (var i = 1; i < depth; ++i)
+            {
+                current.Next = new DerivedLink { Index = i };
+                current = current.Next;
             }
 
             return root;
@@ -146,6 +209,7 @@ namespace Apex.Serialization.Tests
             Link link => 1 + Depth(link.Next),
             Chain chain => chain.Depth,
             Node node => node.Depth,
+            DerivedLink link => 1 + Depth(link.Next),
             _ => 0,
         };
 
@@ -156,7 +220,7 @@ namespace Apex.Serialization.Tests
             var hostile = Write(Nest(shape, HostileDepth));
             var real = Write(Nest(shape, DeepestRealDepth));
 
-            var (exception, readAfter) = ReadOnSmallStack(hostile, real);
+            var (exception, _, readAfter) = ReadOnSmallStack(hostile, real);
 
             exception.Should().BeOfType<InsufficientExecutionStackException>();
             Depth(readAfter).Should().Be(DeepestRealDepth, "the serializer reads intact data after the exception");
@@ -168,10 +232,24 @@ namespace Apex.Serialization.Tests
         {
             var deep = Write(Nest(shape, ReadableDepth));
 
-            var (exception, read) = ReadOnSmallStack(deep, deep);
+            var (exception, read, _) = ReadOnSmallStack(deep);
 
             exception.Should().BeNull();
             Depth(read).Should().Be(ReadableDepth);
+        }
+
+        [Theory]
+        [MemberData(nameof(DepthFloors))]
+        public void EachShapeReadsAtLeastItsDepthFloor(bool graph, string shape, int multiple)
+        {
+            var depth = multiple * DeepestRealDepth;
+            var settings = graph ? (Func<Settings>)GraphSettings : () => NestingSettings();
+            var deep = Write(Nest(shape, depth), settings);
+
+            var (exception, read, _) = ReadOnSmallStack(deep, settings: settings);
+
+            exception.Should().BeNull();
+            Depth(read).Should().Be(depth);
         }
 
         [Fact]
@@ -245,7 +323,7 @@ namespace Apex.Serialization.Tests
         {
             var real = Write<object>((Action)Handlers.First + Handlers.Second);
 
-            var (exception, readAfter) = ReadOnSmallStack(NestedInvocationLists(real, HostileDepth), real);
+            var (exception, _, readAfter) = ReadOnSmallStack(NestedInvocationLists(real, HostileDepth), real);
 
             exception.Should().BeOfType<InsufficientExecutionStackException>();
             ((Action)readAfter!).GetInvocationList().Select(x => x.Method.Name).Should().Equal(nameof(Handlers.First), nameof(Handlers.Second));
@@ -285,12 +363,12 @@ namespace Apex.Serialization.Tests
             return payload.ToArray();
         }
 
-        private static byte[] Write<T>(T value)
+        private static byte[] Write<T>(T value, Func<Settings>? settings = null)
         {
             byte[]? payload = null;
             var writer = new Thread(() =>
             {
-                using var binary = Binary.Create(NestingSettings());
+                using var binary = Binary.Create(settings?.Invoke() ?? NestingSettings());
                 using var stream = new MemoryStream();
                 binary.Write(value, stream);
                 payload = stream.ToArray();
@@ -300,27 +378,32 @@ namespace Apex.Serialization.Tests
             return payload!;
         }
 
-        private static (Exception? Exception, object? ReadAfter) ReadOnSmallStack(byte[] payload, byte[] intact)
+        private static (Exception? Exception, object? Read, object? ReadAfter) ReadOnSmallStack(byte[] payload, byte[]? intact = null,
+            Func<Settings>? settings = null)
         {
             Exception? exception = null;
+            object? read = null;
             object? readAfter = null;
             var reader = new Thread(() =>
             {
-                using var binary = Binary.Create(NestingSettings());
+                using var binary = Binary.Create(settings?.Invoke() ?? NestingSettings());
                 try
                 {
-                    binary.Read<object>(new MemoryStream(payload));
+                    read = binary.Read<object>(new MemoryStream(payload));
                 }
                 catch (Exception e)
                 {
                     exception = e;
                 }
 
-                readAfter = binary.Read<object>(new MemoryStream(intact));
+                if (intact != null)
+                {
+                    readAfter = binary.Read<object>(new MemoryStream(intact));
+                }
             }, ReaderStackBytes);
             reader.Start();
             reader.Join();
-            return (exception, readAfter);
+            return (exception, read, readAfter);
         }
     }
 }
