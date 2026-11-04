@@ -64,6 +64,17 @@ namespace Apex.Serialization.Internal
             throw new NotSupportedException($"An array of {elementCount} elements is too large to check against a stream that can't seek");
         }
 
+        /// <summary>
+        /// The exception the span constructor these checks replace throws for a position outside the buffer:
+        /// <c>MalformedInputTests</c> counts one as a read that got past every check on the data, so a different type would
+        /// hide that from it.
+        /// </summary>
+        [DoesNotReturn]
+        internal static void ThrowOutsideBuffer()
+        {
+            throw new ArgumentOutOfRangeException(null, "A read or write went past the end of the stream buffer");
+        }
+
         [DoesNotReturn]
         internal static void ThrowReservationTooLarge(int size)
         {

@@ -166,9 +166,16 @@ namespace Apex.Serialization.Internal
             }
         }
 
+        /// <summary>
+        /// Skips the store when the buffer is already the pooled one, since storing a reference field pays the GC write
+        /// barrier.
+        /// </summary>
         public void ReleaseReadAhead()
         {
-            _buffer = _pooledBuffer;
+            if (_buffer != _pooledBuffer)
+            {
+                _buffer = _pooledBuffer;
+            }
         }
 
         public bool TryEnsureAvailable(long byteCount)
@@ -405,7 +412,15 @@ namespace Apex.Serialization.Internal
         {
             CheckReserved(Unsafe.SizeOf<T>());
 
-            var destination = new Span<byte>(_buffer, _bufferPosition, Unsafe.SizeOf<T>());
+            var buffer = _buffer;
+            var position = _bufferPosition;
+            if ((ulong)(uint)position + (uint)Unsafe.SizeOf<T>() > (uint)buffer.Length)
+            {
+                ThrowHelper.ThrowOutsideBuffer();
+            }
+
+            var destination = MemoryMarshal.CreateSpan(
+                ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(buffer), (nint)(uint)position), Unsafe.SizeOf<T>());
             MemoryMarshal.Write(destination, in value);
             if (PaddingMap<T>.HasPadding)
             {
@@ -415,12 +430,26 @@ namespace Apex.Serialization.Internal
             _bufferPosition += Unsafe.SizeOf<T>();
         }
 
+        /// <summary>
+        /// Checks the bounds itself, as <see cref="Write{T}"/> does, rather than through the span constructor, which also
+        /// tests the buffer for null on every call: generated code reads and writes every primitive field through these.
+        /// The two don't share a helper: on .NET 10 the extra inlining level uses up the JIT's inline budget in large
+        /// generated read methods, which then call this instead of inlining it.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T Read<T>() where T : struct
         {
             CheckReserved(Unsafe.SizeOf<T>());
 
-            var res = MemoryMarshal.Read<T>(new ReadOnlySpan<byte>(_buffer, _bufferPosition, Unsafe.SizeOf<T>()));
+            var buffer = _buffer;
+            var position = _bufferPosition;
+            if ((ulong)(uint)position + (uint)Unsafe.SizeOf<T>() > (uint)buffer.Length)
+            {
+                ThrowHelper.ThrowOutsideBuffer();
+            }
+
+            var res = MemoryMarshal.Read<T>(MemoryMarshal.CreateReadOnlySpan(
+                ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(buffer), (nint)(uint)position), Unsafe.SizeOf<T>()));
             _bufferPosition += Unsafe.SizeOf<T>();
             return res;
         }

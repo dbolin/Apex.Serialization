@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Xunit;
 using BufferedStream = Apex.Serialization.Internal.BufferedStream;
 
@@ -65,6 +66,57 @@ namespace Apex.Serialization.Tests
             bufferLengths.Should().Equal(BufferedStream.MaxSize);
         }
 
+        [Fact]
+        public void AReadThatGrowsTheBufferToCheckAnArraysLengthLeavesTheNextReadOnTheOriginalBuffer()
+        {
+            using var binary = Binary.Create(new Settings { UseSerializedVersionId = false });
+            var growing = new BufferRecordingStream(Written(binary, new string?[2 * BufferedStream.MaxSize]));
+            var next = new BufferRecordingStream(Written(binary, 42));
+
+            binary.Read<string?[]>(growing).Should().HaveCount(2 * BufferedStream.MaxSize);
+            binary.Read<int>(next).Should().Be(42);
+
+            growing.BufferLengths.Max().Should().BeGreaterThan(BufferedStream.MaxSize);
+            next.BufferLengths.Should().Equal(BufferedStream.MaxSize);
+        }
+
+        /// <summary>
+        /// No read follows to release the buffer when it starts, so only the failed read's own cleanup can.
+        /// </summary>
+        [Fact]
+        public void AReadThatGrowsTheBufferAndThenFailsLetsTheGrownBufferBeCollected()
+        {
+            using var binary = Binary.Create(new Settings { UseSerializedVersionId = false });
+            var whole = Written(binary, new string?[2 * BufferedStream.MaxSize]);
+
+            var grown = ReadFailingAfterGrowth(binary, whole.AsSpan(0, 3 * BufferedStream.MaxSize / 2).ToArray());
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+
+            grown.TryGetTarget(out _).Should().BeFalse("the failed read released the buffer it grew");
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static WeakReference<byte[]> ReadFailingAfterGrowth(IBinary binary, byte[] truncated)
+        {
+            var stream = new BufferRecordingStream(truncated);
+
+            var read = () => binary.Read<string?[]>(stream);
+
+            read.Should().Throw<EndOfStreamException>();
+            stream.LargestBuffer!.TryGetTarget(out var largest).Should().BeTrue();
+            largest!.Length.Should().BeGreaterThan(BufferedStream.MaxSize);
+            return stream.LargestBuffer;
+        }
+
+        private static byte[] Written<T>(IBinary binary, T value)
+        {
+            using var written = new MemoryStream();
+            binary.Write(value, written);
+            return written.ToArray();
+        }
+
         private static (T Read, IEnumerable<int> BufferLengths) ReadThroughNonSeekableStream<T>(T value)
         {
             using var binary = Binary.Create(new Settings { UseSerializedVersionId = false });
@@ -78,13 +130,15 @@ namespace Apex.Serialization.Tests
         }
 
         /// <summary>
-        /// Can't seek, and records the length of every buffer it's asked to read into.
+        /// Can't seek, and records the length of every buffer it's asked to read into and, weakly, the largest one.
         /// </summary>
         private sealed class BufferRecordingStream(byte[] data) : Stream
         {
             private readonly MemoryStream _inner = new MemoryStream(data);
 
             public HashSet<int> BufferLengths { get; } = new HashSet<int>();
+
+            public WeakReference<byte[]>? LargestBuffer { get; private set; }
 
             public override bool CanRead => true;
             public override bool CanSeek => false;
@@ -100,6 +154,10 @@ namespace Apex.Serialization.Tests
             public override int Read(byte[] buffer, int offset, int count)
             {
                 BufferLengths.Add(buffer.Length);
+                if (LargestBuffer == null || !LargestBuffer.TryGetTarget(out var largest) || buffer.Length > largest.Length)
+                {
+                    LargestBuffer = new WeakReference<byte[]>(buffer);
+                }
                 return _inner.Read(buffer, offset, count);
             }
 

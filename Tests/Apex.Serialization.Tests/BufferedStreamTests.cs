@@ -188,6 +188,73 @@ namespace Apex.Serialization.Tests
             }
         }
 
+        /// <summary>
+        /// A stream that reports reading more bytes than it was asked for leaves every reservation looking satisfied, so
+        /// only the bounds check on each read stops the first value that would end past the buffer.
+        /// </summary>
+        [Fact]
+        public void AReadThatWouldEndPastTheBufferThrowsEvenWhenTheStreamOverstatesWhatItRead()
+        {
+            Sut.ReadFrom(new OverstatingStream(extraBytes: 2 * sizeof(int)));
+            Sut.ReserveSize(sizeof(byte));
+            Sut.Read<byte>();
+            var valuesRead = 0;
+
+            var readOn = () =>
+            {
+                while (true)
+                {
+                    Sut.ReserveSize(sizeof(int));
+                    Sut.Read<int>();
+                    ++valuesRead;
+                }
+            };
+
+            readOn.Should().Throw<ArgumentOutOfRangeException>();
+            valuesRead.Should().Be((BufferedStream.MaxSize - sizeof(byte)) / sizeof(int), "the next int would end 1 byte past the buffer");
+            var readTheLastBytes = () =>
+            {
+                for (var i = 0; i < 3; ++i)
+                {
+                    Sut.ReserveSize(sizeof(byte));
+                    Sut.Read<byte>();
+                }
+            };
+            readTheLastBytes.Should().NotThrow("a value that ends on the buffer's last byte is inside it");
+        }
+
+        private sealed class OverstatingStream(int extraBytes) : Stream
+        {
+            private bool _read;
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                if (_read)
+                {
+                    return 0;
+                }
+
+                _read = true;
+                return count + extraBytes;
+            }
+
+            public override void Flush() => throw new NotSupportedException();
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        }
+
         [Fact]
         public void WriteBytes()
         {
