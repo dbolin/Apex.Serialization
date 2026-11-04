@@ -172,7 +172,7 @@ namespace Apex.Serialization.Internal
                     if (settings.SerializationMode == Mode.Graph)
                     {
                         statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                            SavedReferencesListAdd, result));
+                            SavedReferencesAdd, result));
                     }
                 }
                 else
@@ -182,7 +182,7 @@ namespace Apex.Serialization.Internal
                     if (settings.SerializationMode == Mode.Graph)
                     {
                         statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                            SavedReferencesListAdd, result));
+                            SavedReferencesAdd, result));
                     }
                     var readElements = ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths, settings, visitedTypes, depth);
                     // The loops nest one per dimension, so an empty array with long other dimensions would still iterate them.

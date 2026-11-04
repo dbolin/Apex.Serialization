@@ -37,20 +37,20 @@ namespace Apex.Serialization.Internal
             bool isolated)
             where T : Delegate
         {
-            if (DynamicCodeMethods._virtualWriteMethods.TryGetValue(new TypeKey(type, settings, shouldWriteTypeInfo, isolated), out var generated))
+            var key = new TypeKey(type, settings, shouldWriteTypeInfo, isolated);
+            if (DynamicCodeMethods._virtualWriteMethods.TryGetValue(key, out var generated))
             {
                 return (T)generated.Delegate;
             }
 
-            return GenerateWriteMethodSlow<T>(type, settings, shouldWriteTypeInfo, isolated);
+            return GenerateWriteMethodSlow<T>(key);
         }
 
-        private static T GenerateWriteMethodSlow<T>(Type type, ImmutableSettings settings, bool shouldWriteTypeInfo, bool isolated)
+        private static T GenerateWriteMethodSlow<T>(TypeKey key)
             where T : Delegate
         {
-            return (T)DynamicCodeMethods._virtualWriteMethods.GetOrAdd(
-                new TypeKey(type, settings, shouldWriteTypeInfo, isolated),
-                t => GenerateWriteMethodImpl<T>(type, settings, shouldWriteTypeInfo, isolated)).Delegate;
+            return (T)DynamicCodeMethods._virtualWriteMethods.GetOrAdd(key,
+                k => GenerateWriteMethodImpl<T>(k.Type, k.Settings, k.IncludesTypeInfo, k.Isolated)).Delegate;
         }
 
         /// <summary>
@@ -707,21 +707,22 @@ namespace Apex.Serialization.Internal
         internal static T GenerateReadMethod<T>(Type type, ImmutableSettings settings, bool isBoxed, bool isolated)
             where T : Delegate
         {
-            if (DynamicCodeMethods._virtualReadMethods.TryGetValue(new TypeKey(type, settings, isBoxed, isolated), out var generated))
+            var key = new TypeKey(type, settings, isBoxed, isolated);
+            if (DynamicCodeMethods._virtualReadMethods.TryGetValue(key, out var generated))
             {
                 return (T)generated.Delegate;
             }
 
-            return GenerateReadMethodSlow<T>(type, settings, isBoxed, isolated);
+            return GenerateReadMethodSlow<T>(key);
         }
 
-        private static T GenerateReadMethodSlow<T>(Type type, ImmutableSettings settings, bool isBoxed, bool isolated)
+        private static T GenerateReadMethodSlow<T>(TypeKey key)
             where T : Delegate
         {
             try
             {
-                return (T)DynamicCodeMethods._virtualReadMethods.GetOrAdd(new TypeKey(type, settings, isBoxed, isolated),
-                    t => GenerateReadMethodImpl<T>(type, settings, isBoxed, isolated)).Delegate;
+                return (T)DynamicCodeMethods._virtualReadMethods.GetOrAdd(key,
+                    k => GenerateReadMethodImpl<T>(k.Type, k.Settings, k.IncludesTypeInfo, k.Isolated)).Delegate;
             }
             finally
             {
@@ -876,7 +877,7 @@ namespace Apex.Serialization.Internal
                             Expression.Constant(type, typeof(Type))),
                         type)));
                 readStatements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                    SavedReferencesListAdd, result));
+                    SavedReferencesAdd, result));
 
                 if (skipReadLabel != null)
                 {
@@ -945,9 +946,9 @@ namespace Apex.Serialization.Internal
                             if (settings.SerializationMode == Mode.Graph && !type.IsValueType)
                             {
                                 constructorLocalVariables.Add(currentSavedReferencesIndexVariable);
-                                constructorLocalStatements.Add(Expression.Assign(currentSavedReferencesIndexVariable, Expression.Call(Expression.Call(output, SavedReferencesGetter), SavedReferencesListCountGetter)));
+                                constructorLocalStatements.Add(Expression.Assign(currentSavedReferencesIndexVariable, Expression.Call(Expression.Call(output, SavedReferencesGetter), SavedReferencesCountGetter)));
                                 constructorLocalStatements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                                SavedReferencesListAdd, Expression.Constant(null)));
+                                SavedReferencesAdd, Expression.Constant(null)));
                             }
 
                             foreach (var field in fields)
@@ -972,7 +973,7 @@ namespace Apex.Serialization.Internal
                                 constructorLocalStatements.Add(
                                     Expression.Assign(
                                         Expression.Property(Expression.Call(output, SavedReferencesGetter),
-                                            SavedReferencesListIndexer, currentSavedReferencesIndexVariable),
+                                            SavedReferencesIndexer, currentSavedReferencesIndexVariable),
                                     result)
                                 );
                             }
@@ -1005,7 +1006,7 @@ namespace Apex.Serialization.Internal
                 if (!type.IsValueType && settings.SerializationMode == Mode.Graph)
                 {
                     readStatements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                        SavedReferencesListAdd, result));
+                        SavedReferencesAdd, result));
                 }
             }
 
@@ -1174,7 +1175,7 @@ namespace Apex.Serialization.Internal
                     return Expression.Block(
                         Expression.Assign(result, primitive),
                         Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                            SavedReferencesListAdd, result)
+                            SavedReferencesAdd, result)
                     );
                 }
 

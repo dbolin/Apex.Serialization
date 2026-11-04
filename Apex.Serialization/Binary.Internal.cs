@@ -1,4 +1,4 @@
-using Apex.Serialization.Extensions;
+﻿using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal;
 using Apex.Serialization.Internal.Reflection;
 using System;
@@ -98,8 +98,7 @@ namespace Apex.Serialization
         }
 
         /// <summary>
-        /// A sealed root whose read hasn't been generated yet.  It is generated after the header, as before, so a null
-        /// root of a type that can't be read still reads as null.
+        /// Its read is generated after the header, so a null root of a type that can't be read still reads as null.
         /// </summary>
         private sealed class SealedRoot<T>
         {

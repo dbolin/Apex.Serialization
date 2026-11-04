@@ -136,13 +136,13 @@ namespace Apex.Serialization.Internal
         private static readonly MethodInfo ReadTypeRefMethod =
             typeof(TBinary).GetMethod("ReadTypeRef", InstanceFlags)!;
 
-        private static readonly MethodInfo SavedReferencesListAdd =
+        private static readonly MethodInfo SavedReferencesAdd =
             typeof(ReferenceTable<object>).GetMethod("Add")!;
 
-        private static readonly MethodInfo SavedReferencesListCountGetter =
+        private static readonly MethodInfo SavedReferencesCountGetter =
             typeof(ReferenceTable<object>).GetProperty("Count")!.GetMethod!;
 
-        private static readonly PropertyInfo SavedReferencesListIndexer =
+        private static readonly PropertyInfo SavedReferencesIndexer =
             typeof(ReferenceTable<object>).GetProperty("Item", new[] { typeof(int) })!;
 
         private static readonly MethodInfo GetSavedReferenceMethod =
