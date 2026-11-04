@@ -36,6 +36,8 @@ namespace Apex.Serialization.Internal
             internal readonly nuint Span;
         }
 
+        // Without this the JIT doesn't inline it into Read (seen in .NET 10's x64 code), which costs a call per read.
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static Bounds ForCurrentThread()
         {
             var bounds = t_bounds;
