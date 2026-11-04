@@ -5,50 +5,82 @@ using System.Runtime.InteropServices;
 namespace Apex.Serialization.Internal
 {
     /// <summary>
-    /// A stack address above which <see cref="RuntimeHelpers.EnsureSufficientExecutionStack"/> can't throw, so a read
-    /// above it skips that call into the runtime and a read below it makes the call, which then decides.  CoreCLR
-    /// refuses once less than 128 KB of the thread's stack is left on 64-bit (measured on .NET 10 x64: within 128 bytes
-    /// of that from the caller's frame).  The limit sits 256 KB above the stack's low end, so the runtime still decides
-    /// every read that gets near its margin, and would with a margin up to twice as large.  Where the stack's bounds
-    /// aren't read (anything but 64-bit Windows) the limit is the top of the address space, and every read makes the call.
+    /// A range of stack addresses in which <see cref="RuntimeHelpers.EnsureSufficientExecutionStack"/> can't throw, so a
+    /// read inside it skips that call into the runtime and a read outside it, including one on another thread, makes the
+    /// call, which then decides.  CoreCLR refuses once less than 128 KB of the thread's stack is left on 64-bit (measured
+    /// on .NET 10 x64: within 128 bytes of that from the caller's frame).  The range starts 256 KB above the stack's low
+    /// end, which would still hold with a margin up to twice as large.
     /// </summary>
     internal static class StackLimit
     {
-        internal static readonly nuint Unknown = nuint.MaxValue;
-
         private const nuint Margin = 256 * 1024;
 
-        [ThreadStatic]
-        private static nuint t_limit;
+        // Wine reports bounds of its own making, which the runtime's margin isn't measured against.
+        private static readonly bool UnderWine = IsWine();
 
-        internal static nuint ForCurrentThread()
+        [ThreadStatic]
+        private static Bounds t_bounds;
+
+        /// <summary>
+        /// A start of 0 means not yet read: an empty range starts at 1.
+        /// </summary>
+        internal readonly struct Bounds
         {
-            var limit = t_limit;
-            return limit != 0 ? limit : Compute();
+            internal Bounds(nuint start, nuint span)
+            {
+                Start = start;
+                Span = span;
+            }
+
+            internal readonly nuint Start;
+            internal readonly nuint Span;
+        }
+
+        internal static Bounds ForCurrentThread()
+        {
+            var bounds = t_bounds;
+            return bounds.Start != 0 ? bounds : Compute();
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        internal static void Ensure(nuint start, nuint span)
+        {
+            byte probe = 0;
+            if (AddressOf(ref probe) - start >= span)
+            {
+                RuntimeHelpers.EnsureSufficientExecutionStack();
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static nuint AddressOf(ref byte local) => (nuint)Unsafe.ByteOffset(ref Unsafe.NullRef<byte>(), ref local);
 
         [MethodImpl(MethodImplOptions.NoInlining)]
-        internal static void CheckWithRuntime() => RuntimeHelpers.EnsureSufficientExecutionStack();
-
-        [MethodImpl(MethodImplOptions.NoInlining)]
-        private static nuint Compute()
+        private static Bounds Compute()
         {
-            var limit = Unknown;
-            if (OperatingSystem.IsWindows() && Environment.Is64BitProcess)
+            var bounds = new Bounds(1, 0);
+            if (OperatingSystem.IsWindows() && Environment.Is64BitProcess && !UnderWine)
             {
-                GetCurrentThreadStackLimits(out var low, out var high);
-                if (high - low > Margin)
+                try
                 {
-                    limit = low + Margin;
+                    GetCurrentThreadStackLimits(out var low, out var high);
+                    var start = low + Margin;
+                    bounds = new Bounds(start, high > start ? high - start : 0);
+                }
+                catch (EntryPointNotFoundException)
+                {
+                }
+                catch (DllNotFoundException)
+                {
                 }
             }
 
-            t_limit = limit;
-            return limit;
+            t_bounds = bounds;
+            return bounds;
         }
+
+        private static bool IsWine() =>
+            OperatingSystem.IsWindows() && NativeLibrary.TryLoad("ntdll.dll", out var ntdll) && NativeLibrary.TryGetExport(ntdll, "wine_get_version", out _);
 
         [DllImport("kernel32.dll")]
         private static extern void GetCurrentThreadStackLimits(out nuint lowLimit, out nuint highLimit);

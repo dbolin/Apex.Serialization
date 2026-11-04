@@ -64,8 +64,7 @@ namespace Apex.Serialization
                 var root = _rootRead;
                 if (root is ReadMethods<T, TStream, TSettingGen>.ReadSealed method)
                 {
-                    EnsureSufficientStack();
-                    if (ReadObjectRefHeader(Settings.UseSerializedVersionId, out T result))
+                    if (ReadSealedHeader(Settings.UseSerializedVersionId, out T result))
                     {
                         return result;
                     }
@@ -109,17 +108,20 @@ namespace Apex.Serialization
 
         /// <summary>
         /// Every object read starts here, so data nested deeper than the stack can hold ends in
-        /// <see cref="InsufficientExecutionStackException"/> rather than a stack overflow.  Above the read's
-        /// <see cref="StackLimit"/> the runtime's check can't throw, so it's skipped there.
+        /// <see cref="InsufficientExecutionStackException"/> rather than a stack overflow.
         /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void EnsureSufficientStack()
+        private void EnsureSufficientStack() => StackLimit.Ensure(_stackStart, _stackSpan);
+
+        /// <summary>
+        /// The root's cached read and <see cref="ReadSealedInternal{T}"/> both start here, so neither can lose the stack
+        /// check without the other.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool ReadSealedHeader<T>(bool useSerializedVersionId, out T result)
         {
-            byte probe = 0;
-            if (StackLimit.AddressOf(ref probe) < _stackLimit)
-            {
-                StackLimit.CheckWithRuntime();
-            }
+            EnsureSufficientStack();
+            return ReadObjectRefHeader(useSerializedVersionId, out result);
         }
 
         internal object ReadInternal()
@@ -264,8 +266,7 @@ namespace Apex.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal T ReadSealedInternal<T>(bool useSerializedVersionId)
         {
-            EnsureSufficientStack();
-            if (ReadObjectRefHeader(useSerializedVersionId, out T result))
+            if (ReadSealedHeader(useSerializedVersionId, out T result))
             {
                 return result;
             }

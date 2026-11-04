@@ -1,6 +1,7 @@
 using FluentAssertions;
 using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -12,7 +13,9 @@ namespace Apex.Serialization.Tests
 {
     /// <summary>
     /// Reading recurses once per level of nesting, so data nested deeper than the reading thread's stack can hold has to
-    /// end in an exception the caller can catch, not in a stack overflow that ends the process.
+    /// end in an exception the caller can catch, not in a stack overflow that ends the process.  The check skips the
+    /// runtime's call only on native 64-bit Windows, so only there do these tests exercise that fast path; elsewhere
+    /// every level calls the runtime's check.
     /// </summary>
     public class NestingDepthTests
     {
@@ -26,6 +29,15 @@ namespace Apex.Serialization.Tests
         /// of value types alone.
         /// </summary>
         public struct Chain
+        {
+            public int Depth;
+        }
+
+        /// <summary>
+        /// A sealed class that custom code nests the same way, so its levels read through a custom reader's
+        /// <c>ReadObject</c>.
+        /// </summary>
+        public sealed class Node
         {
             public int Depth;
         }
@@ -70,15 +82,34 @@ namespace Apex.Serialization.Tests
                 }
 
                 return new Chain { Depth = depth };
+            })
+            .RegisterCustomSerializer<Node>((node, writer) =>
+            {
+                writer.Write(node.Depth);
+                if (node.Depth > 1)
+                {
+                    writer.WriteObject(new Node { Depth = node.Depth - 1 });
+                }
+            }, (_, _) => { })
+            .RegisterCustomInstantiator<Node>(reader =>
+            {
+                var depth = reader.Read<int>();
+                if (depth > 1)
+                {
+                    reader.ReadObject<Node>();
+                }
+
+                return new Node { Depth = depth };
             });
 
-        public static TheoryData<string> Shapes() => new TheoryData<string> { nameof(ObjectArrays), nameof(Links), nameof(Chain) };
+        public static TheoryData<string> Shapes() => new TheoryData<string> { nameof(ObjectArrays), nameof(Links), nameof(Chain), nameof(Node) };
 
         private static object Nest(string shape, int depth) => shape switch
         {
             nameof(ObjectArrays) => ObjectArrays(depth),
             nameof(Links) => Links(depth),
             nameof(Chain) => new Chain { Depth = depth },
+            nameof(Node) => new Node { Depth = depth },
             _ => throw new ArgumentOutOfRangeException(nameof(shape)),
         };
 
@@ -114,6 +145,7 @@ namespace Apex.Serialization.Tests
             object?[] array => 1 + Depth(array[0]),
             Link link => 1 + Depth(link.Next),
             Chain chain => chain.Depth,
+            Node node => node.Depth,
             _ => 0,
         };
 
@@ -146,12 +178,14 @@ namespace Apex.Serialization.Tests
         public void NoLevelOfNestedDataStartsReadingWhereTheRuntimesStackCheckWouldRefuse()
         {
             var hostile = Write(Nest(nameof(Chain), HostileDepth));
+            var levelsRead = 0;
             var levelsTheRuntimeWouldRefuse = 0;
             Exception? exception = null;
             var reader = new Thread(() =>
             {
                 using var binary = Binary.Create(NestingSettings(() =>
                 {
+                    ++levelsRead;
                     if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
                     {
                         ++levelsTheRuntimeWouldRefuse;
@@ -173,6 +207,37 @@ namespace Apex.Serialization.Tests
             // The instantiator runs a few frames below the check that admitted its level, so the deepest admitted level
             // can be just past the runtime's margin; any level after it would have been refused.
             levelsTheRuntimeWouldRefuse.Should().BeLessThanOrEqualTo(1);
+            levelsRead.Should().BeGreaterThan(ReadableDepth);
+        }
+
+        [Fact]
+        public void ASealedChainReadThroughACustomReaderAfterAnIntactReadThrowsACatchableException()
+        {
+            var intact = Write(new Node { Depth = DeepestRealDepth });
+            var hostile = Write(new Node { Depth = HostileDepth });
+            var depths = new List<int>();
+            Exception? exception = null;
+            var reader = new Thread(() =>
+            {
+                using var binary = Binary.Create(NestingSettings());
+                // The intact read leaves the root's read cached, so the hostile root goes through the cached path.
+                depths.Add(binary.Read<Node>(new MemoryStream(intact)).Depth);
+                try
+                {
+                    binary.Read<Node>(new MemoryStream(hostile));
+                }
+                catch (Exception e)
+                {
+                    exception = e;
+                }
+
+                depths.Add(binary.Read<Node>(new MemoryStream(intact)).Depth);
+            }, ReaderStackBytes);
+            reader.Start();
+            reader.Join();
+
+            exception.Should().BeOfType<InsufficientExecutionStackException>();
+            depths.Should().Equal(DeepestRealDepth, DeepestRealDepth);
         }
 
         [Fact]

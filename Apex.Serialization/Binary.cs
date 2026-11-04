@@ -69,7 +69,8 @@ namespace Apex.Serialization
         private DictionarySlim<MethodInfo, Type[]> _methodGenericsCache = new DictionarySlim<MethodInfo, Type[]>();
 
         private readonly DictionarySlim<DelegateID, CachedDelegate> _delegateCache = new DictionarySlim<DelegateID, CachedDelegate>();
-        private nuint _stackLimit = StackLimit.Unknown;
+        private nuint _stackStart;
+        private nuint _stackSpan;
         private static readonly Func<object, object> _clone = CreateCloneFunc();
         private static readonly Action<Delegate, object> _setTarget = CreateSetTargetAction();
 
@@ -144,7 +145,9 @@ namespace Apex.Serialization
             T result;
             try
             {
-                _stackLimit = StackLimit.ForCurrentThread();
+                var stack = StackLimit.ForCurrentThread();
+                _stackStart = stack.Start;
+                _stackSpan = stack.Span;
                 _stream.ReadFrom(inputStream);
 
                 result = ReadRoot<T>();
@@ -168,7 +171,7 @@ namespace Apex.Serialization
 
         private void EndRead()
         {
-            _stackLimit = StackLimit.Unknown;
+            _stackSpan = 0;
             _stream.ReleaseReadAhead();
             ClearReadState();
         }
