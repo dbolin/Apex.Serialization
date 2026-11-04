@@ -116,9 +116,9 @@ namespace Apex.Serialization.Tests
             });
 
         /// <summary>
-        /// About three quarters of the fewest levels each shape read on a 1 MiB stack, measured on .NET 10 x64 with tiered
-        /// compilation warmed up, off, and stopped at tier 0, as a multiple of <see cref="DeepestRealDepth"/>.  A change
-        /// that widens the frame of every level fails here.
+        /// Three quarters of the fewest levels each shape read on a 1 MiB stack, measured on .NET 10 x64 with tiered
+        /// compilation warmed up, off, and stopped at tier 0, rounded down to a multiple of
+        /// <see cref="DeepestRealDepth"/>.  A change that widens the frame of every level fails here.
         /// </summary>
         public static TheoryData<bool, string, int> DepthFloors() => new TheoryData<bool, string, int>
         {
