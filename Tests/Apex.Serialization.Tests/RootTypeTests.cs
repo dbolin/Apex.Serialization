@@ -1,6 +1,8 @@
 using FluentAssertions;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace Apex.Serialization.Tests
@@ -24,6 +26,30 @@ namespace Apex.Serialization.Tests
         public sealed class Unreadable
         {
             public int Value;
+        }
+
+        public class Animal
+        {
+            public int Legs;
+        }
+
+        public sealed class Dog : Animal
+        {
+            public string? Name;
+        }
+
+        public sealed class Tag
+        {
+            public string? Label;
+        }
+
+        /// <summary>
+        /// Written and read by custom code that alternates a polymorphic and a sealed nested object.
+        /// </summary>
+        public sealed class Alternating
+        {
+            public readonly List<Animal> Animals = new List<Animal>();
+            public readonly List<Tag> Tags = new List<Tag>();
         }
 
         private static Settings WithoutVersionIds() => new Settings { UseSerializedVersionId = false };
@@ -55,6 +81,47 @@ namespace Apex.Serialization.Tests
             reader.Read<Unreadable?>(new MemoryStream(Written<Unreadable?>(writer, null))).Should().BeNull();
             var readOne = () => reader.Read<Unreadable>(new MemoryStream(Written(writer, new Unreadable())));
             readOne.Should().Throw<InvalidOperationException>().WithMessage("*not marked as serializable*");
+        }
+
+        [Fact]
+        public void ACustomReaderAlternatingTwoTypesReadsEachObject()
+        {
+            var settings = WithoutVersionIds().MarkSerializable(_ => true)
+                .RegisterCustomSerializer<Alternating>((value, writer) =>
+                {
+                    writer.Write(value.Animals.Count);
+                    for (var i = 0; i < value.Animals.Count; ++i)
+                    {
+                        writer.WriteObject(value.Animals[i]);
+                        writer.WriteObject(value.Tags[i]);
+                    }
+                }, (_, _) => { })
+                .RegisterCustomInstantiator<Alternating>(reader =>
+                {
+                    var read = new Alternating();
+                    var count = reader.Read<int>();
+                    for (var i = 0; i < count; ++i)
+                    {
+                        read.Animals.Add(reader.ReadObject<Animal>());
+                        read.Tags.Add(reader.ReadObject<Tag>());
+                    }
+
+                    return read;
+                });
+            settings.SupportSerializationHooks = true;
+            var written = new Alternating();
+            for (var i = 0; i < 3; ++i)
+            {
+                written.Animals.Add(i % 2 == 0 ? new Dog { Legs = 4, Name = $"dog {i}" } : new Animal { Legs = i });
+                written.Tags.Add(new Tag { Label = $"tag {i}" });
+            }
+
+            using var binary = Binary.Create(settings);
+            var read = binary.Read<Alternating>(new MemoryStream(Written(binary, written)));
+
+            static (Type, int, string?) Shown(Animal animal) => (animal.GetType(), animal.Legs, (animal as Dog)?.Name);
+            read.Animals.Select(Shown).Should().Equal(written.Animals.Select(Shown));
+            read.Tags.Select(x => x.Label).Should().Equal("tag 0", "tag 1", "tag 2");
         }
 
         private static byte[] Written<T>(IBinary binary, T value)

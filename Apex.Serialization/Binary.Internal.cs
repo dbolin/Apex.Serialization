@@ -34,15 +34,29 @@ namespace Apex.Serialization
         }
 
         /// <summary>
-        /// For a reference type the root read is shared generic code, where each static of a generic class over
-        /// <typeparamref name="T"/> costs a helper call, so what it needs is cached on the instance, keyed by the type
-        /// of what is cached.
+        /// A custom reader's nested reads can alternate between types, which a cache of the last type read would miss
+        /// every time, so this one caches nothing.
         /// </summary>
         internal T ReadObjectEntry<T>()
         {
             if (typeof(T).IsValueType)
             {
-                return StaticTypeInfo<T>.IsSealedOrHasNoDescendents ? ReadValueInternal<T>(Settings.UseSerializedVersionId) : (T)ReadInternal();
+                return ReadValueInternal<T>(Settings.UseSerializedVersionId);
+            }
+
+            return StaticTypeInfo<T>.IsSealedOrHasNoDescendents ? ReadSealedInternal<T>(Settings.UseSerializedVersionId) : (T)ReadInternal();
+        }
+
+        /// <summary>
+        /// For a reference type the root read is shared generic code, where each static of a generic class over
+        /// <typeparamref name="T"/> costs a helper call, so what it needs is cached on the instance, keyed by the type
+        /// of what is cached.
+        /// </summary>
+        internal T ReadRoot<T>()
+        {
+            if (typeof(T).IsValueType)
+            {
+                return ReadValueInternal<T>(Settings.UseSerializedVersionId);
             }
 
             while (true)

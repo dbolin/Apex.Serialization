@@ -147,7 +147,7 @@ namespace Apex.Serialization
                 _stackLimit = StackLimit.ForCurrentThread();
                 _stream.ReadFrom(inputStream);
 
-                result = ReadObjectEntry<T>();
+                result = ReadRoot<T>();
                 _stream.ThrowIfReadPastEnd();
             }
             catch
