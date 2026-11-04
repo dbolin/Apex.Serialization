@@ -159,9 +159,9 @@ namespace Apex.Serialization.Tests
 
         private delegate void Fill<T>(ref T value);
 
-        private unsafe delegate void BlockWrite(ref BufferedStream stream, void* source, uint byteLength);
+        private delegate void BlockWrite(ref BufferedStream stream, ReadOnlySpan<byte> source);
 
-        private unsafe delegate void ValueWrite(ref BufferedStream stream, Padded* value);
+        private delegate void ValueWrite(ref BufferedStream stream, ref Padded value);
 
         [Theory]
         [InlineData(Mode.Tree)]
@@ -478,57 +478,57 @@ namespace Apex.Serialization.Tests
         }
 
         [Fact]
-        public unsafe void ValueWriteZeroesPaddingOverAStaleBuffer()
+        public void ValueWriteZeroesPaddingOverAStaleBuffer()
         {
-            var output = WriteOverStaleBuffer((ref BufferedStream stream, Padded* value) => stream.Write(*value));
+            var output = WriteOverStaleBuffer((ref BufferedStream stream, ref Padded value) => stream.Write(value));
 
             output.Should().Equal(PaddedBlock);
         }
 
         [Fact]
-        public unsafe void RawValueWriteCarriesSourcePaddingIntoTheOutput()
+        public void RawValueWriteCarriesSourcePaddingIntoTheOutput()
         {
-            var output = WriteOverStaleBuffer((ref BufferedStream stream, Padded* value) => stream.WriteBytes(value, (uint)sizeof(Padded)));
+            var output = WriteOverStaleBuffer((ref BufferedStream stream, ref Padded value) => stream.WriteBytes(MemoryMarshal.AsBytes(MemoryMarshal.CreateReadOnlySpan(ref value, 1))));
 
             output.Should().Equal(PoisonedPaddedBlock);
         }
 
         [Fact]
-        public unsafe void ArrayWriteZeroesPaddingSplitAcrossABufferFlush()
+        public void ArrayWriteZeroesPaddingSplitAcrossABufferFlush()
         {
             var values = PoisonedArray<Padded>(100_000, FirstPoison, FillPadded);
 
-            var output = WriteAfterPrefix(values, flushAtByteOfValue: 4, (ref BufferedStream stream, void* source, uint byteLength) => stream.WriteValues<Padded>(source, byteLength));
+            var output = WriteAfterPrefix(values, flushAtByteOfValue: 4, (ref BufferedStream stream, ReadOnlySpan<byte> source) => stream.WriteValues<Padded>(source));
 
             ShouldHoldEveryValue(output, PaddedBlock, values.Length);
         }
 
         [Fact]
-        public unsafe void TwelveByteArrayWriteZeroesPaddingOfEveryValue()
+        public void TwelveByteArrayWriteZeroesPaddingOfEveryValue()
         {
             var values = PoisonedArray<IntByteInt>(100_000, FirstPoison, FillIntByteInt);
 
-            var output = WriteAfterPrefix(values, flushAtByteOfValue: 6, (ref BufferedStream stream, void* source, uint byteLength) => stream.WriteValues<IntByteInt>(source, byteLength));
+            var output = WriteAfterPrefix(values, flushAtByteOfValue: 6, (ref BufferedStream stream, ReadOnlySpan<byte> source) => stream.WriteValues<IntByteInt>(source));
 
             ShouldHoldEveryValue(output, IntByteIntBlock, values.Length);
         }
 
         [Fact]
-        public unsafe void TwentyFourByteArrayWriteZeroesPaddingOfEveryValue()
+        public void TwentyFourByteArrayWriteZeroesPaddingOfEveryValue()
         {
             var values = PoisonedArray<Nested>(50_000, FirstPoison, FillNested);
 
-            var output = WriteAfterPrefix(values, flushAtByteOfValue: 11, (ref BufferedStream stream, void* source, uint byteLength) => stream.WriteValues<Nested>(source, byteLength));
+            var output = WriteAfterPrefix(values, flushAtByteOfValue: 11, (ref BufferedStream stream, ReadOnlySpan<byte> source) => stream.WriteValues<Nested>(source));
 
             ShouldHoldEveryValue(output, NestedBlock, values.Length);
         }
 
         [Fact]
-        public unsafe void RawArrayWriteCarriesSourcePaddingIntoTheOutput()
+        public void RawArrayWriteCarriesSourcePaddingIntoTheOutput()
         {
             var values = PoisonedArray<Padded>(100_000, FirstPoison, FillPadded);
 
-            var output = WriteAfterPrefix(values, flushAtByteOfValue: 4, (ref BufferedStream stream, void* source, uint byteLength) => stream.WriteBytes(source, byteLength));
+            var output = WriteAfterPrefix(values, flushAtByteOfValue: 4, (ref BufferedStream stream, ReadOnlySpan<byte> source) => stream.WriteBytes(source));
 
             ShouldHoldEveryValue(output, PoisonedPaddedBlock, values.Length);
         }
@@ -606,10 +606,10 @@ namespace Apex.Serialization.Tests
             return new Settings { SerializationMode = mode, UseSerializedVersionId = false }.MarkSerializable(_ => true);
         }
 
-        private static unsafe byte[] WriteAfterPrefix<T>(T[] values, int flushAtByteOfValue, BlockWrite write)
+        private static byte[] WriteAfterPrefix<T>(T[] values, int flushAtByteOfValue, BlockWrite write)
             where T : unmanaged
         {
-            var prefixLength = (int)((BufferedStream.MaxSize - (uint)flushAtByteOfValue) % (uint)sizeof(T));
+            var prefixLength = (BufferedStream.MaxSize - flushAtByteOfValue) % Unsafe.SizeOf<T>();
 
             using var memory = new MemoryStream();
             var stream = BufferedStream.Create();
@@ -622,10 +622,7 @@ namespace Apex.Serialization.Tests
                     stream.Write((byte)i);
                 }
 
-                fixed (void* source = values)
-                {
-                    write(ref stream, source, (uint)(values.Length * sizeof(T)));
-                }
+                write(ref stream, MemoryMarshal.AsBytes(values.AsSpan()));
 
                 stream.Flush();
             }
@@ -637,7 +634,7 @@ namespace Apex.Serialization.Tests
             return memory.ToArray()[prefixLength..];
         }
 
-        private static unsafe byte[] WriteOverStaleBuffer(ValueWrite write)
+        private static byte[] WriteOverStaleBuffer(ValueWrite write)
         {
             var value = new Padded();
             Poison(ref value, FirstPoison, FillPadded);
@@ -649,14 +646,11 @@ namespace Apex.Serialization.Tests
             try
             {
                 stream.WriteTo(Stream.Null);
-                fixed (byte* source = stale)
-                {
-                    stream.WriteBytes(source, (uint)stale.Length);
-                }
+                stream.WriteBytes(stale);
 
                 stream.WriteTo(memory);
-                stream.ReserveSize(sizeof(Padded));
-                write(ref stream, &value);
+                stream.ReserveSize(Unsafe.SizeOf<Padded>());
+                write(ref stream, ref value);
                 stream.Flush();
             }
             finally

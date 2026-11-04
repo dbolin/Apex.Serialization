@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -9,7 +7,26 @@ using System.Text;
 
 namespace Apex.Serialization.Internal
 {
-    internal unsafe struct BufferedStream : IBinaryStream, IDisposable
+    /// <summary>
+    /// Stages reads and writes in one pooled buffer of <see cref="MaxSize"/> bytes.
+    /// <para>
+    /// A reservation is the most a value can take, not what it takes (a null reference consumes one byte of the nine its
+    /// header reserves, and a struct with a custom read may consume none), so a stream may end inside one or before it:
+    /// reading then zeroes the part of the reservation the stream didn't supply, and a value read into that part leaves
+    /// the position past <see cref="_size"/>, which the next reservation, refill or <see cref="ThrowIfReadPastEnd"/>
+    /// reports.  A value that always takes all its bytes and is checked as soon as it's read (a type reference, a
+    /// version id) calls <see cref="ThrowIfStreamEndsWithin"/> first, or the check reports the zeroes as invalid data.
+    /// </para>
+    /// <para>
+    /// A length is checked against what a stream that can seek has left, and against a stream that can't seek by
+    /// buffering the bytes it implies when they fit the buffer (<see cref="TryEnsureAvailable"/>).  A longer blittable
+    /// array or string from a stream that can't seek is read into an allocation grown as the bytes arrive, so the buffer
+    /// stays at <see cref="MaxSize"/> for it.  Only checking the element count of another array reads further ahead
+    /// (<see cref="ReadAhead"/>), growing the buffer only once the stream has filled it, until
+    /// <see cref="ReleaseReadAhead"/>.
+    /// </para>
+    /// </summary>
+    internal struct BufferedStream : IBinaryStream, IDisposable
     {
         private struct TypeIdCacheEntry
         {
@@ -22,51 +39,25 @@ namespace Apex.Serialization.Internal
         private bool _writing;
 
         private byte[] _buffer;
-        private byte[] _typeIdBuffer;
-        private List<byte[]> _previousTypeIdBuffers;
-        private int _typeIdLengthRemaining;
+        private byte[] _pooledBuffer;
 
-        private GCHandle _bufferGCHandle;
-        private List<GCHandle> _typeIdBufferGCHandles;
-
-        private void* _bufferPtr;
-        private byte* _typeIdBufferPtr;
-
-        private uint _bufferPosition;
-        internal const uint MaxSize = 1024*1024;
+        private int _bufferPosition;
+        internal const int MaxSize = 1024*1024;
         private int _size;
 
         private DictionarySlim<Type, TypeIdCacheEntry> _typeIdCache;
 
         // DEV fields
-        private uint _reserved;
+        private int _reserved;
 
         internal static BufferedStream Create()
         {
             var stream = new BufferedStream();
-            stream._size = (int)MaxSize;
-            stream._previousTypeIdBuffers = new List<byte[]>();
-            stream._typeIdBufferGCHandles = new List<GCHandle>();
+            stream._size = MaxSize;
             stream._typeIdCache = new DictionarySlim<Type, TypeIdCacheEntry>();
-            stream._buffer = Binary.ByteArrayPool.Rent((int)MaxSize);
-            stream._bufferGCHandle = GCHandle.Alloc(stream._buffer, GCHandleType.Pinned);
-            stream._bufferPtr = stream._bufferGCHandle.AddrOfPinnedObject().ToPointer();
-            stream.CreateNewTypeIdBuffer();
+            stream._pooledBuffer = Binary.ByteArrayPool.Rent(MaxSize);
+            stream._buffer = stream._pooledBuffer;
             return stream;
-        }
-
-        private void CreateNewTypeIdBuffer()
-        {
-            if(_typeIdBuffer != null)
-            {
-                _previousTypeIdBuffers.Add(_typeIdBuffer);
-            }
-
-            _typeIdBuffer = Binary.ByteArrayPool.Rent((int)MaxSize);
-            _typeIdLengthRemaining = (int)MaxSize;
-            var typeIdBufferGCHandle = GCHandle.Alloc(_typeIdBuffer, GCHandleType.Pinned);
-            _typeIdBufferPtr = (byte*)typeIdBufferGCHandle.AddrOfPinnedObject().ToPointer();
-            _typeIdBufferGCHandles.Add(typeIdBufferGCHandle);
         }
 
         public void ReadFrom(Stream stream)
@@ -76,7 +67,8 @@ namespace Apex.Serialization.Internal
                 _target = stream;
             }
 
-            _size = _target.Read(_buffer, 0, (int)MaxSize);
+            ReleaseReadAhead();
+            _size = _target.Read(_buffer, 0, MaxSize);
             _bufferPosition = 0;
             _writing = false;
         }
@@ -88,7 +80,8 @@ namespace Apex.Serialization.Internal
                 _target = stream;
             }
 
-            _size = (int)MaxSize;
+            ReleaseReadAhead();
+            _size = MaxSize;
             _bufferPosition = 0;
             _writing = true;
         }
@@ -102,53 +95,152 @@ namespace Apex.Serialization.Internal
                     return true;
                 }
 
-                _target.Write(_buffer, 0, (int)_bufferPosition);
+                _target.Write(_buffer, 0, _bufferPosition);
                 _bufferPosition = 0;
                 return true;
             }
             else
             {
-                var len = (int)(_size - _bufferPosition);
-                Unsafe.CopyBlock(_bufferPtr, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), (uint)len);
-                _size = _target.Read(_buffer, len, (int)MaxSize - len);
-                var result = _size != 0;
-                _size += len;
-                _bufferPosition = 0;
-                return result;
+                var len = _size - _bufferPosition;
+                if (len < 0)
+                {
+                    ThrowHelper.ThrowEndOfStream();
+                }
+
+                if (_bufferPosition != 0)
+                {
+                    _buffer.AsSpan(_bufferPosition, len).CopyTo(_buffer);
+                    _bufferPosition = 0;
+                }
+
+                var read = _target.Read(_buffer, len, _buffer.Length - len);
+                _size = len + read;
+                return read != 0;
             }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void ReserveSize(int sizeNeeded)
         {
-            CheckSize();
-            while (_size - _bufferPosition < sizeNeeded && Flush())
-                ;
+            if (_size - _bufferPosition < sizeNeeded)
+            {
+                ReserveSizeSlow(sizeNeeded);
+            }
 
             SetReserved(sizeNeeded);
         }
 
-        [Conditional("DEV")]
-        private void CheckSize()
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private void ReserveSizeSlow(int sizeNeeded)
         {
-            if (_size == 0 || _size < _bufferPosition)
+            if ((uint)sizeNeeded > MaxSize)
             {
-                throw new InvalidOperationException();
+                ThrowHelper.ThrowReservationTooLarge(sizeNeeded);
+            }
+
+            while (_size - _bufferPosition < sizeNeeded)
+            {
+                if (!Flush())
+                {
+                    _buffer.AsSpan(_size, sizeNeeded - _size).Clear();
+                    return;
+                }
+            }
+        }
+
+        public void ReadAhead(int byteCount)
+        {
+            while (_size - _bufferPosition < byteCount)
+            {
+                if (_bufferPosition == 0 && _size == _buffer.Length)
+                {
+                    var grown = new byte[(int)Math.Min(2L * _buffer.Length, Array.MaxLength)];
+                    _buffer.AsSpan(0, _size).CopyTo(grown);
+                    _buffer = grown;
+                }
+
+                if (!Flush())
+                {
+                    ThrowHelper.ThrowEndOfStream();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Skips the store when the buffer is already the pooled one, since storing a reference field pays the GC write
+        /// barrier.
+        /// </summary>
+        public void ReleaseReadAhead()
+        {
+            if (_buffer != _pooledBuffer)
+            {
+                _buffer = _pooledBuffer;
+            }
+        }
+
+        public bool TryEnsureAvailable(long byteCount)
+        {
+            var buffered = _size - _bufferPosition;
+            if (byteCount <= buffered)
+            {
+                return true;
+            }
+
+            if (_target.CanSeek)
+            {
+                ThrowIfSeekableStreamLacks(byteCount - buffered);
+                return true;
+            }
+
+            if (byteCount > _buffer.Length)
+            {
+                return false;
+            }
+
+            ReadAhead((int)byteCount);
+            return true;
+        }
+
+        private void ThrowIfSeekableStreamLacks(long unbufferedByteCount)
+        {
+            if (unbufferedByteCount > _target.Length - _target.Position)
+            {
+                ThrowHelper.ThrowEndOfStream();
+            }
+        }
+
+        public void ThrowIfReadPastEnd()
+        {
+            if (_bufferPosition > _size)
+            {
+                ThrowHelper.ThrowEndOfStream();
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public void ThrowIfStreamEndsWithin(int byteCount)
+        {
+            CheckReserved(byteCount);
+            if (_size - _bufferPosition < byteCount)
+            {
+                ThrowHelper.ThrowEndOfStream();
             }
         }
 
         [Conditional("DEV")]
         private void SetReserved(int size)
         {
-            _reserved = (uint)(_bufferPosition + size);
+            _reserved = _bufferPosition + size;
         }
+
+        internal const string ReservationOverrun = "A read or write went past its reservation";
 
         [Conditional("DEV")]
         private void CheckReserved(int size)
         {
             if(_bufferPosition + size > _reserved)
             {
-                throw new InvalidOperationException();
+                throw new InvalidOperationException(ReservationOverrun);
             }
         }
 
@@ -161,244 +253,158 @@ namespace Apex.Serialization.Internal
                 return;
             }
 
-            var byteCount = (uint)input.Length;
-            Write(byteCount);
-            byteCount *= 2;
-
-            var allowed = (uint)(_size - _bufferPosition);
-            if (input.Length < 2048 && allowed >= byteCount)
-            {
-                fixed (void* text = input)
-                {
-                    Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), text, byteCount);
-                    _bufferPosition += byteCount;
-                    return;
-                }
-            }
-
-            WriteStringSlow(input, byteCount, allowed);
-        }
-
-        private void WriteStringSlow(string input, uint byteCount, uint allowed)
-        {
-            if (input.Length >= 2048)
-            {
-                Flush();
-                fixed (void* s = input)
-                {
-                    _target.Write(new ReadOnlySpan<byte>(s, (int)byteCount));
-                    return;
-                }
-            }
-
-            uint sourcePosition = 0;
-            fixed (void* text = input)
-            {
-                do
-                {
-                    if (byteCount > allowed)
-                    {
-                        Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), Unsafe.Add<byte>(text, (int)sourcePosition), allowed);
-                        byteCount -= allowed;
-                        _bufferPosition += allowed;
-                        sourcePosition += allowed;
-                        if (!Flush())
-                        {
-                            ThrowFailedStream();
-                        }
-                    }
-                    else
-                    {
-                        Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), Unsafe.Add<byte>(text, (int)sourcePosition), byteCount);
-                        _bufferPosition += byteCount;
-                        byteCount = 0;
-                    }
-                    allowed = (uint)(_size - _bufferPosition);
-                } while (byteCount > 0);
-            }
+            Write((uint)input.Length);
+            WriteBytes(MemoryMarshal.AsBytes(input.AsSpan()));
         }
 
         public void WriteTypeId(Type type)
         {
             ref var entry = ref _typeIdCache.GetOrAddValueRef(type);
 
-            if (entry.Bytes != null)
+            if (entry.Bytes == null)
             {
-                fixed (byte* b = &entry.Bytes[0])
-                {
-                    ReserveSize(10 + entry.Length1 + entry.Length2);
-                    Write(entry.Length1);
-                    Write(entry.Length2);
-                    WriteBytes(b, entry.Length1 + entry.Length2 + 2);
-                    return;
-                }
+                var name = type.FullName!;
+                var qualifiedInfo = type.Assembly.FullName!;
+                var infoBytes = new byte[Encoding.UTF8.GetMaxByteCount(name.Length) + 2 + Encoding.UTF8.GetMaxByteCount(qualifiedInfo.Length)];
+
+                var nameLen = Encoding.UTF8.GetBytes(name, infoBytes);
+                ReorderBytes(infoBytes.AsSpan(0, nameLen));
+                infoBytes[nameLen] = (byte)',';
+                infoBytes[nameLen + 1] = (byte)' ';
+
+                var asmLen = Encoding.UTF8.GetBytes(qualifiedInfo, infoBytes.AsSpan(nameLen + 2));
+                ReorderBytes(infoBytes.AsSpan(nameLen + 2, asmLen));
+
+                entry = new TypeIdCacheEntry {Bytes = infoBytes, Length1 = nameLen, Length2 = asmLen};
             }
 
-            var name = type.FullName!;
-            var qualifiedInfo = type.Assembly.FullName!;
-            var infoBytes = new byte[(name.Length + qualifiedInfo.Length) * Encoding.UTF8.GetMaxByteCount(1)];
-
-            fixed (char* namePtr = name, asmPtr = qualifiedInfo)
-            {
-                fixed (byte* stageBytes = infoBytes)
-                {
-                    var stage = stageBytes;
-                    var start = stage;
-                    var nameLen = Encoding.UTF8.GetBytes(namePtr, name.Length, stage, (int) MaxSize);
-                    ReorderBytes(stage, nameLen);
-
-                    stage += nameLen;
-                    *stage = (byte) ',';
-                    stage++;
-                    *stage = (byte) ' ';
-                    stage++;
-
-                    var asmLen = Encoding.UTF8.GetBytes(asmPtr, qualifiedInfo.Length, stage, (int) MaxSize);
-                    ReorderBytes(stage, asmLen);
-                    stage += asmLen;
-
-                    var totalSize = nameLen + asmLen + 2;
-                    ReserveSize(totalSize + 8);
-                    Write(nameLen);
-                    Write(asmLen);
-                    WriteBytes(start, totalSize);
-                    entry = new TypeIdCacheEntry {Bytes = infoBytes, Length1 = nameLen, Length2 = asmLen};
-                }
-            }
-        }
-
-        private void WriteBytes(byte* start, int totalSize)
-        {
+            var totalSize = entry.Length1 + entry.Length2 + 2;
+            ReserveSize(totalSize + 8);
+            Write(entry.Length1);
+            Write(entry.Length2);
             CheckReserved(totalSize);
-
-            Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), (void*) start, (uint) totalSize);
-            _bufferPosition += (uint)totalSize;
+            entry.Bytes.AsSpan(0, totalSize).CopyTo(_buffer.AsSpan(_bufferPosition));
+            _bufferPosition += totalSize;
         }
 
-        private void ReorderBytes(byte* typeIdBufferPtr, int length)
+        private static void ReorderBytes(Span<byte> typeIdBytes)
         {
-            for (int i = 0; i < length; i+=2, length-=2)
+            for (int i = 0, length = typeIdBytes.Length; i < length; i+=2, length-=2)
             {
-                var t = typeIdBufferPtr[i];
-                typeIdBufferPtr[i] = typeIdBufferPtr[length - 1];
-                typeIdBufferPtr[length - 1] = t;
+                var t = typeIdBytes[i];
+                typeIdBytes[i] = typeIdBytes[length - 1];
+                typeIdBytes[length - 1] = t;
             }
         }
+
+        // The runtime's limit on a string's length, which it doesn't expose.
+        private const int MaxStringLength = 0x3FFFFFDF;
 
         public string? Read()
         {
             ReserveSize(4);
-            var byteCount = Read<uint>();
-            if (byteCount == uint.MaxValue)
+            var length = Read<uint>();
+            if (length == uint.MaxValue)
             {
                 return null;
             }
 
-            byteCount *= 2;
-
-            var result = new string('\0', (int)byteCount / 2);
-            var allowed = (uint)(_size - _bufferPosition);
-
-            if (allowed >= byteCount)
+            if (length > MaxStringLength)
             {
-                fixed (void* text = result)
+                ThrowHelper.ThrowInvalidLength("string length", length);
+            }
+
+            var byteCount = (int)length * 2;
+            if (_size - _bufferPosition < byteCount)
+            {
+                if (!TryEnsureAvailable(byteCount))
                 {
-                    Unsafe.CopyBlock(text, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), byteCount);
-                    _bufferPosition += byteCount;
-                    return result;
+                    return ReadStringAsSupplied((int)length);
+                }
+
+                if (_size - _bufferPosition < byteCount)
+                {
+                    return ReadUnbufferedString(byteCount);
                 }
             }
 
-            ReadStringSlow(byteCount, result, allowed);
+            var result = new string(MemoryMarshal.Cast<byte, char>(_buffer.AsSpan(_bufferPosition, byteCount)));
+            _bufferPosition += byteCount;
             return result;
         }
 
-        private void ReadStringSlow(uint byteCount, string result, uint allowed)
+        /// <summary>
+        /// Reads a string longer than a stream that can't seek has supplied, doubling its characters from one buffer's
+        /// worth only as they arrive, so what a corrupt length allocates stays proportional to what the stream holds.
+        /// </summary>
+        private string ReadStringAsSupplied(int length)
         {
-            uint sourcePosition = 0;
-            fixed (void* text = result)
+            var chars = new char[Math.Min(length, MaxSize / sizeof(char))];
+            var read = 0;
+            while (true)
             {
-                do
+                ReadBytes(MemoryMarshal.AsBytes(chars.AsSpan(read)));
+                read = chars.Length;
+                if (read == length)
                 {
-                    if (byteCount > allowed)
-                    {
-                        Unsafe.CopyBlock(Unsafe.Add<byte>(text, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), allowed);
-                        byteCount -= allowed;
-                        sourcePosition += allowed;
-                        _bufferPosition += allowed;
-                        if (!Flush())
-                        {
-                            ThrowFailedStream();
-                        }
-                    }
-                    else
-                    {
-                        Unsafe.CopyBlock(Unsafe.Add<byte>(text, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), byteCount);
-                        _bufferPosition += byteCount;
-                        byteCount = 0;
-                    }
-                    allowed = (uint)(_size - _bufferPosition);
-                } while (byteCount > 0);
-            }
-        }
-
-        public byte* ReadTypeId(out int length1, out int length2)
-        {
-            ReserveSize(8);
-            length1 = Read<int>();
-            length2 = Read<int>();
-            var totalLength = length1 + length2 + 2;
-            ReserveSize(totalLength);
-            var result = Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition);
-            _bufferPosition += (uint)totalLength;
-            return (byte*)result;
-        }
-
-        private static readonly ConcurrentDictionary<string, Type> _knownTypes = new ConcurrentDictionary<string, Type>();
-
-        public Type RestoreTypeFromId(ref byte* typeId, int typeLen1, int typeLen2)
-        {
-            if (_typeIdLengthRemaining < typeLen1 + typeLen2 + 2)
-            {
-                CreateNewTypeIdBuffer();
-            }
-
-            Unsafe.CopyBlock((void*)_typeIdBufferPtr, (void*)typeId, (uint)(typeLen1 + typeLen2 + 2));
-
-            ReorderBytes(typeId, typeLen1);
-            ReorderBytes(typeId + typeLen1 + 2, typeLen2);
-
-            var typeName = Encoding.UTF8.GetString(typeId, typeLen1 + typeLen2 + 2);
-
-            typeId = _typeIdBufferPtr;
-
-            var totalLen = typeLen1 + typeLen2 + 2;
-            _typeIdBufferPtr += totalLen;
-            _typeIdLengthRemaining -= totalLen;
-            return _knownTypes.GetOrAdd(typeName, FindType);
-        }
-
-        private static Type FindType(string name)
-        {
-            var result = Type.GetType(name, false);
-            if(result != null)
-            {
-                return result;
-            }
-
-            // Fallback and search loaded assemblies
-            var shortName = name.Substring(0, name.IndexOf(','));
-            var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-            foreach (var asm in assemblies)
-            {
-                result = asm.GetType(shortName, false);
-                if(result != null)
-                {
-                    return result;
+                    return new string(chars);
                 }
+
+                Array.Resize(ref chars, (int)Math.Min(length, 2L * read));
+            }
+        }
+
+        /// <summary>
+        /// Allocates the whole string before reading the rest of it straight from the stream, so call it only for a
+        /// length a seekable stream was checked to hold.
+        /// </summary>
+        private string ReadUnbufferedString(int byteCount)
+        {
+            var buffered = _size - _bufferPosition;
+            if (buffered < 0)
+            {
+                ThrowHelper.ThrowEndOfStream();
             }
 
-            throw new InvalidOperationException($"Unable to resolve type: {name}");
+            var copied = string.Create(byteCount / 2, (Source: _target, Buffer: _buffer, Start: _bufferPosition, Buffered: buffered),
+                static (chars, state) =>
+                {
+                    var destination = MemoryMarshal.AsBytes(chars);
+                    state.Buffer.AsSpan(state.Start, state.Buffered).CopyTo(destination);
+                    state.Source.ReadExactly(destination.Slice(state.Buffered));
+                });
+            _bufferPosition = _size;
+            return copied;
+        }
+
+        private const int TypeIdHeaderSize = 8;
+
+        public ReadOnlySpan<byte> ReadTypeId()
+        {
+            ReserveSize(TypeIdHeaderSize);
+            var length1 = MemoryMarshal.Read<int>(_buffer.AsSpan(_bufferPosition));
+            var length2 = MemoryMarshal.Read<int>(_buffer.AsSpan(_bufferPosition + 4));
+            var totalLength = TypeIdHeaderSize + (long)length1 + length2 + 2;
+            if (length1 < 0 || length2 < 0 || totalLength > MaxSize)
+            {
+                ThrowHelper.ThrowInvalidLength("type id length", totalLength);
+            }
+
+            ReadAhead((int)totalLength);
+            var result = new ReadOnlySpan<byte>(_buffer, _bufferPosition, (int)totalLength);
+            _bufferPosition += (int)totalLength;
+            return result;
+        }
+
+        public Type RestoreTypeFromId(ReadOnlySpan<byte> typeId, out bool isCanonical)
+        {
+            var length1 = MemoryMarshal.Read<int>(typeId);
+            var name = typeId.Slice(TypeIdHeaderSize).ToArray();
+            ReorderBytes(name.AsSpan(0, length1));
+            ReorderBytes(name.AsSpan(length1 + 2));
+
+            var assemblyQualifiedName = Encoding.UTF8.GetString(name);
+            return TypeResolver.Find(assemblyQualifiedName, out isCanonical) ?? ThrowHelper.ThrowUnresolvableType(assemblyQualifiedName);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -406,23 +412,45 @@ namespace Apex.Serialization.Internal
         {
             CheckReserved(Unsafe.SizeOf<T>());
 
-            var destination = (byte*)Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition);
-            Unsafe.Write(destination, value);
+            var buffer = _buffer;
+            var position = _bufferPosition;
+            if ((ulong)(uint)position + (uint)Unsafe.SizeOf<T>() > (uint)buffer.Length)
+            {
+                ThrowHelper.ThrowOutsideBuffer();
+            }
+
+            var destination = MemoryMarshal.CreateSpan(
+                ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(buffer), (nint)(uint)position), Unsafe.SizeOf<T>());
+            MemoryMarshal.Write(destination, in value);
             if (PaddingMap<T>.HasPadding)
             {
                 PaddingMap<T>.ZeroPadding(destination);
             }
 
-            _bufferPosition += (uint)Unsafe.SizeOf<T>();
+            _bufferPosition += Unsafe.SizeOf<T>();
         }
 
+        /// <summary>
+        /// Checks the bounds itself, as <see cref="Write{T}"/> does, rather than through the span constructor, which also
+        /// tests the buffer for null on every call: generated code reads and writes every primitive field through these.
+        /// The two don't share a helper: on .NET 10 the extra inlining level uses up the JIT's inline budget in large
+        /// generated read methods, which then call this instead of inlining it.
+        /// </summary>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public T Read<T>() where T : struct
         {
             CheckReserved(Unsafe.SizeOf<T>());
 
-            var res = Unsafe.Read<T>(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition));
-            _bufferPosition += (uint)Unsafe.SizeOf<T>();
+            var buffer = _buffer;
+            var position = _bufferPosition;
+            if ((ulong)(uint)position + (uint)Unsafe.SizeOf<T>() > (uint)buffer.Length)
+            {
+                ThrowHelper.ThrowOutsideBuffer();
+            }
+
+            var res = MemoryMarshal.Read<T>(MemoryMarshal.CreateReadOnlySpan(
+                ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(buffer), (nint)(uint)position), Unsafe.SizeOf<T>()));
+            _bufferPosition += Unsafe.SizeOf<T>();
             return res;
         }
 
@@ -433,19 +461,9 @@ namespace Apex.Serialization.Internal
             if (!disposedValue)
             {
                 disposedValue = true;
-                _bufferGCHandle.Free();
-                foreach(var handle in _typeIdBufferGCHandles)
-                {
-                    handle.Free();
-                }
-
-                foreach(var buf in _previousTypeIdBuffers)
-                {
-                    Binary.ByteArrayPool.Return(buf);
-                }
-
-                Binary.ByteArrayPool.Return(_typeIdBuffer);
-                Binary.ByteArrayPool.Return(_buffer);
+                Binary.ByteArrayPool.Return(_pooledBuffer);
+                _pooledBuffer = null!;
+                _buffer = null!;
             }
         }
 
@@ -454,132 +472,103 @@ namespace Apex.Serialization.Internal
             Dispose(true);
         }
 
-        public void WriteValues<T>(void* source, uint byteLength) where T : struct
+        public void WriteValues<T>(ReadOnlySpan<byte> source) where T : struct
         {
             if (PaddingMap<T>.HasPadding)
             {
-                WriteValuesZeroingPadding<T>((byte*)source, byteLength);
+                WriteValuesZeroingPadding<T>(source);
             }
             else
             {
-                WriteBytes(source, byteLength);
+                WriteBytes(source);
             }
         }
 
-        private void WriteValuesZeroingPadding<T>(byte* source, uint byteLength) where T : struct
+        private void WriteValuesZeroingPadding<T>(ReadOnlySpan<byte> source) where T : struct
         {
-            uint written = 0;
-            while (written < byteLength)
+            var written = 0;
+            while (written < source.Length)
             {
-                var allowed = (uint)(_size - _bufferPosition);
+                var allowed = _size - _bufferPosition;
                 if (allowed == 0)
                 {
-                    if (!Flush())
-                    {
-                        ThrowFailedStream();
-                    }
-
+                    Flush();
                     continue;
                 }
 
-                var count = Math.Min(allowed, byteLength - written);
-                var destination = (byte*)Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition);
-                PaddingMap<T>.CopyZeroingPadding(destination, source + written, written, count);
+                var count = Math.Min(allowed, source.Length - written);
+                PaddingMap<T>.CopyZeroingPadding(_buffer.AsSpan(_bufferPosition, count), source.Slice(written, count), (uint)written);
                 _bufferPosition += count;
                 written += count;
             }
         }
 
-        public void WriteBytes(void* source, uint length)
+        public void WriteBytes(ReadOnlySpan<byte> source)
         {
-            var allowed = (uint)(_size - _bufferPosition);
-
-            if (length < 4096 && allowed >= length)
+            if (source.Length < 4096 && source.Length <= _size - _bufferPosition)
             {
-                Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), source, length);
-                _bufferPosition += length;
+                source.CopyTo(_buffer.AsSpan(_bufferPosition));
+                _bufferPosition += source.Length;
                 return;
             }
 
-            WriteBytesSlow(source, length, allowed);
+            WriteBytesSlow(source);
         }
 
-        private void WriteBytesSlow(void* source, uint length, uint allowed)
+        private void WriteBytesSlow(ReadOnlySpan<byte> source)
         {
-            if (length >= 4096)
+            if (source.Length >= 4096)
             {
                 Flush();
-                _target.Write(new ReadOnlySpan<byte>(source, (int)length));
+                _target.Write(source);
                 return;
             }
 
-            uint sourcePosition = 0;
-            do
+            while (source.Length > _size - _bufferPosition)
             {
-                if (length > allowed)
-                {
-                    Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), Unsafe.Add<byte>(source, (int)sourcePosition), allowed);
-                    length -= allowed;
-                    _bufferPosition += allowed;
-                    sourcePosition += allowed;
-                    if (!Flush())
-                    {
-                        ThrowFailedStream();
-                    }
-                }
-                else
-                {
-                    Unsafe.CopyBlock(Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), Unsafe.Add<byte>(source, (int)sourcePosition), length);
-                    _bufferPosition += length;
-                    length = 0;
-                }
-                allowed = (uint)(_size - _bufferPosition);
-            } while (length > 0);
+                var allowed = _size - _bufferPosition;
+                source.Slice(0, allowed).CopyTo(_buffer.AsSpan(_bufferPosition));
+                _bufferPosition += allowed;
+                source = source.Slice(allowed);
+                Flush();
+            }
+
+            source.CopyTo(_buffer.AsSpan(_bufferPosition));
+            _bufferPosition += source.Length;
         }
 
-        public void ReadBytes(void* destination, uint length)
+        public void ReadBytes(Span<byte> destination)
         {
-            var allowed = (uint)(_size - _bufferPosition);
-
-            if (allowed >= length)
+            if (destination.Length <= _size - _bufferPosition)
             {
-                Unsafe.CopyBlock(destination, Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), length);
-                _bufferPosition += length;
+                _buffer.AsSpan(_bufferPosition, destination.Length).CopyTo(destination);
+                _bufferPosition += destination.Length;
                 return;
             }
 
-            ReadBytesSlow(destination, length, allowed);
+            ReadBytesSlow(destination);
         }
 
-        private void ReadBytesSlow(void* destination, uint length, uint allowed)
+        private void ReadBytesSlow(Span<byte> destination)
         {
-            uint sourcePosition = 0;
-            do
+            while (destination.Length > _size - _bufferPosition)
             {
-                if (length > allowed)
+                var allowed = _size - _bufferPosition;
+                if (allowed > 0)
                 {
-                    Unsafe.CopyBlock(Unsafe.Add<byte>(destination, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), allowed);
-                    length -= allowed;
-                    sourcePosition += allowed;
+                    _buffer.AsSpan(_bufferPosition, allowed).CopyTo(destination);
                     _bufferPosition += allowed;
-                    if (!Flush())
-                    {
-                        ThrowFailedStream();
-                    }
+                    destination = destination.Slice(allowed);
                 }
-                else
-                {
-                    Unsafe.CopyBlock(Unsafe.Add<byte>(destination, (int)sourcePosition), Unsafe.Add<byte>(_bufferPtr, (int)_bufferPosition), length);
-                    _bufferPosition += length;
-                    length = 0;
-                }
-                allowed = (uint)(_size - _bufferPosition);
-            } while (length > 0);
-        }
 
-        private void ThrowFailedStream()
-        {
-            throw new InvalidOperationException("Underlying stream failed to read or write");
+                if (!Flush())
+                {
+                    ThrowHelper.ThrowEndOfStream();
+                }
+            }
+
+            _buffer.AsSpan(_bufferPosition, destination.Length).CopyTo(destination);
+            _bufferPosition += destination.Length;
         }
     }
 }

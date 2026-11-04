@@ -26,21 +26,31 @@ Using the latest package version is recommended, but 1.3.4 is the latest version
 
 As the serialization is contract-less, the binary format produced depends on precise characteristics of the types serialized. Most changes to types, such as adding or removing fields, renaming types, or changing relationships between types will break compatibility with previously serialized data.  Serializing and deserializing between different chip architectures and .NET runtimes is not supported.
 
-For performance reasons, the serializer and deserializer make use of pointers and direct memory access.  This will often cause attempting to deserialize incompatible data to immediately crash the application instead of throwing an exception.
+The reader works on managed buffers with bounds checks, so data that is malformed or was written by an incompatible version makes `Read` throw rather than read or write outside them.  The exceptions it raises include `EndOfStreamException` when the data ends early, `InvalidDataException` for a length, reference, delegate or object type that can't be valid, `InvalidOperationException` for a type it can't resolve, that isn't marked serializable or (with `UseSerializedVersionId`) that has a different version id, `NotSupportedException` for a type it can't read (one holding pointers or handles, or a delegate when functions aren't allowed) or an array too large to check against a stream that can't seek, and `InsufficientExecutionStackException` when the data nests deeper than the thread's stack allows.  A stored type name resolves among the loaded assemblies, and loads an assembly only when one with that name is in the runtime's trusted platform assemblies list (the framework and the application's own dependencies); a type the named assembly forwards elsewhere is bound the way the runtime binds that assembly's references.  A length is checked against what the stream can still supply before anything is allocated for it, so what a corrupt length allocates stays proportional to the size of the data (except for an array of a value type that has a custom read action or reads no bytes, whose length isn't checked).
 
-NEVER deserialize data from an untrusted source.
+Reading checks the stack at each level of nesting, but writing doesn't.  Data nested deeper than the reading thread's stack allows writes but then fails to read: measured on .NET 10 x64, a Release build reads between about 2,000 and 19,000 levels on a 1 MiB stack, depending on what nests and on whether tiered compilation has optimized the reader yet.  Nesting deeper than the writing thread's stack allows overflows it, which ends the process, so keep nesting well under those depths or read and write on a thread with a larger stack.
+
+Reading data from another process or machine also needs the caller to:
+- catch `Exception` around `Read`, since the list above isn't complete (a reference to an object of the wrong type throws `InvalidCastException`, for example) and custom read actions and `[AfterDeserialization]` hooks can throw their own
+- call `Settings.AllowDelegateMethodsFrom` when functions are serialized, or the data can name any method whose signature matches the delegate type, and the application calls it later.  It checks the assembly declaring each method and the type arguments of a generic method, but not the type arguments of the generic type a method belongs to.  Writing applies the same check and throws `InvalidOperationException`, so a delegate the reader would refuse fails when it's written
+- treat a count that a custom read action reads as a hint, not as a size to allocate
 
 Some types aren't supported:
 - Objects that use randomized hashing or other runtime specific data to determine their behavior (including HashSet<>, Dictionary<,> and their immutable counterparts) unless you specifically use a comparer/objects that don't have that randomization
 - Objects containing pointers or handles to unmanaged resources
 - BlockingCollection\<> and types in System.Collections.Concurrent
 - Non-generic standard collections
+- Delegates to dynamic methods, such as those `DynamicMethod` and usually `LambdaExpression.Compile` create, which have no declaring type for the reader to find them in (writing one throws `NotSupportedException`)
 
 Requires code generation capabilities
 
 ### Migrating to version 2.x
 
 Version 2 adds type whitelisting, which means no types can be serialized unless marked by calling Settings.MarkSerializable(Type | Func<Type, bool>).  To restore the previous behavior for backwards compatibility you can simply pass a function that always returns true.
+
+### Migrating to version 8.x
+
+Version 8 reads through bounds-checked managed buffers, so malformed data throws instead of reading out of bounds, and the exceptions it throws have changed: data that ends early throws `EndOfStreamException`, and an impossible length, a reference to a type or object that hasn't been read, or a delegate that can't be valid throws `InvalidDataException` (Limitations lists the others).  Some delegates are refused on write as well: one to a dynamic method throws `NotSupportedException`, and once `Settings.AllowDelegateMethodsFrom` (new in version 8) is called, one to a method from another assembly, or to a generic method over a type from one, throws `InvalidOperationException`.  The wire format is unchanged, so valid data written by version 7 reads back the same, within the read limits Limitations describes (nesting depth, which assemblies a type name can load).
 
 ### Usage
 
@@ -70,7 +80,7 @@ A struct with a declared size (`StructLayout.Size`) counts as having no padding,
 
 You must pass a Settings object to Binary.Create that lets you choose:
 - between tree or graph serialization (graph serialization is required for cases where you have a cyclical reference or need to maintain object identity)
-- whether functions should be serialized
+- whether functions should be serialized, and which assemblies their methods may come from when they're read
 - whether serialization hooks should be called (any methods with the [AfterDeserialization] attribute will be called after the object graph is completely deserialized.)
 - whether to disable inlining (reduces startup time and stack frame sizes at the cost of throughput)
 - whether to disable flattening of class hierachies (has an effect similar to disabling inlining)

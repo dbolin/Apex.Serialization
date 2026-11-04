@@ -337,6 +337,71 @@ namespace Apex.Serialization.Tests
             RoundTrip(s, (a, b) => a.Peek().Value == b.Peek().Value + 1);
         }
 
+        public class Animal
+        {
+            public int Legs;
+        }
+
+        public sealed class Dog : Animal
+        {
+            public string? Name;
+        }
+
+        public sealed class Tag
+        {
+            public string? Label;
+        }
+
+        public sealed class Alternating
+        {
+            public readonly List<Animal> Animals = new List<Animal>();
+            public readonly List<Tag> Tags = new List<Tag>();
+        }
+
+        [Fact]
+        public void ACustomReaderAlternatingTwoTypesReadsEachObject()
+        {
+            var settings = new Settings { UseSerializedVersionId = false }.MarkSerializable(_ => true)
+                .RegisterCustomSerializer<Alternating>((value, writer) =>
+                {
+                    writer.Write(value.Animals.Count);
+                    for (var i = 0; i < value.Animals.Count; ++i)
+                    {
+                        writer.WriteObject(value.Animals[i]);
+                        writer.WriteObject(value.Tags[i]);
+                    }
+                }, (_, _) => { })
+                .RegisterCustomInstantiator<Alternating>(reader =>
+                {
+                    var read = new Alternating();
+                    var count = reader.Read<int>();
+                    for (var i = 0; i < count; ++i)
+                    {
+                        read.Animals.Add(reader.ReadObject<Animal>());
+                        read.Tags.Add(reader.ReadObject<Tag>());
+                    }
+
+                    return read;
+                });
+            settings.SupportSerializationHooks = true;
+            var written = new Alternating();
+            for (var i = 0; i < 3; ++i)
+            {
+                written.Animals.Add(i % 2 == 0 ? new Dog { Legs = 4, Name = $"dog {i}" } : new Animal { Legs = i });
+                written.Tags.Add(new Tag { Label = $"tag {i}" });
+            }
+
+            using var binary = Binary.Create(settings);
+            using var stream = new MemoryStream();
+            binary.Write(written, stream);
+            stream.Position = 0;
+            var read = binary.Read<Alternating>(stream);
+
+            static (Type, int, string?) Shown(Animal animal) => (animal.GetType(), animal.Legs, (animal as Dog)?.Name);
+            read.Animals.Select(Shown).Should().Equal(written.Animals.Select(Shown));
+            read.Tags.Select(x => x.Label).Should().Equal("tag 0", "tag 1", "tag 2");
+        }
+
         private class TestEqualityComparer : IEqualityComparer<Test>
         {
             public bool Equals(Test? x, Test? y)

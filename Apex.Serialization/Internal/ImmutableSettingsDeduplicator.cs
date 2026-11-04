@@ -26,7 +26,10 @@ namespace Apex.Serialization
                 && x.WhitelistFuncs.SequenceEqual(y.WhitelistFuncs)
                 // Boundary types change the generated write/read trees, so settings differing only in
                 // their boundary set must not dedup onto each other and share generated methods.
-                && x.BoundaryTypes.SetEquals(y.BoundaryTypes);
+                && x.BoundaryTypes.SetEquals(y.BoundaryTypes)
+                && (x.DelegateMethodAssemblies == null
+                    ? y.DelegateMethodAssemblies == null
+                    : y.DelegateMethodAssemblies != null && x.DelegateMethodAssemblies.SetEquals(y.DelegateMethodAssemblies));
 #pragma warning restore CS8602 // Dereference of a possibly null reference.
         }
 

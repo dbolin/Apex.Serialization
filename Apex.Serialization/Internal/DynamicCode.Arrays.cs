@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 namespace Apex.Serialization.Internal
 {
@@ -51,7 +52,7 @@ namespace Apex.Serialization.Internal
 
                 if (IsBlittable(elementType, settings) && dimensions < 3)
                 {
-                    statements.Add(WriteArrayOfBlittableValues(output, actualSource, stream, dimensions, elementType, elementSize));
+                    statements.Add(WriteArrayOfBlittableValues(output, actualSource, dimensions, elementType, elementSize));
                 }
                 else
                 {
@@ -67,7 +68,7 @@ namespace Apex.Serialization.Internal
         }
 
         private static Expression WriteArrayOfBlittableValues(ParameterExpression output, Expression actualSource,
-            ParameterExpression stream, int dimensions, Type elementType, int elementSize)
+            int dimensions, Type elementType, int elementSize)
         {
             return dimensions switch
             {
@@ -167,28 +168,100 @@ namespace Apex.Serialization.Internal
 
                 if (isBlittable)
                 {
-                    statements.Add(ReadArrayOfBlittableValues(output, result, stream, dimensions, elementType, elementSize, lengths));
+                    statements.Add(ReadArrayOfBlittableValues(output, result, dimensions, elementType, lengths));
                     if (settings.SerializationMode == Mode.Graph)
                     {
                         statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                            SavedReferencesListAdd, result));
+                            SavedReferencesAdd, result));
                     }
                 }
                 else
                 {
+                    statements.Add(CheckArrayLengths(output, lengths, MinimumReadSize(elementType, settings, new Dictionary<Type, int>())));
                     statements.Add(Expression.Assign(result, Expression.NewArrayBounds(elementType, lengths)));
                     if (settings.SerializationMode == Mode.Graph)
                     {
                         statements.Add(Expression.Call(Expression.Call(output, SavedReferencesGetter),
-                            SavedReferencesListAdd, result));
+                            SavedReferencesAdd, result));
                     }
-                    statements.Add(ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths, settings, visitedTypes, depth));
+                    var readElements = ReadArrayGeneral(output, result, stream, dimensions, elementType, elementSize, lengths, settings, visitedTypes, depth);
+                    // The loops nest one per dimension, so an empty array with long other dimensions would still iterate them.
+                    statements.Add(dimensions == 1
+                        ? readElements
+                        : Expression.IfThen(Expression.NotEqual(Expression.Property(result, nameof(Array.LongLength)), Expression.Constant(0L)), readElements));
                 }
 
                 return Expression.Block(lengths, statements);
             }
 
             return null;
+        }
+
+        private static Expression CheckArrayLengths(ParameterExpression output, List<ParameterExpression> lengths, int minimumElementBytes)
+        {
+            var minimum = Expression.Constant(minimumElementBytes);
+            if (lengths.Count == 1)
+            {
+                return Expression.Call(output, CheckArrayLengthMethod, lengths[0], minimum);
+            }
+
+            var elementCount = lengths.Aggregate((Expression)Expression.Constant(1L),
+                (count, length) => Expression.Call(MultiplyArrayLengthMethod, count, length));
+            return Expression.Call(output, CheckArrayElementCountMethod, elementCount, minimum);
+        }
+
+        /// <summary>
+        /// The fewest bytes reading a value declared as <paramref name="type"/> takes from the stream, which an array's
+        /// length times this must not exceed what the stream holds.  It has to be a true lower bound, or valid data is
+        /// rejected: a null reference takes its 1-byte flag, a string its 4-byte length, a null Nullable 1 byte, and a
+        /// custom read possibly nothing.
+        /// </summary>
+        private static int MinimumReadSize(Type type, ImmutableSettings settings, Dictionary<Type, int> known)
+        {
+            if (type == typeof(string))
+            {
+                return 4;
+            }
+
+            if (!type.IsValueType)
+            {
+                return 1;
+            }
+
+            if (known.TryGetValue(type, out var size))
+            {
+                return size;
+            }
+
+            if (settings.ContainsCustomSerializedValue(type) || HasCustomRead(type, settings))
+            {
+                size = 0;
+            }
+            else if (IsBlittable(type, settings))
+            {
+                size = TypeFields.GetSizeForType(type, settings).size;
+            }
+            else if (Nullable.GetUnderlyingType(type) != null)
+            {
+                size = 1;
+            }
+            else
+            {
+                var fields = TypeFields.GetOrderedFields(type, settings);
+                var perElement = fields.Sum(x => (long)MinimumReadSize(x.FieldType, settings, known));
+                var elements = type.IsDefined(typeof(InlineArrayAttribute), false) ? InlineArrayLength(type) : 1;
+                size = (int)Math.Min(int.MaxValue, perElement * elements);
+            }
+
+            known.Add(type, size);
+            return size;
+        }
+
+        private static bool HasCustomRead(Type type, ImmutableSettings settings)
+        {
+            return settings.SupportSerializationHooks
+                && settings.CustomActionDeserializers.Keys.Concat(settings.CustomActionInstantiators.Keys)
+                    .Any(x => ImmutableSettings.MatchesRegistration(x, type, out _));
         }
 
         private static Expression ReadArrayGeneral(ParameterExpression output, Expression result,
@@ -248,12 +321,7 @@ namespace Apex.Serialization.Internal
                                         Expression.NotEqual(refIndex, Expression.Constant(-1)),
                                         Expression.Block(
                                             Expression.Assign(accessExpression,
-                                                Expression.Convert(
-                                                    Expression.Property(
-                                                        Expression.Call(output, SavedReferencesGetter),
-                                                    SavedReferencesListIndexer, Expression.Decrement(refIndex)),
-                                                elementType)
-                                            ),
+                                                Expression.Convert(Expression.Call(output, GetSavedReferenceMethod, refIndex), elementType)),
                                             Expression.Continue(continueLabels[continueLabels.Count - 1])
                                         )
                                     )
@@ -301,14 +369,14 @@ namespace Apex.Serialization.Internal
         }
 
         private static Expression ReadArrayOfBlittableValues(ParameterExpression output, Expression result,
-            ParameterExpression stream, int dimensions, Type elementType, int elementSize, List<ParameterExpression> lengths)
+            int dimensions, Type elementType, List<ParameterExpression> lengths)
         {
             return dimensions switch
             {
                 1 => Expression.Assign(result, Expression.Call(output, ReadArrayOfValuesMethod1.MakeGenericMethod(elementType),
-                       Expression.Constant(elementSize), lengths[0])),
+                       lengths[0])),
                 2 => Expression.Assign(result, Expression.Call(output, ReadArrayOfValuesMethod2.MakeGenericMethod(elementType),
-                        Expression.Constant(elementSize), lengths[0], lengths[1])),
+                        lengths[0], lengths[1])),
                 _ => throw new InvalidOperationException($"Blitting multidimensional array with {dimensions} dimensions is not supported"),
             };
         }

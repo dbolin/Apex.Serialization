@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace Apex.Serialization
 {
@@ -32,30 +33,95 @@ namespace Apex.Serialization
             }
         }
 
+        /// <summary>
+        /// A custom reader's nested reads can alternate between types, which a cache of the last type read would miss
+        /// every time, so this one caches nothing.
+        /// </summary>
         internal T ReadObjectEntry<T>()
         {
-            object? result;
-            if (StaticTypeInfo<T>.IsSealedOrHasNoDescendents)
+            if (typeof(T).IsValueType)
             {
-                if (StaticTypeInfo<T>.IsValueType)
-                {
-                    result = ReadValueInternal<T>(Settings.UseSerializedVersionId);
-                }
-                else
-                {
-                    result = ReadSealedInternal<T>(Settings.UseSerializedVersionId);
-                }
-            }
-            else
-            {
-                result = ReadInternal();
+                return ReadValueInternal<T>(Settings.UseSerializedVersionId);
             }
 
-            return (T)result!;
+            return StaticTypeInfo<T>.IsSealedOrHasNoDescendents ? ReadSealedInternal<T>(Settings.UseSerializedVersionId) : (T)ReadInternal();
+        }
+
+        /// <summary>
+        /// For a reference type the root read is shared generic code, where each static of a generic class over
+        /// <typeparamref name="T"/> costs a helper call, so what it needs is cached on the instance, keyed by the type
+        /// of what is cached.
+        /// </summary>
+        internal T ReadRoot<T>()
+        {
+            if (typeof(T).IsValueType)
+            {
+                return ReadValueInternal<T>(Settings.UseSerializedVersionId);
+            }
+
+            while (true)
+            {
+                var root = _rootRead;
+                if (root is ReadMethods<T, TStream, TSettingGen>.ReadSealed method)
+                {
+                    if (ReadSealedHeader(Settings.UseSerializedVersionId, out T result))
+                    {
+                        return result;
+                    }
+
+                    return method(ref _stream, this);
+                }
+
+                if (root is PolymorphicRoot<T>)
+                {
+                    return (T)ReadInternal();
+                }
+
+                if (root is SealedRoot<T>)
+                {
+                    var result = ReadSealedInternal<T>(Settings.UseSerializedVersionId);
+                    _rootRead = ReadMethods<T, TStream, TSettingGen>.Method ?? root;
+                    return result;
+                }
+
+                _rootRead = StaticTypeInfo<T>.IsSealedOrHasNoDescendents
+                    ? ReadMethods<T, TStream, TSettingGen>.Method ?? (object)SealedRoot<T>.Instance
+                    : PolymorphicRoot<T>.Instance;
+            }
+        }
+
+        private object? _rootRead;
+
+        private sealed class PolymorphicRoot<T>
+        {
+            internal static readonly PolymorphicRoot<T> Instance = new PolymorphicRoot<T>();
+        }
+
+        /// <summary>
+        /// Its read is generated after the header, so a null root of a type that can't be read still reads as null.
+        /// </summary>
+        private sealed class SealedRoot<T>
+        {
+            internal static readonly SealedRoot<T> Instance = new SealedRoot<T>();
+        }
+
+        /// <summary>
+        /// Every object read starts here, so data nested deeper than the stack can hold ends in
+        /// <see cref="InsufficientExecutionStackException"/> rather than a stack overflow.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void EnsureSufficientStack() => StackLimit.Ensure(_stackStart, _stackSpan);
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private bool ReadSealedHeader<T>(bool useSerializedVersionId, out T result)
+        {
+            EnsureSufficientStack();
+            return ReadObjectRefHeader(useSerializedVersionId, out result);
         }
 
         internal object ReadInternal()
         {
+            EnsureSufficientStack();
             if (ReadObjectRefHeader<object>(false, out var result))
             {
                 return result;
@@ -69,11 +135,7 @@ namespace Apex.Serialization
             }
 
             ref var method = ref VirtualReadMethods.GetOrAddValueRef(type);
-
-            if (method == null)
-            {
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true, false);
-            }
+            method ??= GenerateObjectRead(type);
 
             _lastReadType = type;
             _lastReadMethod = method;
@@ -81,60 +143,102 @@ namespace Apex.Serialization
             return method(ref _stream, this);
         }
 
-        private unsafe Type ReadTypeRef(bool readSerializedVersionId)
+        /// <summary>
+        /// Out of line, as is <see cref="GenerateSealedRead{T}"/>: inlined into the reads that nest, the one-time
+        /// generation call widens every level's frame, which cuts how deep data can nest on a given stack.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private ReadObject GenerateObjectRead(Type type)
+        {
+            if (!CanBeAnObjectsType(type))
+            {
+                ThrowHelper.ThrowImpossibleObjectType(type);
+            }
+
+            return DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadObject>(type, Settings, true, false);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private ReadMethods<T, TStream, TSettingGen>.ReadSealed GenerateSealedRead<T>()
+        {
+            return ReadMethods<T, TStream, TSettingGen>.Method =
+                DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false, false);
+        }
+
+        /// <summary>
+        /// Generating code throws <see cref="ArgumentException"/> for a byref, pointer, byref-like or open generic type or
+        /// void, none of which an object can be, and for an array of pointers, which the writer can't write either, so a
+        /// stored name that resolves to one is rejected as invalid data first.
+        /// </summary>
+        private static bool CanBeAnObjectsType(Type type)
+        {
+            var innermost = type;
+            while (innermost.IsArray)
+            {
+                innermost = innermost.GetElementType()!;
+            }
+
+            return !innermost.IsByRef && !innermost.IsPointer && !innermost.IsByRefLike && !type.ContainsGenericParameters && type != typeof(void);
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private Type ReadTypeRef(bool readSerializedVersionId)
         {
             _stream.ReserveSize(4);
+            _stream.ThrowIfStreamEndsWithin(4);
             var knownTypeIndex = _stream.Read<int>();
-            Type type;
             if (knownTypeIndex != -1)
             {
-                type = _loadedTypeRefs[knownTypeIndex - 1];
+                return _loadedTypeRefs.GetReferenced(knownTypeIndex, "type");
             }
-            else
+
+            return ReadNewTypeRef(readSerializedVersionId);
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private Type ReadNewTypeRef(bool readSerializedVersionId)
+        {
+            var typeId = _stream.ReadTypeId();
+            var type = _knownTypes.Find(typeId);
+            if (type == null)
             {
-                var typeId = _stream.ReadTypeId(out var typeLen1, out var typeLen2);
-                type = _knownTypes.Find(typeId, typeLen1 + typeLen2);
-                if (type == null)
+                type = _stream.RestoreTypeFromId(typeId, out var isCanonical);
+                if (isCanonical)
                 {
-                    type = _stream.RestoreTypeFromId(ref typeId, typeLen1, typeLen2);
-                    _knownTypes.Add(typeId, typeLen1 + typeLen2, type);
+                    _knownTypes.Add(typeId, type);
                 }
-
-                if (readSerializedVersionId)
-                {
-                    CheckSerializedVersionUniqueId(type);
-                }
-
-                _loadedTypeRefs.Add(type);
             }
 
+            if (readSerializedVersionId)
+            {
+                CheckSerializedVersionUniqueId(type);
+            }
+
+            _loadedTypeRefs.Add(type);
             return type;
         }
 
-        public unsafe void CheckSerializedVersionUniqueId(Type type)
+        public void CheckSerializedVersionUniqueId(Type type)
         {
             _stream.ReserveSize(4);
+            _stream.ThrowIfStreamEndsWithin(4);
             var expectedId = GetSerializedVersionUniqueId(type);
             var id = _stream.Read<int>();
             if (id != expectedId)
             {
-                throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {type.FullName}");
+                ThrowHelper.ThrowVersionIdMismatch(type);
             }
         }
 
         internal T ReadValueInternal<T>(bool useSerializedVersionId)
         {
+            EnsureSufficientStack();
             if (useSerializedVersionId)
             {
                 CheckSerializedVersionUniqueId<T>();
             }
 
-            ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
-            if (method == null)
-            {
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false, false);
-            }
-
+            var method = ReadMethods<T, TStream, TSettingGen>.Method ?? GenerateSealedRead<T>();
             return method(ref _stream, this);
         }
 
@@ -142,26 +246,27 @@ namespace Apex.Serialization
         {
             var expectedId = GetSerializedVersionUniqueId<T>();
             _stream.ReserveSize(4);
+            _stream.ThrowIfStreamEndsWithin(4);
             var id = _stream.Read<int>();
             if (id != expectedId)
             {
-                throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {typeof(T).FullName}");
+                ThrowHelper.ThrowVersionIdMismatch(typeof(T));
             }
         }
 
+        /// <summary>
+        /// Generated code calls this for each nested object of a type it doesn't inline, and inlined there the statics of
+        /// <typeparamref name="T"/> resolve when the JIT compiles it rather than through a helper call per object.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal T ReadSealedInternal<T>(bool useSerializedVersionId)
         {
-            if (ReadObjectRefHeader(useSerializedVersionId, out T result))
+            if (ReadSealedHeader(useSerializedVersionId, out T result))
             {
                 return result;
             }
 
-            ref var method = ref ReadMethods<T, TStream, TSettingGen>.Method;
-            if (method == null)
-            {
-                method = DynamicCode<TStream, Binary<TStream, TSettingGen>>.GenerateReadMethod<ReadMethods<T, TStream, TSettingGen>.ReadSealed>(typeof(T), Settings, false, false);
-            }
-
+            var method = ReadMethods<T, TStream, TSettingGen>.Method ?? GenerateSealedRead<T>();
             return method(ref _stream, this);
         }
 
@@ -175,6 +280,7 @@ namespace Apex.Serialization
             _allowReadingObjectReference = true;
         }
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool ReadObjectRefHeader<T>(bool checkSerializedVersionId, out T result)
         {
             result = default!;
@@ -187,11 +293,12 @@ namespace Apex.Serialization
 
             if (checkSerializedVersionId)
             {
+                _stream.ThrowIfStreamEndsWithin(4);
                 var expectedId = GetSerializedVersionUniqueId<T>();
                 var id = _stream.Read<int>();
                 if (id != expectedId)
                 {
-                    throw new InvalidOperationException($"SerializedVersionUniqueId does not match for Type {typeof(T).FullName}");
+                    ThrowHelper.ThrowVersionIdMismatch(typeof(T));
                 }
             }
 
@@ -202,21 +309,21 @@ namespace Apex.Serialization
                 var refNo = _stream.Read<int>();
                 if (refNo != -1)
                 {
-                    {
-                        result = (T)_loadedObjectRefs[refNo - 1];
-                        return true;
-                    }
+                    result = (T)GetSavedReference(refNo);
+                    return true;
                 }
 
             }
             return false;
         }
 
+        internal object GetSavedReference(int refIndex) => _loadedObjectRefs.GetReferenced(refIndex, "object");
+
         private void CheckReadingObjectReference()
         {
             if (!_allowReadingObjectReference)
             {
-                throw new InvalidOperationException("Unable to read an object reference in graph mode during custom instantiation");
+                ThrowHelper.ThrowObjectReferenceDuringInstantiation();
             }
         }
 
@@ -378,15 +485,26 @@ namespace Apex.Serialization
 
         internal void WriteFunction(Delegate value)
         {
+            var declaringType = value.Method.DeclaringType;
+            if (declaringType == null)
+            {
+                ThrowHelper.ThrowDelegateToDynamicMethod(value.Method);
+            }
+
+            var generics = GetMethodGenericTypes(value.Method);
+            if (!Settings.AllowsDelegateMethod(declaringType, generics))
+            {
+                ThrowHelper.ThrowDelegateMethodNotAllowed(value.Method);
+            }
+
             var delegateType = value.GetType();
             _stream.ReserveSize(4);
             WriteTypeRef(delegateType, false);
             _stream.ReserveSize(4);
-            WriteTypeRef(value.Method.DeclaringType!, false);
+            WriteTypeRef(declaringType, false);
             _stream.Write(value.Method.Name);
             _stream.ReserveSize(2);
             var parameters = GetMethodParameterTypes(value.Method);
-            var generics = GetMethodGenericTypes(value.Method);
             _stream.Write((byte)parameters.Length);
             _stream.Write((byte)generics.Length);
             for (int i = 0; i < parameters.Length; ++i)
@@ -488,6 +606,8 @@ namespace Apex.Serialization
             }
         }
 
+        internal readonly record struct CachedDelegate(Delegate? Template, Type? TargetType);
+
         private static Func<object, object> CreateCloneFunc()
         {
             var p = Expression.Parameter(typeof(object));
@@ -511,6 +631,7 @@ namespace Apex.Serialization
 
         internal Delegate ReadFunction()
         {
+            EnsureSufficientStack();
             var delegateType = ReadTypeRef(false);
             var declaringType = ReadTypeRef(false);
             var methodName = _stream.Read();
@@ -531,67 +652,47 @@ namespace Apex.Serialization
                 genericTypeBuffer![i] = ReadTypeRef(false);
             }
 
+            if (!Settings.AllowsDelegateMethod(declaringType, genericTypeBuffer))
+            {
+                ThrowHelper.ThrowInvalidDelegate($"{declaringType.FullName}.{methodName} is declared in, or instantiated over, an assembly the settings don't allow delegate methods from");
+            }
+
             _stream.ReserveSize(1);
             bool hasTarget = _stream.Read<bool>();
             Delegate result;
-            var methods = TypeMethods.GetMethods(declaringType);
-            MethodInfo? delegateMethod = null;
-            for (int i = 0; i < methods.Count; ++i)
+            var delegateMethod = FindDelegateMethod(declaringType, methodName, parameterCount, genericTypeBuffer);
+            if (delegateMethod == null)
             {
-                var m = methods[i];
-                if (m.MethodInfo.Name != methodName)
-                {
-                    continue;
-                }
-
-                if (m.ParameterTypes.Length != parameterCount)
-                {
-                    continue;
-                }
-
-                if (m.GenericArguments.Length != genericCount)
-                {
-                    continue;
-                }
-
-                for (int j = 0; j < parameterCount; ++j)
-                {
-                    if (m.ParameterTypes[j] != _parameterTypeBuffer[j])
-                    {
-                        goto next;
-                    }
-                }
-
-                delegateMethod = m.MethodInfo;
-                if (m.GenericArguments.Length > 0)
-                {
-                    delegateMethod = delegateMethod.MakeGenericMethod(genericTypeBuffer!);
-                }
-                break;
-                next:;
+                ThrowHelper.ThrowInvalidDelegate($"no method {declaringType.FullName}.{methodName} matches its parameter types");
             }
 
             if (hasTarget)
             {
                 var target = ReadInternal();
-                ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod!));
-                if (cachedDelegate == null)
+                ref var cached = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod));
+                if (cached.Template == null)
                 {
-                    cachedDelegate = Delegate.CreateDelegate(delegateType, null, delegateMethod!);
+                    cached = new CachedDelegate(CreateTemplate(delegateType, delegateMethod, closedOverTarget: true), ClosedTargetType(delegateType, delegateMethod));
                 }
 
-                result = (Delegate)_clone(cachedDelegate);
+                // The clone shares the template's method pointer, which only works on the type the method was bound for.
+                if (cached.TargetType?.IsInstanceOfType(target) != true)
+                {
+                    ThrowHelper.ThrowInvalidDelegate($"its target, a {target?.GetType().FullName ?? "null"}, can't be bound to {declaringType.FullName}.{methodName}");
+                }
+
+                result = (Delegate)_clone(cached.Template!);
                 _setTarget(result, target);
             }
             else
             {
-                ref var cachedDelegate = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod!));
-                if (cachedDelegate == null)
+                ref var cached = ref _delegateCache.GetOrAddValueRef(new DelegateID(delegateType, declaringType, delegateMethod));
+                if (cached.Template == null)
                 {
-                    cachedDelegate = Delegate.CreateDelegate(delegateType, delegateMethod!);
+                    cached = new CachedDelegate(CreateTemplate(delegateType, delegateMethod, closedOverTarget: false), null);
                 }
 
-                result = cachedDelegate;
+                result = cached.Template!;
             }
 
             _stream.ReserveSize(5);
@@ -607,13 +708,104 @@ namespace Apex.Serialization
                 return result;
             }
 
+            CheckArrayLength(invocationCount, 1);
             var list = new Delegate[invocationCount];
             for (int i = 0; i < invocationCount; ++i)
             {
                 list[i] = ReadFunction();
             }
 
-            return Delegate.Combine(list)!;
+            try
+            {
+                return Delegate.Combine(list)!;
+            }
+            catch (ArgumentException e)
+            {
+                return ThrowHelper.ThrowInvalidDelegate("its invocation list mixes delegate types", e);
+            }
+        }
+
+        private static Delegate CreateTemplate(Type delegateType, MethodInfo method, bool closedOverTarget)
+        {
+            try
+            {
+                return closedOverTarget ? Delegate.CreateDelegate(delegateType, null, method) : Delegate.CreateDelegate(delegateType, method);
+            }
+            catch (ArgumentException e)
+            {
+                return ThrowHelper.ThrowInvalidDelegate($"{method.DeclaringType?.FullName}.{method.Name} can't be bound to a {delegateType.FullName}", e);
+            }
+        }
+
+        /// <summary>
+        /// The writer stores a generic method's parameter types with its type arguments substituted, so a generic method
+        /// is compared once it's instantiated over the stored arguments.  A method those arguments break the constraints
+        /// of can't be the one written.
+        /// </summary>
+        private MethodInfo? FindDelegateMethod(Type declaringType, string? methodName, int parameterCount, Type[]? genericArguments)
+        {
+            var genericCount = genericArguments?.Length ?? 0;
+            var methods = TypeMethods.GetMethods(declaringType);
+            for (int i = 0; i < methods.Count; ++i)
+            {
+                var m = methods[i];
+                if (m.MethodInfo.Name != methodName
+                    || m.ParameterTypes.Length != parameterCount
+                    || m.GenericArguments.Length != genericCount)
+                {
+                    continue;
+                }
+
+                var method = genericCount > 0 ? TryMakeGenericMethod(m.MethodInfo, genericArguments!) : m.MethodInfo;
+                if (method != null && HasStoredParameterTypes(genericCount > 0 ? GetMethodParameterTypes(method) : m.ParameterTypes))
+                {
+                    return method;
+                }
+            }
+
+            return null;
+        }
+
+        private static MethodInfo? TryMakeGenericMethod(MethodInfo definition, Type[] arguments)
+        {
+            try
+            {
+                return definition.MakeGenericMethod(arguments);
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+        }
+
+        private bool HasStoredParameterTypes(Type[] parameterTypes)
+        {
+            for (int j = 0; j < parameterTypes.Length; ++j)
+            {
+                if (parameterTypes[j] != _parameterTypeBuffer[j])
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// The type a delegate's target has to be for <paramref name="method"/> to run on it, or null if
+        /// <see cref="Delegate.CreateDelegate(Type, object, MethodInfo)"/> doesn't close a delegate of
+        /// <paramref name="delegateType"/> over a target for it (an open delegate keeps itself in the target field).
+        /// </summary>
+        private static Type? ClosedTargetType(Type delegateType, MethodInfo method)
+        {
+            var delegateParameterCount = delegateType.GetMethod("Invoke")!.GetParameters().Length;
+            var parameters = method.GetParameters();
+            if (method.IsStatic)
+            {
+                return parameters.Length == delegateParameterCount + 1 && !parameters[0].ParameterType.IsValueType ? parameters[0].ParameterType : null;
+            }
+
+            return parameters.Length == delegateParameterCount ? method.DeclaringType : null;
         }
 
         internal void WriteValueInternal<T>(T value, bool useSerializedVersionId)
@@ -705,79 +897,186 @@ namespace Apex.Serialization
             _deserializationHooks.Add((method, instance));
         }
 
-        unsafe internal void WriteValuesArray1<T>(T[] array, int elementSize)
-            where T : unmanaged
+        internal void CheckArrayLength(int length, int minimumBytesPerElement)
         {
-            fixed (void* ptr = array)
+            CheckLength(length);
+            CheckArrayElementCount(length, minimumBytesPerElement);
+        }
+
+        internal void CheckArrayElementCount(long elementCount, int minimumBytesPerElement)
+        {
+            if (minimumBytesPerElement == 0)
             {
-                _stream.WriteValues<T>(ptr, (uint)(array.Length * elementSize));
+                return;
+            }
+
+            var byteCount = SaturatingMultiply(elementCount, minimumBytesPerElement);
+            if (_stream.TryEnsureAvailable(byteCount))
+            {
+                return;
+            }
+
+            if (byteCount > Array.MaxLength)
+            {
+                ThrowHelper.ThrowTooLargeToCheck(elementCount);
+            }
+
+            _stream.ReadAhead((int)byteCount);
+        }
+
+        /// <summary>
+        /// The runtime won't create a multi-dimensional array once the product of its dimensions so far, taken in order,
+        /// passes <see cref="uint.MaxValue"/>, even when a later dimension is 0 (<c>AllocateArrayEx</c> in coreclr's
+        /// <c>gchelpers.cpp</c> throws <see cref="OutOfMemoryException"/>), so the running product is checked here.
+        /// </summary>
+        internal static long MultiplyArrayLength(long elementCount, int length)
+        {
+            CheckLength(length);
+            var product = SaturatingMultiply(elementCount, length);
+            if (product > uint.MaxValue)
+            {
+                ThrowHelper.ThrowInvalidLength("product of array dimensions", product);
+            }
+
+            return product;
+        }
+
+        /// <summary>
+        /// Multiplies non-negative counts, saturating at <see cref="long.MaxValue"/>: the product is only compared with
+        /// what the stream can supply, which an overflow would wrap below.
+        /// </summary>
+        private static long SaturatingMultiply(long a, long b)
+        {
+            return b == 0 || a <= long.MaxValue / b ? a * b : long.MaxValue;
+        }
+
+        private static void CheckLength(int length)
+        {
+            if ((uint)length > Array.MaxLength)
+            {
+                ThrowHelper.ThrowInvalidLength("array length", length);
             }
         }
 
-        unsafe internal T[] ReadValuesArray1<T>(int elementSize, int length)
+        // A span holds at most int.MaxValue bytes, so a larger blittable array is copied a chunk at a time.
+        private const int BlittableChunkBytes = 1 << 30;
+
+        // elementSize is always Unsafe.SizeOf<T>(), but the generated write code that passes it is hashed into
+        // SerializedVersionUniqueId, so dropping the parameter changes the id every payload carries for these arrays.
+        internal void WriteValuesArray1<T>(T[] array, int elementSize)
             where T : unmanaged
         {
-            if(length == 0)
+            WriteBlittable(ref MemoryMarshal.GetArrayDataReference(array), array.Length);
+        }
+
+        internal T[] ReadValuesArray1<T>(int length)
+            where T : unmanaged
+        {
+            if (length == 0)
             {
                 return Array.Empty<T>();
             }
 
+            CheckLength(length);
+            if (!_stream.TryEnsureAvailable((long)length * Unsafe.SizeOf<T>()))
+            {
+                return ReadBlittableAsSupplied<T>(length);
+            }
+
             var array = new T[length];
-
-            fixed(void* ptr = array)
-            {
-                _stream.ReadBytes(ptr, (uint)(length * elementSize));
-            }
-
+            ReadBlittable(ref MemoryMarshal.GetArrayDataReference(array), length);
             return array;
         }
 
-        unsafe internal void WriteValuesArray2<T>(T[,] array, int elementSize)
+        internal void WriteValuesArray2<T>(T[,] array, int elementSize)
             where T : unmanaged
         {
-            var length1 = array.GetLength(0);
-            var length2 = array.GetLength(1);
-
-            fixed (void* ptr = array)
-            {
-                _stream.WriteValues<T>(ptr, (uint)(length1 * length2 * elementSize));
-            }
+            WriteBlittable(ref Unsafe.As<byte, T>(ref MemoryMarshal.GetArrayDataReference(array)), array.LongLength);
         }
 
-        unsafe internal T[,] ReadValuesArray2<T>(int elementSize, int length1, int length2)
+        internal T[,] ReadValuesArray2<T>(int length1, int length2)
             where T : unmanaged
         {
+            var count = MultiplyArrayLength(MultiplyArrayLength(1, length1), length2);
+            if (count == 0)
+            {
+                return new T[length1, length2];
+            }
+
+            if (!_stream.TryEnsureAvailable(SaturatingMultiply(count, Unsafe.SizeOf<T>())))
+            {
+                if (count > Array.MaxLength)
+                {
+                    ThrowHelper.ThrowTooLargeToCheck(count);
+                }
+
+                var values = ReadBlittableAsSupplied<T>((int)count);
+                var copy = new T[length1, length2];
+                values.CopyTo(MemoryMarshal.CreateSpan(ref Unsafe.As<byte, T>(ref MemoryMarshal.GetArrayDataReference(copy)), values.Length));
+                return copy;
+            }
+
             var array = new T[length1, length2];
-
-            if (length1 == 0 && length2 == 0)
-            {
-                return array;
-            }
-
-            fixed (void* ptr = array)
-            {
-                _stream.ReadBytes(ptr, (uint)(length1 * length2 * elementSize));
-            }
-
+            ReadBlittable(ref Unsafe.As<byte, T>(ref MemoryMarshal.GetArrayDataReference(array)), count);
             return array;
         }
 
-        unsafe internal void WriteRawBytes<T>(ref T value, int offset, int length)
-            where T : struct
+        private void WriteBlittable<T>(ref T first, long count)
+            where T : unmanaged
         {
-            fixed (byte* start = &Unsafe.As<T, byte>(ref value))
+            var chunk = Math.Max(1, BlittableChunkBytes / Unsafe.SizeOf<T>());
+            for (long done = 0; done < count; done += chunk)
             {
-                _stream.WriteValues<byte>(start + offset, (uint)length);
+                var values = MemoryMarshal.CreateReadOnlySpan(ref Unsafe.Add(ref first, (nint)done), (int)Math.Min(chunk, count - done));
+                _stream.WriteValues<T>(MemoryMarshal.AsBytes(values));
             }
         }
 
-        unsafe internal void ReadRawBytes<T>(ref T value, int offset, int length)
+        private void ReadBlittable<T>(ref T first, long count)
+            where T : unmanaged
+        {
+            var chunk = Math.Max(1, BlittableChunkBytes / Unsafe.SizeOf<T>());
+            for (long done = 0; done < count; done += chunk)
+            {
+                var values = MemoryMarshal.CreateSpan(ref Unsafe.Add(ref first, (nint)done), (int)Math.Min(chunk, count - done));
+                _stream.ReadBytes(MemoryMarshal.AsBytes(values));
+            }
+        }
+
+        private const int UnverifiedArrayStartBytes = 1024 * 1024;
+
+        /// <summary>
+        /// Reads an array the stream can't vouch for up front, doubling it from 1 MiB only as the values arrive, so what a
+        /// corrupt length allocates stays proportional to what the stream actually holds.
+        /// </summary>
+        private T[] ReadBlittableAsSupplied<T>(int length)
+            where T : unmanaged
+        {
+            var values = new T[Math.Min(length, Math.Max(1, UnverifiedArrayStartBytes / Unsafe.SizeOf<T>()))];
+            var read = 0;
+            while (true)
+            {
+                ReadBlittable(ref values[read], values.Length - read);
+                read = values.Length;
+                if (read == length)
+                {
+                    return values;
+                }
+
+                Array.Resize(ref values, (int)Math.Min(length, 2L * read));
+            }
+        }
+
+        internal void WriteRawBytes<T>(ref T value, int offset, int length)
             where T : struct
         {
-            fixed (byte* start = &Unsafe.As<T, byte>(ref value))
-            {
-                _stream.ReadBytes(start + offset, (uint)length);
-            }
+            _stream.WriteValues<byte>(MemoryMarshal.CreateReadOnlySpan(ref Unsafe.As<T, byte>(ref value), Unsafe.SizeOf<T>()).Slice(offset, length));
+        }
+
+        internal void ReadRawBytes<T>(ref T value, int offset, int length)
+            where T : struct
+        {
+            _stream.ReadBytes(MemoryMarshal.CreateSpan(ref Unsafe.As<T, byte>(ref value), Unsafe.SizeOf<T>()).Slice(offset, length));
         }
 
         internal IBinaryWriter BinaryWriter => _binaryWriter;

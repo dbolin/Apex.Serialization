@@ -1,35 +1,42 @@
-﻿using System.Numerics;
+﻿using System;
+using System.Numerics;
 
 namespace Apex.Serialization.Internal
 {
     public static class NonRandomHashCode
     {
-        public static unsafe int Ordinal(string s)
+        public static int Ordinal(string s)
         {
-            fixed (char* src = s)
+            uint hash1 = (5381 << 16) + 5381;
+            uint hash2 = hash1;
+
+            var chars = s.AsSpan();
+            int index = 0;
+            int length = s.Length;
+
+            while (length > 2)
             {
-                uint hash1 = (5381 << 16) + 5381;
-                uint hash2 = hash1;
-
-                uint* ptr = (uint*)src;
-                int length = s.Length;
-
-                while (length > 2)
-                {
-                    length -= 4;
-                    // Where length is 4n-1 (e.g. 3,7,11,15,19) this additionally consumes the null terminator
-                    hash1 = (BitOperations.RotateLeft(hash1, 5) + hash1) ^ ptr[0];
-                    hash2 = (BitOperations.RotateLeft(hash2, 5) + hash2) ^ ptr[1];
-                    ptr += 2;
-                }
-
-                if (length > 0)
-                {
-                    // Where length is 4n-3 (e.g. 1,5,9,13,17) this additionally consumes the null terminator
-                    hash2 = (BitOperations.RotateLeft(hash2, 5) + hash2) ^ ptr[0];
-                }
-
-                return (int)(hash1 + (hash2 * 1566083941));
+                length -= 4;
+                hash1 = (BitOperations.RotateLeft(hash1, 5) + hash1) ^ CharPair(chars, index);
+                hash2 = (BitOperations.RotateLeft(hash2, 5) + hash2) ^ CharPair(chars, index + 2);
+                index += 4;
             }
-        }    }
+
+            if (length > 0)
+            {
+                hash2 = (BitOperations.RotateLeft(hash2, 5) + hash2) ^ CharPair(chars, index);
+            }
+
+            return (int)(hash1 + (hash2 * 1566083941));
+        }
+
+        /// <summary>
+        /// Two chars as one little-endian uint.  The hash was first computed through a pointer that read the string's null
+        /// terminator as the second char of a final pair, and serialized version ids depend on its exact values.
+        /// </summary>
+        private static uint CharPair(ReadOnlySpan<char> chars, int index)
+        {
+            return chars[index] | (index + 1 < chars.Length ? (uint)chars[index + 1] << 16 : 0u);
+        }
+    }
 }

@@ -12,6 +12,7 @@ using BenchmarkDotNet.Diagnosers;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Running;
 using BenchmarkDotNet.Toolchains.CsProj;
+using BenchmarkDotNet.Toolchains.DotNetCli;
 using BenchmarkDotNet.Validators;
 using MessagePack;
 
@@ -26,7 +27,7 @@ namespace Benchmark
             AddExporter(DefaultConfig.Instance.GetExporters().ToArray()); // manual config has no exporters by default
             AddColumnProvider(DefaultConfig.Instance.GetColumnProviders().ToArray()); // manual config has no columns by default
 
-            AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.NetCoreApp80).WithGcServer(true));
+            AddJob(Job.Default.WithToolchain(CsProjCoreToolchain.From(new NetCoreAppSettings("net10.0", null, ".NET 10.0"))).WithGcServer(true));
             //AddJob(Job.Clr.With(CsProjClassicNetToolchain.Net472));
             //AddJob(Job.CoreRT);
             //Add(HardwareCounter.BranchMispredictions, HardwareCounter.BranchInstructions);
@@ -49,9 +50,12 @@ namespace Benchmark
                 t.S_ListEmptyFullWithVersionIds();
             */
 
-            var summaries = BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(config: new Config());
+            var summaries = BenchmarkSwitcher.FromAssembly(Assembly.GetExecutingAssembly()).Run(args, new Config());
 
-            Console.ReadKey();
+            if (!Console.IsInputRedirected)
+            {
+                Console.ReadKey();
+            }
         }
     }
 }
