@@ -94,8 +94,12 @@ namespace Apex.Serialization.Internal
 
         public void Clear()
         {
-            _slots.AsSpan(0, _count).Clear();
-            _count = 0;
+            // Clearing an empty span still makes a call, and a read without type info leaves its type table empty.
+            if (_count != 0)
+            {
+                _slots.AsSpan(0, _count).Clear();
+                _count = 0;
+            }
         }
     }
 }
