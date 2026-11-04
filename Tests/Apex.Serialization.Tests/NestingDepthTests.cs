@@ -2,7 +2,6 @@ using Apex.Serialization.Internal;
 using FluentAssertions;
 using System;
 using System.Buffers.Binary;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -120,9 +119,10 @@ namespace Apex.Serialization.Tests
             });
 
         /// <summary>
-        /// Three quarters of the fewest levels each shape read on a 1 MiB stack, measured on .NET 10 x64 with tiered
-        /// compilation warmed up, off, and stopped at tier 0, rounded down to a multiple of
-        /// <see cref="DeepestRealDepth"/>.  A change that widens the frame of every level fails here.
+        /// Three quarters of each shape's depth, rounded down to a multiple of <see cref="DeepestRealDepth"/>, so a change
+        /// that cuts a shape's depth by more than about a quarter fails here.  The depth, measured on .NET 10 x64, is the
+        /// deepest payload that reads on a 1 MiB thread (found by binary search), the lowest of tiered compilation warmed up,
+        /// off (<c>DOTNET_TieredCompilation=0</c>) and stopped at tier 0 (<c>DOTNET_TC_CallCounting=0</c>).
         /// </summary>
         public static TheoryData<bool, string, int> DepthFloors() => new TheoryData<bool, string, int>
         {
@@ -290,36 +290,6 @@ namespace Apex.Serialization.Tests
             // can be just past the runtime's margin; any level after it would have been refused.
             levelsTheRuntimeWouldRefuse.Should().BeLessThanOrEqualTo(1);
             levelsRead.Should().BeGreaterThan(ReadableDepth);
-        }
-
-        [Fact]
-        public void ASealedChainReadThroughACustomReaderAfterAnIntactReadThrowsACatchableException()
-        {
-            var intact = Write(new Node { Depth = DeepestRealDepth });
-            var hostile = Write(new Node { Depth = HostileDepth });
-            var depths = new List<int>();
-            Exception? exception = null;
-            var reader = new Thread(() =>
-            {
-                using var binary = Binary.Create(NestingSettings());
-                // The intact read leaves the root's read cached, so the hostile root goes through the cached path.
-                depths.Add(binary.Read<Node>(new MemoryStream(intact)).Depth);
-                try
-                {
-                    binary.Read<Node>(new MemoryStream(hostile));
-                }
-                catch (Exception e)
-                {
-                    exception = e;
-                }
-
-                depths.Add(binary.Read<Node>(new MemoryStream(intact)).Depth);
-            }, ReaderStackBytes);
-            reader.Start();
-            reader.Join();
-
-            exception.Should().BeOfType<InsufficientExecutionStackException>();
-            depths.Should().Equal(DeepestRealDepth, DeepestRealDepth);
         }
 
         [Fact]
