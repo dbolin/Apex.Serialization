@@ -3,6 +3,7 @@ using System;
 using System.Buffers.Binary;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using Xunit;
@@ -49,7 +50,7 @@ namespace Apex.Serialization.Tests
 
         private const int WriterStackBytes = 1024 * 1024 * 1024;
 
-        private static Settings NestingSettings() => new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true }
+        private static Settings NestingSettings(Action? onChainRead = null) => new Settings { AllowFunctionSerialization = true, SupportSerializationHooks = true }
             .MarkSerializable(_ => true)
             .RegisterCustomSerializer<Chain>((chain, writer) =>
             {
@@ -61,6 +62,7 @@ namespace Apex.Serialization.Tests
             }, (_, _) => { })
             .RegisterCustomInstantiator<Chain>(reader =>
             {
+                onChainRead?.Invoke();
                 var depth = reader.Read<int>();
                 if (depth > 1)
                 {
@@ -138,6 +140,39 @@ namespace Apex.Serialization.Tests
 
             exception.Should().BeNull();
             Depth(read).Should().Be(ReadableDepth);
+        }
+
+        [Fact]
+        public void NoLevelOfNestedDataStartsReadingWhereTheRuntimesStackCheckWouldRefuse()
+        {
+            var hostile = Write(Nest(nameof(Chain), HostileDepth));
+            var levelsTheRuntimeWouldRefuse = 0;
+            Exception? exception = null;
+            var reader = new Thread(() =>
+            {
+                using var binary = Binary.Create(NestingSettings(() =>
+                {
+                    if (!RuntimeHelpers.TryEnsureSufficientExecutionStack())
+                    {
+                        ++levelsTheRuntimeWouldRefuse;
+                    }
+                }));
+                try
+                {
+                    binary.Read<object>(new MemoryStream(hostile));
+                }
+                catch (Exception e)
+                {
+                    exception = e;
+                }
+            }, ReaderStackBytes);
+            reader.Start();
+            reader.Join();
+
+            exception.Should().BeOfType<InsufficientExecutionStackException>();
+            // The instantiator runs a few frames below the check that admitted its level, so the deepest admitted level
+            // can be just past the runtime's margin; any level after it would have been refused.
+            levelsTheRuntimeWouldRefuse.Should().BeLessThanOrEqualTo(1);
         }
 
         [Fact]

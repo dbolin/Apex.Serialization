@@ -1,4 +1,4 @@
-﻿using Apex.Serialization.Extensions;
+using Apex.Serialization.Extensions;
 using Apex.Serialization.Internal;
 using Apex.Serialization.Internal.Reflection;
 using System;
@@ -50,7 +50,7 @@ namespace Apex.Serialization
                 var root = _rootRead;
                 if (root is ReadMethods<T, TStream, TSettingGen>.ReadSealed method)
                 {
-                    RuntimeHelpers.EnsureSufficientExecutionStack();
+                    EnsureSufficientStack();
                     if (ReadObjectRefHeader(Settings.UseSerializedVersionId, out T result))
                     {
                         return result;
@@ -93,9 +93,24 @@ namespace Apex.Serialization
             internal static readonly SealedRoot<T> Instance = new SealedRoot<T>();
         }
 
+        /// <summary>
+        /// Every object read starts here, so data nested deeper than the stack can hold ends in
+        /// <see cref="InsufficientExecutionStackException"/> rather than a stack overflow.  Above the read's
+        /// <see cref="StackLimit"/> the runtime's check can't throw, so it's skipped there.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private void EnsureSufficientStack()
+        {
+            byte probe = 0;
+            if (StackLimit.AddressOf(ref probe) < _stackLimit)
+            {
+                StackLimit.CheckWithRuntime();
+            }
+        }
+
         internal object ReadInternal()
         {
-            RuntimeHelpers.EnsureSufficientExecutionStack();
+            EnsureSufficientStack();
             if (ReadObjectRefHeader<object>(false, out var result))
             {
                 return result;
@@ -193,7 +208,7 @@ namespace Apex.Serialization
 
         internal T ReadValueInternal<T>(bool useSerializedVersionId)
         {
-            RuntimeHelpers.EnsureSufficientExecutionStack();
+            EnsureSufficientStack();
             if (useSerializedVersionId)
             {
                 CheckSerializedVersionUniqueId<T>();
@@ -227,7 +242,7 @@ namespace Apex.Serialization
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal T ReadSealedInternal<T>(bool useSerializedVersionId)
         {
-            RuntimeHelpers.EnsureSufficientExecutionStack();
+            EnsureSufficientStack();
             if (ReadObjectRefHeader(useSerializedVersionId, out T result))
             {
                 return result;
@@ -603,7 +618,7 @@ namespace Apex.Serialization
 
         internal Delegate ReadFunction()
         {
-            RuntimeHelpers.EnsureSufficientExecutionStack();
+            EnsureSufficientStack();
             var delegateType = ReadTypeRef(false);
             var declaringType = ReadTypeRef(false);
             var methodName = _stream.Read();
