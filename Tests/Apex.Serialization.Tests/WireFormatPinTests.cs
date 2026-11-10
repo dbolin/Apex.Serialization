@@ -5,10 +5,6 @@ using Xunit;
 
 namespace Apex.Serialization.Tests
 {
-    /// <summary>
-    /// Pins the exact bytes of an object written through a polymorphic reference: its type ids, serialized version ids and
-    /// fields, including a nested polymorphic field and a blittable array, so a diff here means the wire format changed.
-    /// </summary>
     public class WireFormatPinTests
     {
         public class PinShape
@@ -93,6 +89,90 @@ namespace Apex.Serialization.Tests
             var read = sut.Read<object>(new MemoryStream(Convert.FromHexString(hex)));
 
             read.Should().BeOfType<PinCircle>().Which.Should().BeEquivalentTo((PinCircle)BuildPinnedShape(), options => options.PreferringRuntimeMemberTypes());
+        }
+
+        public sealed class PinListener
+        {
+            public int Id;
+
+            public void OnFirst()
+            {
+            }
+
+            public void OnSecond()
+            {
+            }
+
+            public static void OnAny()
+            {
+            }
+        }
+
+        public delegate void PinHandler();
+
+        public sealed class PinHandlers
+        {
+            public PinHandler? WithTarget;
+            public PinHandler? WithoutTarget;
+            public PinHandler? Multicast;
+        }
+
+        private static string WriteDelegatesHex(Mode mode)
+        {
+            var listener = new PinListener { Id = 3 };
+            var handlers = new PinHandlers
+            {
+                WithTarget = listener.OnFirst,
+                WithoutTarget = PinListener.OnAny,
+                Multicast = (PinHandler)listener.OnFirst + listener.OnSecond + PinListener.OnAny,
+            };
+            var settings = new Settings { SerializationMode = mode, AllowFunctionSerialization = true }
+                .MarkSerializable(typeof(PinListener))
+                .MarkSerializable(typeof(PinHandlers));
+            using var sut = Binary.Create(settings);
+            using var stream = new MemoryStream();
+            sut.Write(handlers, stream);
+            return Convert.ToHexString(stream.ToArray());
+        }
+
+        private const string ExpectedTreeDelegateBytes =
+            "0100D3CA8101FFFFFFFF360000005B00000072706C786E53487269612B69746165696E6E50546173727346577269652E"
+            + "6F746D65742E696F5474737A736C50696E65612E646565412C20347063783153367232616569346133693D6E65546F73"
+            + "79734B2069656273506F2C3D612E742E652E3D2C7243746C75752065306E30753072316C6E206975726C56632C657454"
+            + "656B2E6E6F6274307A376C34693465322E396532415533B4E401000000FFFFFFFF370000005B00000072706E78745369"
+            + "726E61506973617369546E695474736D736F57657269462E72746165502E6E6F6574747A2B6C69694C65732E65656541"
+            + "2C20347063783153367232616569346133693D6E65546F7379734B2069656273506F2C3D612E742E652E3D2C7243746C"
+            + "75752065306E30753072316C6E206975726C56632C657454656B2E6E6F6274307A376C34693465322E39653241050000"
+            + "004F006E0041006E00790000000001030000000100000002000000070000004F006E0046006900720073007400000001"
+            + "01020000000300000001000000000100000002000000080000004F006E005300650063006F006E006400000001010200"
+            + "00000300000001000000000100000002000000050000004F006E0041006E007900000000010000000001010000000100"
+            + "000002000000050000004F006E0041006E007900000000010000000001010000000100000002000000070000004F006E"
+            + "00460069007200730074000000010102000000030000000100000000";
+
+        private const string ExpectedGraphDelegateBytes =
+            "014E0547E2FFFFFFFF01FFFFFFFFFFFFFFFF360000005B00000072706C786E53487269612B69746165696E6E50546173"
+            + "727346577269652E6F746D65742E696F5474737A736C50696E65612E646565412C203470637831533672326165693461"
+            + "33693D6E65546F7379734B2069656273506F2C3D612E742E652E3D2C7243746C75752065306E30753072316C6E206975"
+            + "726C56632C657454656B2E6E6F6274307A376C34693465322E39653241B56DE29B01000000FFFFFFFF370000005B0000"
+            + "0072706E78745369726E61506973617369546E695474736D736F57657269462E72746165502E6E6F6574747A2B6C6969"
+            + "4C65732E656565412C20347063783153367232616569346133693D6E65546F7379734B2069656273506F2C3D612E742E"
+            + "652E3D2C7243746C75752065306E30753072316C6E206975726C56632C657454656B2E6E6F6274307A376C3469346532"
+            + "2E39653241050000004F006E0041006E00790000000001030000000100000002000000070000004F006E004600690072"
+            + "007300740000000101FFFFFFFF020000000300000001000000000100000002000000080000004F006E00530065006300"
+            + "6F006E006400000001010200000001000000000100000002000000050000004F006E0041006E00790000000001000000"
+            + "0001FFFFFFFF010000000100000002000000050000004F006E0041006E007900000000010000000001FFFFFFFF010000"
+            + "000100000002000000070000004F006E004600690072007300740000000101020000000100000000";
+
+        [Fact]
+        public void TreeModeDelegateBytesUnchanged()
+        {
+            WriteDelegatesHex(Mode.Tree).Should().Be(ExpectedTreeDelegateBytes);
+        }
+
+        [Fact]
+        public void GraphModeDelegateBytesUnchanged()
+        {
+            WriteDelegatesHex(Mode.Graph).Should().Be(ExpectedGraphDelegateBytes);
         }
     }
 }
