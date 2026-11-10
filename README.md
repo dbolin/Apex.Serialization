@@ -11,7 +11,7 @@ Suitable for realtime workloads where the serialized data will not persist for l
 
 [Nuget Package](https://www.nuget.org/packages/Apex.Serialization/)
 
-Using the latest package version is recommended, but 1.3.4 is the latest version that supportes netstandard or .NET framework targets.
+Using the latest package version is recommended.  Version 9 targets .NET 11; version 8 is the latest for .NET 10, and 1.3.5 is the latest version that supports netstandard or .NET framework targets.
 
 ### Use Cases
 
@@ -41,6 +41,7 @@ Some types aren't supported:
 - BlockingCollection\<> and types in System.Collections.Concurrent
 - Non-generic standard collections
 - Delegates to dynamic methods, such as those `DynamicMethod` and usually `LambdaExpression.Compile` create, which have no declaring type for the reader to find them in (writing one throws `NotSupportedException`)
+- Delegates over unmanaged function pointers, such as those `Marshal.GetDelegateForFunctionPointer` creates (writing one throws `NotSupportedException`)
 
 Requires code generation capabilities
 
@@ -51,6 +52,10 @@ Version 2 adds type whitelisting, which means no types can be serialized unless 
 ### Migrating to version 8.x
 
 Version 8 reads through bounds-checked managed buffers, so malformed data throws instead of reading out of bounds, and the exceptions it throws have changed: data that ends early throws `EndOfStreamException`, and an impossible length, a reference to a type or object that hasn't been read, or a delegate that can't be valid throws `InvalidDataException` (Limitations lists the others).  Some delegates are refused on write as well: one to a dynamic method throws `NotSupportedException`, and once `Settings.AllowDelegateMethodsFrom` (new in version 8) is called, one to a method from another assembly, or to a generic method over a type from one, throws `InvalidOperationException`.  The wire format is unchanged, so valid data written by version 7 reads back the same, within the read limits Limitations describes (nesting depth, which assemblies a type name can load).
+
+### Migrating to version 9.x
+
+Version 9 targets .NET 11, so a project that uses it has to target .NET 11 as well.  Version 8 doesn't run there (almost every write and read throws `TypeInitializationException`), and it's the last version for .NET 10.  Delegates are now inspected through the runtime's public API, which changes one thing on write: an open delegate (one with no bound target, which takes the instance to call as its first argument) over a virtual instance method of a class or an interface, including one over a method of its own delegate type, is written and reads back, where version 8 threw `InvalidOperationException`.  A delegate over an unmanaged function pointer is still refused with `NotSupportedException`.  The wire format is unchanged, but version 9 runs on a different runtime from version 8, so data that version 8 wrote comes under what Limitations says about reading across runtimes: it isn't supported.  With `UseSerializedVersionId` on (the default), a type that is, or has a field of, a generic type over a framework type, such as `List<int>`, has a different version id on .NET 11, and reading it throws `InvalidOperationException`.
 
 ### Usage
 
