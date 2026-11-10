@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
@@ -9,27 +8,6 @@ namespace Apex.Serialization.Internal.Reflection
 {
     internal static class TypeFields
     {
-        internal static Func<MulticastDelegate, bool> getInvocationListLogicallyNull;
-        internal static Func<MulticastDelegate, IntPtr> getInvocationCount;
-        internal static Action<MulticastDelegate, IntPtr> setInvocationCount;
-        internal static Func<MulticastDelegate, object> getInvocationList;
-        internal static Action<MulticastDelegate, object> setInvocationList;
-
-        static TypeFields()
-        {
-            var delegateParam = Expression.Parameter(typeof(MulticastDelegate));
-            var intPtrParam = Expression.Parameter(typeof(IntPtr));
-            var objectParam = Expression.Parameter(typeof(object));
-
-            var logicallyNullMethod = typeof(MulticastDelegate).GetMethod("InvocationListLogicallyNull", BindingFlags.Instance | BindingFlags.NonPublic)!;
-
-            getInvocationCount = Expression.Lambda<Func<MulticastDelegate, IntPtr>>(Expression.Field(delegateParam, "_invocationCount"), delegateParam).Compile();
-            getInvocationList = Expression.Lambda<Func<MulticastDelegate, object>>(Expression.Field(delegateParam, "_invocationList"), delegateParam).Compile();
-            setInvocationCount = Expression.Lambda<Action<MulticastDelegate, IntPtr>>(Expression.Assign(Expression.Field(delegateParam, "_invocationCount"), intPtrParam), delegateParam, intPtrParam).Compile();
-            setInvocationList = Expression.Lambda<Action<MulticastDelegate, object>>(Expression.Assign(Expression.Field(delegateParam, "_invocationList"), objectParam), delegateParam, objectParam).Compile();
-            getInvocationListLogicallyNull = Expression.Lambda<Func<MulticastDelegate, bool>>(Expression.Call(delegateParam, logicallyNullMethod), delegateParam).Compile();
-        }
-
         private static DictionarySlim<Type, List<FieldInfo>> _cache = new DictionarySlim<Type, List<FieldInfo>>();
         private static DictionarySlim<Type, List<FieldInfo>> _flattenedCache = new DictionarySlim<Type, List<FieldInfo>>();
         private static DictionarySlim<OrderedTypeCacheKey, List<FieldInfo>> _orderedCache = new DictionarySlim<OrderedTypeCacheKey, List<FieldInfo>>();

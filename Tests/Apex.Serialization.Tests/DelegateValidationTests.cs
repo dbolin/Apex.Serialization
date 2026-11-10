@@ -7,6 +7,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using Xunit;
@@ -28,6 +29,8 @@ namespace Apex.Serialization.Tests
         public delegate int RefFunc(ref int x);
 
         public delegate int InFunc(in int x);
+
+        public delegate int NativeFunc();
 
         public sealed class Counter
         {
@@ -395,6 +398,91 @@ namespace Apex.Serialization.Tests
 
             ShouldRefuseToWriteThenWriteIntact<Func<int>, NotSupportedException>(limitAssemblies ? Serializer(TestAssembly) : Serializer(),
                 seven, new Counter().Peek, "*dynamic method*");
+        }
+
+        [UnmanagedCallersOnly]
+        private static int NativeSeven() => 7;
+
+        private static unsafe NativeFunc OverAnUnmanagedFunction()
+        {
+            var native = Marshal.GetDelegateForFunctionPointer<NativeFunc>((IntPtr)(delegate* unmanaged<int>)&NativeSeven);
+            native.Method.DeclaringType.Should().Be(typeof(NativeFunc), "the test needs a delegate the runtime made for the function pointer, not one over a managed method");
+            return native;
+        }
+
+        [Fact]
+        public void WritingADelegateOverAnUnmanagedFunctionIsRefused()
+        {
+            ShouldRefuseToWriteThenWriteIntact<NativeFunc, NotSupportedException>(Serializer(),
+                OverAnUnmanagedFunction(), new Counter().Peek, "*unmanaged function*");
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void WritingAMulticastDelegateWithAnEntryOverAnUnmanagedFunctionIsRefused(bool unmanagedEntryFirst)
+        {
+            NativeFunc managed = new Counter().Peek;
+            var multicast = unmanagedEntryFirst ? OverAnUnmanagedFunction() + managed : managed + OverAnUnmanagedFunction();
+
+            ShouldRefuseToWriteThenWriteIntact<NativeFunc, NotSupportedException>(Serializer(),
+                multicast, managed + managed, "*unmanaged function*");
+        }
+
+        [Fact]
+        public void ADelegateClosedOverNullOnItsOwnTypesInvokeIsntRefusedAsOneOverAnUnmanagedFunction()
+        {
+            var closedOverNull = (Action)Delegate.CreateDelegate(typeof(Action), null, typeof(Action).GetMethod(nameof(Action.Invoke))!);
+            closedOverNull.Target.Should().BeNull();
+            closedOverNull.Method.DeclaringType.Should().Be(typeof(Action), "the test needs a delegate that reports what one over an unmanaged function does");
+
+            var write = () => Write(closedOverNull);
+
+            write.Should().NotThrow();
+        }
+
+        [Fact]
+        public void ADelegateClosedOverAnotherOfItsOwnTypeIsntRefusedAsOneOverAnUnmanagedFunction()
+        {
+            Func<int> inner = new Counter { Count = 5 }.Peek;
+            Func<int> outer = inner.Invoke;
+            outer.Target.Should().BeSameAs(inner);
+            outer.Method.DeclaringType.Should().Be(typeof(Func<int>));
+
+            RoundTrip(outer)().Should().Be(5);
+        }
+
+        private static int Seven() => 7;
+
+        [Theory]
+        [InlineData("closed")]
+        [InlineData("static")]
+        [InlineData("multicast")]
+        public void WritingADelegateAllocatesNothing(string kind)
+        {
+            var counter = new Counter();
+            var holder = new Holder<Func<int>>
+            {
+                Second = kind switch
+                {
+                    "closed" => counter.Peek,
+                    "static" => Seven,
+                    "multicast" => (Func<int>)counter.Peek + counter.Peek + Seven,
+                    _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+                },
+            };
+            using var binary = Serializer();
+            using var stream = new MemoryStream();
+            binary.Write(holder, stream);
+
+            var before = GC.GetAllocatedBytesForCurrentThread();
+            for (var i = 0; i < 100; ++i)
+            {
+                stream.Position = 0;
+                binary.Write(holder, stream);
+            }
+
+            (GC.GetAllocatedBytesForCurrentThread() - before).Should().Be(0);
         }
 
         private static T RoundTrip<T>(T value) where T : Delegate

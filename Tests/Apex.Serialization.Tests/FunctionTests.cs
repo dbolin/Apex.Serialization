@@ -67,6 +67,40 @@ namespace Apex.Serialization.Tests
             }
         }
 
+        public class Animal
+        {
+            public virtual string Speak() => "animal";
+        }
+
+        public sealed class Dog : Animal
+        {
+            public override string Speak() => "dog";
+        }
+
+        public class OpenCall
+        {
+            public Func<Animal, string>? Speak;
+        }
+
+        public delegate void SelfEnding(SelfEnding self, IAsyncResult result);
+
+        public class OpenEnd
+        {
+            public SelfEnding? End;
+        }
+
+        public sealed class Step
+        {
+            public string Name = "";
+
+            public void Run(List<string> log) => log.Add(Name);
+        }
+
+        public class Steps
+        {
+            public Action<List<string>>? Run;
+        }
+
         [Fact]
         public void Functions()
         {
@@ -123,6 +157,68 @@ namespace Apex.Serialization.Tests
             };
 
             RoundTrip(x, (a, b) => true);
+        }
+
+        [Fact]
+        public void AnOpenDelegateOverAVirtualMethodRoundTripsAsAFreshlyCreatedOne()
+        {
+            var x = new OpenCall { Speak = OpenSpeak() };
+
+            RoundTrip(x, (_, read) =>
+            {
+                read.Speak(new Dog()).Should().Be("dog");
+                read.Speak.Equals(OpenSpeak()).Should().BeTrue();
+                OpenSpeak().Equals(read.Speak).Should().BeTrue();
+                read.Speak.GetHashCode().Should().Be(OpenSpeak().GetHashCode());
+            });
+        }
+
+        [Fact]
+        public void AnOpenDelegateOverItsOwnDelegateTypesMethodRoundTrips()
+        {
+            var x = new OpenEnd { End = OpenEndInvoke() };
+
+            RoundTrip(x, (_, read) =>
+            {
+                read.End.Equals(OpenEndInvoke()).Should().BeTrue();
+                read.End.GetHashCode().Should().Be(OpenEndInvoke().GetHashCode());
+            });
+        }
+
+        [Fact]
+        public void AMulticastDelegateLeftByRemovingEntriesRoundTripsWithItsRemainingEntriesInOrder()
+        {
+            var b = StepNamed("b");
+            var d = StepNamed("d");
+            var five = StepNamed("a") + b + StepNamed("c") + d + StepNamed("e");
+            var x = new Steps { Run = five - d - b };
+
+            RoundTrip(x, (_, read) => Ran(read).Should().Equal("a", "c", "e"));
+        }
+
+        [Fact]
+        public void AMulticastDelegateSharingItsListWithALongerOneRoundTripsWithOnlyItsOwnEntries()
+        {
+            var three = StepNamed("a") + StepNamed("b") + StepNamed("c");
+            // The runtime appends into the list the two delegates then share, past the end of the shorter one's entries.
+            var four = new Steps { Run = three + StepNamed("d") };
+            Ran(four).Should().Equal("a", "b", "c", "d");
+            var x = new Steps { Run = three };
+
+            RoundTrip(x, (_, read) => Ran(read).Should().Equal("a", "b", "c"));
+        }
+
+        private static Func<Animal, string> OpenSpeak() => typeof(Animal).GetMethod(nameof(Animal.Speak))!.CreateDelegate<Func<Animal, string>>();
+
+        private static SelfEnding OpenEndInvoke() => typeof(SelfEnding).GetMethod(nameof(SelfEnding.EndInvoke))!.CreateDelegate<SelfEnding>();
+
+        private static Action<List<string>> StepNamed(string name) => new Step { Name = name }.Run;
+
+        private static List<string> Ran(Steps steps)
+        {
+            var log = new List<string>();
+            steps.Run(log);
+            return log;
         }
     }
 }

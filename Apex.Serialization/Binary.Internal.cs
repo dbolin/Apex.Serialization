@@ -518,47 +518,63 @@ namespace Apex.Serialization
                 WriteTypeRef(generics[i], false);
             }
             _stream.ReserveSize(1);
-            if (value.Target == null)
+            var target = value.Target;
+            if (target == null)
             {
                 _stream.Write(false);
             }
             else
             {
                 _stream.Write(true);
-                WriteInternal(value.Target);
+                WriteInternal(target);
             }
 
             _stream.ReserveSize(5);
-            if (!(value is MulticastDelegate md))
+            if (!(value is MulticastDelegate))
             {
                 _stream.Write(false);
                 return;
             }
             _stream.Write(true);
 
-            var invocationCount = TypeFields.getInvocationCount(md);
-            if (invocationCount == (IntPtr)(-1))
+            if (value.HasSingleTarget)
             {
-                throw new NotSupportedException("Serializing delegates to unmanaged functions is not supported");
-            }
+                if (target == null && declaringType == delegateType && !IsBoundToTheMethodItReports(value))
+                {
+                    throw new NotSupportedException("Serializing delegates to unmanaged functions is not supported");
+                }
 
-            _stream.Write((int)invocationCount);
-
-            if (invocationCount == (IntPtr)0)
-            {
+                _stream.Write(0);
                 return;
             }
 
-            var invocationList = TypeFields.getInvocationList(md) as object[];
-            if (invocationList == null)
+            WriteInvocationList(value);
+        }
+
+        private void WriteInvocationList(Delegate value)
+        {
+            var invocationCount = 0;
+            foreach (var _ in Delegate.EnumerateInvocationList(value))
             {
-                throw new InvalidOperationException("Unexpected null invocation list on delegate");
+                ++invocationCount;
             }
 
-            for (int i = 0; i < (int)invocationCount; ++i)
+            _stream.Write(invocationCount);
+            foreach (var entry in Delegate.EnumerateInvocationList(value))
             {
-                WriteFunction((Delegate)invocationList[i]);
+                WriteFunction(entry);
             }
+        }
+
+        /// <summary>
+        /// The runtime has no public test for a delegate over an unmanaged function pointer.  One reports no target and
+        /// its own type's Invoke as its method, which a delegate closed over null on that Invoke does too, but unlike
+        /// any single-target delegate with no target over a method of its own type, it never equals the one
+        /// <see cref="Delegate.CreateDelegate(Type, object, MethodInfo, bool)"/> binds to the method it reports.
+        /// </summary>
+        private static bool IsBoundToTheMethodItReports(Delegate targetless)
+        {
+            return targetless.Equals(Delegate.CreateDelegate(targetless.GetType(), null, targetless.Method, throwOnBindFailure: false));
         }
 
         internal struct DelegateID : IEquatable<DelegateID>
