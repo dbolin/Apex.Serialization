@@ -289,6 +289,66 @@ namespace Apex.Serialization.Internal
             _count = 0;
         }
 
+        /// <summary>
+        /// Removes every entry but the first <paramref name="count"/> added.  It relies on entries sitting in the
+        /// order they were added, which holds while nothing removes a single entry.
+        /// </summary>
+        public void TruncateTo(int count)
+        {
+            if (count >= _count)
+            {
+                return;
+            }
+
+            if (count == 0)
+            {
+                Clear();
+                return;
+            }
+
+            if (_count < _buckets.Length >> 5)
+            {
+                for (int i = _count - 1; i >= count; --i)
+                {
+                    Unlink(i);
+                    _entries[i] = default;
+                }
+            }
+            else
+            {
+                Array.Clear(_buckets);
+                Array.Clear(_entries, count, _count - count);
+                for (int i = 0; i < count; ++i)
+                {
+                    ref var entry = ref _entries[i];
+                    entry.next = _buckets[entry.bucket] - 1;
+                    _buckets[entry.bucket] = i + 1;
+                }
+            }
+
+            _count = count;
+        }
+
+        private void Unlink(int index)
+        {
+            Entry[] entries = _entries;
+            int next = entries[index].next;
+            ref int head = ref _buckets[entries[index].bucket];
+            if (head - 1 == index)
+            {
+                head = next + 1;
+                return;
+            }
+
+            int previous = head - 1;
+            while (entries[previous].next != index)
+            {
+                previous = entries[previous].next;
+            }
+
+            entries[previous].next = next;
+        }
+
         private Entry[] Resize()
         {
             int count = _count;

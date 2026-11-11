@@ -41,6 +41,15 @@ namespace Apex.Serialization
 
         private readonly List<object> _internedObjects = new List<object>();
 
+        /// <summary>
+        /// The two tables keep the interned objects' entries from one stream to the next, as their first entries.
+        /// <see cref="Intern"/> can run in the middle of a write or a read, where its entry lands after the stream's,
+        /// so it marks both for rebuilding from <see cref="_internedObjects"/> when that stream ends: -1 here, and
+        /// false in <see cref="_loadedRefsStartWithInterned"/>.
+        /// </summary>
+        private int _internedLookupEntries = -1;
+        private bool _loadedRefsStartWithInterned;
+
         private readonly Dictionary<Type, object> _boundarySubstitutes = new Dictionary<Type, object>();
 
         internal ReferenceTable<Type> LoadedTypeRefs => _loadedTypeRefs;
@@ -125,13 +134,19 @@ namespace Apex.Serialization
         {
             if (Settings.SerializationMode == Mode.Graph)
             {
-                _savedObjectLookup.Clear();
-                if (_internedObjects.Count > 0)
+                if (_internedLookupEntries >= 0)
                 {
+                    _savedObjectLookup.TruncateTo(_internedLookupEntries);
+                }
+                else
+                {
+                    _savedObjectLookup.Clear();
                     foreach (var o in _internedObjects)
                     {
                         _savedObjectLookup.GetOrAddValueRef(o) = _savedObjectLookup.Count;
                     }
+
+                    _internedLookupEntries = _savedObjectLookup.Count;
                 }
             }
             _savedTypeLookup.Clear();
@@ -197,10 +212,15 @@ namespace Apex.Serialization
             if (Settings.SerializationMode == Mode.Graph)
             {
                 _allowReadingObjectReference = true;
-                _loadedObjectRefs.Clear();
-                if (_internedObjects.Count > 0)
+                if (_loadedRefsStartWithInterned)
                 {
+                    _loadedObjectRefs.TruncateTo(_internedObjects.Count);
+                }
+                else
+                {
+                    _loadedObjectRefs.Clear();
                     _loadedObjectRefs.AddRange(_internedObjects);
+                    _loadedRefsStartWithInterned = true;
                 }
             }
             _loadedTypeRefs.Clear();
@@ -266,6 +286,8 @@ namespace Apex.Serialization
 
             _savedObjectLookup.GetOrAddValueRef(o) = _savedObjectLookup.Count;
             _loadedObjectRefs.Add(o);
+            _internedLookupEntries = -1;
+            _loadedRefsStartWithInterned = false;
         }
 
         public void SetCustomHookContext<T>(T context)
