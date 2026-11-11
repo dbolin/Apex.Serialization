@@ -81,6 +81,21 @@ namespace Apex.Serialization.Tests
             public T? Value;
         }
 
+        public sealed class Scale
+        {
+            public int Factor;
+
+            public int Take(int x) => x * Factor;
+
+            public long Take(long x) => x * Factor * 2;
+
+            public int Hold(object x) => Factor;
+
+            public int Keep(string x) => Factor;
+
+            public int Mark(string x) => Factor;
+        }
+
         public static class Factory
         {
             public static Type TypeOf<T>() => typeof(T);
@@ -335,6 +350,52 @@ namespace Apex.Serialization.Tests
             var widget = new Widget();
 
             RoundTrip(echo)(widget).Should().BeSameAs(widget);
+        }
+
+        [Fact]
+        public void OverloadsReadByOneSerializerEachReadBackAsTheOneWritten()
+        {
+            var scale = new Scale { Factor = 3 };
+            var narrow = Write<Func<int, int>>(scale.Take);
+            var wide = Write<Func<long, long>>(scale.Take);
+            using var binary = Serializer();
+
+            for (var pass = 0; pass < 2; ++pass)
+            {
+                binary.Read<Func<int, int>>(new MemoryStream(narrow))(5).Should().Be(15);
+                binary.Read<Func<long, long>>(new MemoryStream(wide))(5).Should().Be(30);
+            }
+        }
+
+        [Fact]
+        public void AGenericMethodReadByOneSerializerOverTwoTypeArgumentsReadsBackOverEach()
+        {
+            var overInt = Write<Func<int, int>>(Factory.Echo);
+            var overWidget = Write<Func<Widget, Widget>>(Factory.Echo);
+            var echo = typeof(Factory).GetMethod(nameof(Factory.Echo))!;
+            using var binary = Serializer();
+
+            for (var pass = 0; pass < 2; ++pass)
+            {
+                binary.Read<Func<int, int>>(new MemoryStream(overInt)).Method.Should().BeSameAs(echo.MakeGenericMethod(typeof(int)));
+                binary.Read<Func<Widget, Widget>>(new MemoryStream(overWidget)).Method.Should().BeSameAs(echo.MakeGenericMethod(typeof(Widget)));
+            }
+        }
+
+        [Fact]
+        public void AMethodAlreadyReadIsStillRejectedUnderParameterTypesItDoesntDeclare()
+        {
+            var scale = new Scale { Factor = 3 };
+            var payload = Write<Func<string, int>>(scale.Keep);
+            var nameAt = FirstDifference(payload, Write<Func<string, int>>(scale.Mark));
+            Encoding.Unicode.GetString(payload, nameAt, 8).Should().Be("Keep");
+            var mutated = payload.ToArray();
+            Encoding.Unicode.GetBytes("Hold").CopyTo(mutated, nameAt);
+            var binary = Serializer();
+            binary.Read<Func<object, int>>(new MemoryStream(Write<Func<object, int>>(scale.Hold)))("").Should().Be(3);
+
+            // Hold(object) binds to a Func<string, int>, so only the method lookup stands between the data and a delegate.
+            ShouldRejectThenReadIntact<Func<string, int>, InvalidDataException>(binary, payload, mutated);
         }
 
         [Fact]

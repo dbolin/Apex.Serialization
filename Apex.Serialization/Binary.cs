@@ -69,6 +69,7 @@ namespace Apex.Serialization
         private DictionarySlim<MethodInfo, Type[]> _methodGenericsCache = new DictionarySlim<MethodInfo, Type[]>();
 
         private readonly DictionarySlim<DelegateID, CachedDelegate> _delegateCache = new DictionarySlim<DelegateID, CachedDelegate>();
+        private readonly DictionarySlim<Type, DictionarySlim<string, FoundDelegateMethod[]>> _foundDelegateMethods = new DictionarySlim<Type, DictionarySlim<string, FoundDelegateMethod[]>>();
         private nuint _stackStart;
         private nuint _stackSpan;
         private static readonly Func<object, object> _clone = CreateCloneFunc();
