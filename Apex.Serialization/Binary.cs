@@ -42,10 +42,12 @@ namespace Apex.Serialization
         private readonly List<object> _internedObjects = new List<object>();
 
         /// <summary>
-        /// The two tables keep the interned objects' entries from one stream to the next, as their first entries.
-        /// <see cref="Intern"/> can run in the middle of a write or a read, where its entry lands after the stream's,
-        /// so it marks both for rebuilding from <see cref="_internedObjects"/> when that stream ends: -1 here, and
-        /// false in <see cref="_loadedRefsStartWithInterned"/>.
+        /// <see cref="_savedObjectLookup"/> and <see cref="_loadedObjectRefs"/> keep the interned objects' entries from
+        /// one stream to the next, as their first entries.  <see cref="Intern"/> can run in the middle of a write or a
+        /// read, where its entry lands after the stream's, so it marks each table for rebuilding from
+        /// <see cref="_internedObjects"/> when the table's next stream ends: -1 here, and false in
+        /// <see cref="_loadedRefsStartWithInterned"/>.  It marks them before it adds anything, since adding to the
+        /// lookup can throw once the list has grown.
         /// </summary>
         private int _internedLookupEntries = -1;
         private bool _loadedRefsStartWithInterned;
@@ -282,12 +284,12 @@ namespace Apex.Serialization
                 throw new InvalidOperationException("Object interning is only supported for Graph serialization");
             }
 
+            _internedLookupEntries = -1;
+            _loadedRefsStartWithInterned = false;
             _internedObjects.Add(o);
 
             _savedObjectLookup.GetOrAddValueRef(o) = _savedObjectLookup.Count;
             _loadedObjectRefs.Add(o);
-            _internedLookupEntries = -1;
-            _loadedRefsStartWithInterned = false;
         }
 
         public void SetCustomHookContext<T>(T context)

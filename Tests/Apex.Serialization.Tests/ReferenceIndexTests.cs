@@ -1,6 +1,7 @@
 using FluentAssertions;
 using System;
 using System.Buffers.Binary;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
@@ -62,12 +63,49 @@ namespace Apex.Serialization.Tests
             using var binary = Serializer(Mode.Graph);
             var payload = Written(binary, Enumerable.Range(0, count).Select(_ => new Empty()).ToArray());
 
-            var read = ReadAndDrop(binary, payload);
+            for (var reads = 1; reads <= 2; ++reads)
+            {
+                var read = ReadAndDrop(binary, payload);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+
+                read.Where(x => x.TryGetTarget(out _)).Should().BeEmpty("the serializer, still alive, keeps nothing it read, after {0} reads", reads);
+            }
+        }
+
+        [Fact]
+        public void AGraphWriteLetsGoOfTheObjectsItWroteOnASerializerWithAnInternedObject()
+        {
+            var serializers = new List<IBinary>();
+            var written = new List<WeakReference<object>>();
+            for (var laterCount = 1; laterCount <= 1024; laterCount *= 4)
+            {
+                var binary = Serializer(Mode.Graph);
+                serializers.Add(binary);
+                binary.Intern(new Empty());
+                written.AddRange(WriteAndDrop(binary, 256));
+                written.AddRange(WriteAndDrop(binary, laterCount));
+                written.AddRange(WriteAndDrop(binary, laterCount));
+            }
+
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
 
-            read.Where(x => x.TryGetTarget(out _)).Should().BeEmpty("the serializer, still alive, keeps nothing it read");
+            written.Where(x => x.TryGetTarget(out _)).Should().BeEmpty("the serializers, still alive, keep nothing they wrote");
+            foreach (var binary in serializers)
+            {
+                binary.Dispose();
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.NoInlining)]
+        private static WeakReference<object>[] WriteAndDrop(IBinary binary, int count)
+        {
+            var value = Enumerable.Range(0, count).Select(_ => new Empty()).ToArray();
+            Written(binary, value);
+            return value.Prepend<object>(value).Select(x => new WeakReference<object>(x)).ToArray();
         }
 
         [MethodImpl(MethodImplOptions.NoInlining)]

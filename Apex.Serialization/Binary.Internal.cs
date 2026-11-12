@@ -792,7 +792,8 @@ namespace Apex.Serialization
         }
 
         /// <summary>
-        /// Only a method that was found is remembered, so data naming methods that don't exist leaves nothing behind.
+        /// Only a method that was found is remembered, so data naming methods that don't exist adds nothing to
+        /// <see cref="_foundDelegateMethods"/>.
         /// </summary>
         private MethodInfo? FindDelegateMethod(Type declaringType, string? methodName, int parameterCount, Type[]? genericArguments)
         {

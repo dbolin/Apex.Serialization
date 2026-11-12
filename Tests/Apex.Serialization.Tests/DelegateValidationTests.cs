@@ -94,6 +94,36 @@ namespace Apex.Serialization.Tests
             public int Keep(string x) => Factor;
 
             public int Mark(string x) => Factor;
+
+            public int Peek() => Factor;
+        }
+
+        public sealed class Adder
+        {
+            public int Base;
+
+            public int Sum(int a) => Base + a;
+
+            public int Sum(int a, int b) => Base + a + b;
+
+            public long Sum(int a, long b) => Base + a + b + 1000;
+        }
+
+        public static class Pair
+        {
+            public static string Of<T>() => typeof(T).Name;
+
+            public static string Of<T, U>() => typeof(T).Name + typeof(U).Name;
+        }
+
+        public static class Left
+        {
+            public static string Side() => "left";
+        }
+
+        public static class Right
+        {
+            public static string Side() => "right";
         }
 
         public static class Factory
@@ -396,6 +426,104 @@ namespace Apex.Serialization.Tests
 
             // Hold(object) binds to a Func<string, int>, so only the method lookup stands between the data and a delegate.
             ShouldRejectThenReadIntact<Func<string, int>, InvalidDataException>(binary, payload, mutated);
+        }
+
+        [Fact]
+        public void AGenericMethodWithNoParameterOfItsTypeArgumentReadsBackOverEachOneASerializerReads()
+        {
+            var overWidget = Write<Func<Type>>(Factory.TypeOf<Widget>);
+            var overString = Write<Func<Type>>(Factory.TypeOf<string>);
+            using var binary = Serializer();
+
+            for (var pass = 0; pass < 2; ++pass)
+            {
+                binary.Read<Func<Type>>(new MemoryStream(overWidget))().Should().Be(typeof(Widget));
+                binary.Read<Func<Type>>(new MemoryStream(overString))().Should().Be(typeof(string));
+            }
+        }
+
+        [Fact]
+        public void MethodsOfOneNameOnTwoTypesReadByOneSerializerEachReadBackAsTheOneWritten()
+        {
+            var left = Write<Func<string>>(Left.Side);
+            var right = Write<Func<string>>(Right.Side);
+            var onCounter = Write<Func<int>>(new Counter { Count = 3 }.Peek);
+            var onScale = Write<Func<int>>(new Scale { Factor = 5 }.Peek);
+            using var binary = Serializer();
+
+            for (var pass = 0; pass < 2; ++pass)
+            {
+                binary.Read<Func<string>>(new MemoryStream(left))().Should().Be("left");
+                binary.Read<Func<string>>(new MemoryStream(right))().Should().Be("right");
+                binary.Read<Func<int>>(new MemoryStream(onCounter))().Should().Be(3);
+                binary.Read<Func<int>>(new MemoryStream(onScale))().Should().Be(5);
+            }
+        }
+
+        [Fact]
+        public void OverloadsWithDifferentNumbersOfParametersReadByOneSerializerEachReadBackAsTheOneWritten()
+        {
+            var adder = new Adder { Base = 100 };
+            var two = Write<Func<int, int, int>>(adder.Sum);
+            var one = Write<Func<int, int>>(adder.Sum);
+            var twoWide = Write<Func<int, long, long>>(adder.Sum);
+            using var binary = Serializer();
+
+            for (var pass = 0; pass < 2; ++pass)
+            {
+                binary.Read<Func<int, int, int>>(new MemoryStream(two))(1, 2).Should().Be(103);
+                binary.Read<Func<int, int>>(new MemoryStream(one))(1).Should().Be(101);
+                binary.Read<Func<int, long, long>>(new MemoryStream(twoWide))(1, 2).Should().Be(1103);
+            }
+        }
+
+        [Fact]
+        public void GenericMethodsOfOneNameWithDifferentNumbersOfTypeArgumentsEachReadBackAsTheOneWritten()
+        {
+            var one = Write<Func<string>>(Pair.Of<Widget>);
+            var two = Write<Func<string>>(Pair.Of<Widget, Decoy>);
+            var twoOther = Write<Func<string>>(Pair.Of<Widget, Counter>);
+            using var binary = Serializer();
+
+            for (var pass = 0; pass < 2; ++pass)
+            {
+                binary.Read<Func<string>>(new MemoryStream(two))().Should().Be("WidgetDecoy");
+                binary.Read<Func<string>>(new MemoryStream(one))().Should().Be("Widget");
+                binary.Read<Func<string>>(new MemoryStream(twoOther))().Should().Be("WidgetCounter");
+            }
+        }
+
+        [Fact]
+        public void AMethodAlreadyReadIsStillRejectedOverATypeArgumentTheSettingsDontAllow()
+        {
+            var allowed = Write<Func<Type>>(Factory.TypeOf<Widget>);
+            var refused = Write<Func<Type>>(Factory.TypeOf<string>);
+            using var binary = Serializer(TestAssembly);
+
+            for (var pass = 0; pass < 2; ++pass)
+            {
+                binary.Read<Func<Type>>(new MemoryStream(allowed))().Should().Be(typeof(Widget));
+                binary.Invoking(b => b.Read<Func<Type>>(new MemoryStream(refused))).Should().Throw<InvalidDataException>();
+            }
+        }
+
+        [Fact]
+        public void ANullMethodNameIsRejectedAfterItsDeclaringTypeWasRead()
+        {
+            var counter = new Counter();
+            var payload = Write<Action>(counter.Alpha);
+            var nameAt = FirstDifference(payload, Write<Action>(counter.Bravo));
+            var lengthAt = nameAt - sizeof(int);
+            BinaryPrimitives.ReadInt32LittleEndian(payload.AsSpan(lengthAt)).Should().Be(nameof(Counter.Alpha).Length);
+            var lengthOfANullString = BitConverter.GetBytes(uint.MaxValue);
+            var mutated = payload[..lengthAt]
+                .Concat(lengthOfANullString)
+                .Concat(payload[(nameAt + Encoding.Unicode.GetByteCount(nameof(Counter.Alpha)))..])
+                .ToArray();
+            var binary = Serializer();
+            binary.Read<Action>(new MemoryStream(payload));
+
+            ShouldRejectThenReadIntact<Action, InvalidDataException>(binary, payload, mutated);
         }
 
         [Fact]
