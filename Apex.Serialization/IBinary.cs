@@ -5,6 +5,12 @@ namespace Apex.Serialization
 {
     public interface IBinary : IDisposable
     {
+        /// <summary>
+        /// Interns <paramref name="o"/>: a write refers to it by its position among the interned objects in place
+        /// of writing it, and a read returns the object interned at that position.  Graph mode only.  The
+        /// serializer keeps an interned object's lookup entry from one stream to the next, so the object's hash
+        /// code and equality must not change after it is interned.
+        /// </summary>
         void Intern(object o);
 
         /// <summary>
