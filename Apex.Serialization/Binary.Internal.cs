@@ -753,12 +753,87 @@ namespace Apex.Serialization
             }
         }
 
+        internal sealed class FoundDelegateMethod
+        {
+            private readonly Type[] _parameterTypes;
+            private readonly Type[] _genericArguments;
+
+            public readonly MethodInfo Method;
+
+            public FoundDelegateMethod(MethodInfo method, ReadOnlySpan<Type> parameterTypes, ReadOnlySpan<Type> genericArguments)
+            {
+                Method = method;
+                _parameterTypes = parameterTypes.ToArray();
+                _genericArguments = genericArguments.ToArray();
+            }
+
+            public bool WasFoundFor(ReadOnlySpan<Type> parameterTypes, ReadOnlySpan<Type> genericArguments)
+            {
+                return AreSame(parameterTypes, _parameterTypes) && AreSame(genericArguments, _genericArguments);
+            }
+
+            private static bool AreSame(ReadOnlySpan<Type> read, Type[] found)
+            {
+                if (read.Length != found.Length)
+                {
+                    return false;
+                }
+
+                for (int i = 0; i < found.Length; ++i)
+                {
+                    if (read[i] != found[i])
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Only a method that was found is remembered, so data naming methods that don't exist adds nothing to
+        /// <see cref="_foundDelegateMethods"/>.
+        /// </summary>
+        private MethodInfo? FindDelegateMethod(Type declaringType, string? methodName, int parameterCount, Type[]? genericArguments)
+        {
+            if (methodName == null)
+            {
+                return null;
+            }
+
+            ReadOnlySpan<Type> parameterTypes = _parameterTypeBuffer.AsSpan(0, parameterCount);
+            if (_foundDelegateMethods.TryGetValue(declaringType, out var byName) && byName.TryGetValue(methodName, out var found))
+            {
+                for (int i = 0; i < found.Length; ++i)
+                {
+                    if (found[i].WasFoundFor(parameterTypes, genericArguments))
+                    {
+                        return found[i].Method;
+                    }
+                }
+            }
+
+            var method = ScanForDelegateMethod(declaringType, methodName, parameterCount, genericArguments);
+            if (method != null)
+            {
+                ref var methodsOfType = ref _foundDelegateMethods.GetOrAddValueRef(declaringType);
+                methodsOfType ??= new DictionarySlim<string, FoundDelegateMethod[]>();
+                ref var methods = ref methodsOfType.GetOrAddValueRef(methodName);
+                var count = methods?.Length ?? 0;
+                Array.Resize(ref methods, count + 1);
+                methods[count] = new FoundDelegateMethod(method, parameterTypes, genericArguments);
+            }
+
+            return method;
+        }
+
         /// <summary>
         /// The writer stores a generic method's parameter types with its type arguments substituted, so a generic method
         /// is compared once it's instantiated over the stored arguments.  A method those arguments break the constraints
         /// of can't be the one written.
         /// </summary>
-        private MethodInfo? FindDelegateMethod(Type declaringType, string? methodName, int parameterCount, Type[]? genericArguments)
+        private MethodInfo? ScanForDelegateMethod(Type declaringType, string methodName, int parameterCount, Type[]? genericArguments)
         {
             var genericCount = genericArguments?.Length ?? 0;
             var methods = TypeMethods.GetMethods(declaringType);

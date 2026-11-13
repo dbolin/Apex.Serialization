@@ -93,6 +93,15 @@ namespace Apex.Serialization.Internal
             }
         }
 
+        public void TruncateTo(int count)
+        {
+            if (count < _count)
+            {
+                _slots.AsSpan(count, _count - count).Clear();
+                _count = count;
+            }
+        }
+
         public void Clear()
         {
             // Clearing an empty span still makes a call, and a read without type info leaves its type table empty.

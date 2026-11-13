@@ -41,6 +41,17 @@ namespace Apex.Serialization
 
         private readonly List<object> _internedObjects = new List<object>();
 
+        /// <summary>
+        /// <see cref="_savedObjectLookup"/> and <see cref="_loadedObjectRefs"/> keep the interned objects' entries from
+        /// one stream to the next, as their first entries.  <see cref="Intern"/> can run in the middle of a write or a
+        /// read, where its entry lands after the stream's, so it marks each table for rebuilding from
+        /// <see cref="_internedObjects"/> when the table's next stream ends: -1 here, and false in
+        /// <see cref="_loadedRefsStartWithInterned"/>.  It marks them before it adds anything, since adding to the
+        /// lookup can throw once the list has grown.
+        /// </summary>
+        private int _internedLookupEntries = -1;
+        private bool _loadedRefsStartWithInterned;
+
         private readonly Dictionary<Type, object> _boundarySubstitutes = new Dictionary<Type, object>();
 
         internal ReferenceTable<Type> LoadedTypeRefs => _loadedTypeRefs;
@@ -69,6 +80,7 @@ namespace Apex.Serialization
         private DictionarySlim<MethodInfo, Type[]> _methodGenericsCache = new DictionarySlim<MethodInfo, Type[]>();
 
         private readonly DictionarySlim<DelegateID, CachedDelegate> _delegateCache = new DictionarySlim<DelegateID, CachedDelegate>();
+        private readonly DictionarySlim<Type, DictionarySlim<string, FoundDelegateMethod[]>> _foundDelegateMethods = new DictionarySlim<Type, DictionarySlim<string, FoundDelegateMethod[]>>();
         private nuint _stackStart;
         private nuint _stackSpan;
         private static readonly Func<object, object> _clone = CreateCloneFunc();
@@ -124,13 +136,19 @@ namespace Apex.Serialization
         {
             if (Settings.SerializationMode == Mode.Graph)
             {
-                _savedObjectLookup.Clear();
-                if (_internedObjects.Count > 0)
+                if (_internedLookupEntries >= 0)
                 {
+                    _savedObjectLookup.TruncateTo(_internedLookupEntries);
+                }
+                else
+                {
+                    _savedObjectLookup.Clear();
                     foreach (var o in _internedObjects)
                     {
                         _savedObjectLookup.GetOrAddValueRef(o) = _savedObjectLookup.Count;
                     }
+
+                    _internedLookupEntries = _savedObjectLookup.Count;
                 }
             }
             _savedTypeLookup.Clear();
@@ -196,10 +214,15 @@ namespace Apex.Serialization
             if (Settings.SerializationMode == Mode.Graph)
             {
                 _allowReadingObjectReference = true;
-                _loadedObjectRefs.Clear();
-                if (_internedObjects.Count > 0)
+                if (_loadedRefsStartWithInterned)
                 {
+                    _loadedObjectRefs.TruncateTo(_internedObjects.Count);
+                }
+                else
+                {
+                    _loadedObjectRefs.Clear();
                     _loadedObjectRefs.AddRange(_internedObjects);
+                    _loadedRefsStartWithInterned = true;
                 }
             }
             _loadedTypeRefs.Clear();
@@ -261,6 +284,8 @@ namespace Apex.Serialization
                 throw new InvalidOperationException("Object interning is only supported for Graph serialization");
             }
 
+            _internedLookupEntries = -1;
+            _loadedRefsStartWithInterned = false;
             _internedObjects.Add(o);
 
             _savedObjectLookup.GetOrAddValueRef(o) = _savedObjectLookup.Count;
